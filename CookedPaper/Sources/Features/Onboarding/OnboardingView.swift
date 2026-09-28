@@ -781,7 +781,7 @@ private struct LivePositionCard: View {
                         .font(.rowTitle)
                         .foregroundStyle(Color.textPrimary)
                     TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text("\(PriceFormat.quantity(position.qty)) · \(heldFor(at: context.date))")
+                        Text("\(PriceFormat.quantity(position.qty)) \(position.token?.symbol ?? "") · \(heldFor(at: context.date))")
                             .font(.caption13Digits)
                             .foregroundStyle(Color.textSecondary)
                     }

@@ -140,6 +140,22 @@ nonisolated enum MockAPI {
         DemoToken(mint: "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump", symbol: "FWOG", name: "Fwog", price: "0.1204", change: "41.20", volume: "8120330.00", marketCap: "117402000.00", liquidity: "1920300.00", verified: false),
     ]
 
+    /// Real logos for the demo tokens (CoinGecko's CDN), keyed by mint.
+    static let logos: [String: String] = [
+        "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": "https://coin-images.coingecko.com/coins/images/28600/large/bonk.jpg",
+        "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm": "https://coin-images.coingecko.com/coins/images/33566/large/dogwifhat.jpg",
+        "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "https://coin-images.coingecko.com/coins/images/34188/large/jup.png",
+        "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr": "https://coin-images.coingecko.com/coins/images/33760/large/image.jpg",
+        "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3": "https://coin-images.coingecko.com/coins/images/31924/large/pyth.png",
+        "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5": "https://coin-images.coingecko.com/coins/images/36440/large/MEW.png",
+        "ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82": "https://coin-images.coingecko.com/coins/images/36071/large/bome.png",
+        "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump": "https://coin-images.coingecko.com/coins/images/39453/large/fwog.png",
+    ]
+
+    static func logoURL(mint: String) -> URL? {
+        logos[mint].flatMap(URL.init(string:))
+    }
+
     static func token(for mint: String) -> DemoToken {
         tokens.first { $0.mint == mint } ?? tokens[0]
     }

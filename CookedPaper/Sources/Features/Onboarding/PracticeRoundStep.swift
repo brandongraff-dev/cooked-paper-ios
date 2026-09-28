@@ -83,11 +83,11 @@ struct PracticeRoundStep: View {
                 if let replay {
                     card(replay)
                 } else {
-                    EmptyStateView(symbol: "exclamationmark.triangle", title: "Replay unavailable", detail: "Skip ahead to your real trades.")
+                    EmptyStateView(symbol: "exclamationmark.triangle", title: "Replay unavailable", detail: "Skip ahead to live prices.")
                 }
             }
             .padding(.horizontal, Space.margin)
-            .padding(.bottom, Space.s16)
+            .padding(.bottom, Space.s24)
         }
         .scrollIndicators(.hidden)
         .safeAreaInset(edge: .bottom) {
@@ -111,9 +111,10 @@ struct PracticeRoundStep: View {
         let prices = replay.prices
         let shown = Array(prices.prefix(max(index + 1, 1)))
         let current = shown.last ?? replay.entry
-        let value = Self.stake * current / replay.entry
+        // Before the buy the stake is exactly $1,000; after it, it tracks the price.
+        let value = phase == .ready ? Self.stake : Self.stake * current / replay.entry
         let pnl = value - Self.stake
-        let percent = (current / replay.entry - 1) * 100
+        let percent = phase == .ready ? 0 : (current / replay.entry - 1) * 100
         let pnlColor = Color.direction(Decimal(pnl))
 
         return VStack(alignment: .leading, spacing: Space.s16) {
@@ -147,22 +148,22 @@ struct PracticeRoundStep: View {
             ReplayChart(prices: prices, revealed: shown.count, entry: replay.entry, soldAt: soldIndex)
                 .frame(height: 240)
 
-            HStack(alignment: .lastTextBaseline) {
-                VStack(alignment: .leading, spacing: Space.s4) {
-                    Text(phase == .ready ? "Your stake" : "Your position")
-                        .font(.caption13)
-                        .foregroundStyle(Color.textSecondary)
-                    Text(PriceFormat.usd(Decimal(value)))
-                        .heroPriceStyle()
-                        .foregroundStyle(Color.textPrimary)
-                        .contentTransition(.numericText())
-                }
-                Spacer(minLength: Space.s8)
+            VStack(alignment: .leading, spacing: Space.s4) {
+                Text(phase == .ready ? "Your stake" : "Your position")
+                    .font(.caption13)
+                    .foregroundStyle(Color.textSecondary)
+                Text(PriceFormat.usd(Decimal(value)))
+                    .heroPriceStyle()
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .contentTransition(.numericText())
                 Text(phase == .ready
-                     ? "Buy at \(PriceFormat.price(replay.entryPrice))"
+                     ? "Buys at \(PriceFormat.price(replay.entryPrice))"
                      : "\(PriceFormat.signedUSD(Decimal(pnl))) (\(PriceFormat.change(Decimal(percent))))")
                     .font(.rowSubvalue)
                     .foregroundStyle(phase == .ready ? Color.textSecondary : pnlColor)
+                    .contentTransition(.numericText())
             }
 
             Text("\(replay.source) \(replay.pair) · 1-minute prices")
@@ -242,7 +243,7 @@ struct PracticeRoundStep: View {
     private var actionButton: some View {
         switch phase {
         case .ready:
-            Button(replay == nil ? "Skip to real trades" : "Buy $1,000 practice \(replay?.symbol ?? "")") {
+            Button(replay == nil ? "Skip to live prices" : "Buy $1,000 practice \(replay?.symbol ?? "")") {
                 guard replay != nil else { return onContinue() }
                 start()
             }
@@ -253,7 +254,7 @@ struct PracticeRoundStep: View {
                 .buttonStyle(.primary)
                 .accessibilityIdentifier("onboarding.practice.sell")
         case .finished:
-            Button("Now make real trades", action: onContinue)
+            Button("Now try live prices", action: onContinue)
                 .buttonStyle(.accent)
                 .accessibilityIdentifier("onboarding.practice.continue")
         }
@@ -295,9 +296,11 @@ private struct SimulationTag: View {
         HStack(spacing: Space.s4) {
             Image(systemName: "clock.arrow.circlepath")
             Text("REPLAY · SIMULATED")
-                .tracking(0.6)
+                .tracking(0.4)
         }
-        .font(.caption13.weight(.bold))
+        .font(.caption2.weight(.bold))
+        .lineLimit(1)
+        .fixedSize()
         .foregroundStyle(Color.textPrimary)
         .padding(.horizontal, Space.s12)
         .padding(.vertical, Space.s4 + 2)

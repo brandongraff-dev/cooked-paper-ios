@@ -41,7 +41,12 @@ enum TokenAPI {
     }
 
     static func logoURL(mint: String) -> URL {
-        APIConfig.baseURL.appendingPathComponent("/tokens/\(mint)/logo")
+        #if DEBUG
+        // Logos load through URLSession.shared, outside the mock protocol, so the
+        // demo tokens point straight at their real CoinGecko images.
+        if MockAPI.isEnabled, let url = MockAPI.logoURL(mint: mint) { return url }
+        #endif
+        return APIConfig.baseURL.appendingPathComponent("/tokens/\(mint)/logo")
     }
 }
 

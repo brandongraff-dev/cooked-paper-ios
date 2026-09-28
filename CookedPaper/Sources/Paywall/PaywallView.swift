@@ -36,6 +36,12 @@ struct PaywallView: View {
                 .padding(.bottom, Space.s16)
             }
             .scrollIndicators(.hidden)
+            .overlay(alignment: .bottom) {
+                // Soft edge where content scrolls under the footer, instead of a hard cut.
+                LinearGradient(colors: [Color.appBackground.opacity(0), Color.appBackground], startPoint: .top, endPoint: .bottom)
+                    .frame(height: Space.s24)
+                    .allowsHitTesting(false)
+            }
 
             footer
         }
