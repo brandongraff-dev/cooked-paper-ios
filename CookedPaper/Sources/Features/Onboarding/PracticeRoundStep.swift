@@ -65,19 +65,20 @@ struct PracticeRoundStep: View {
     var body: some View {
         ScrollViewReader { proxy in
         ScrollView {
-            VStack(alignment: .leading, spacing: Space.s24) {
-                VStack(alignment: .leading, spacing: Space.s12) {
-                    SimulationTag()
-                    Text("Practice round")
-                        .font(.system(size: 34, weight: .bold))
-                        .tracking(-0.8)
-                        .foregroundStyle(Color.textPrimary)
-                    Text(subtitle)
-                        .font(.body)
+            VStack(alignment: .leading, spacing: Space.s16) {
+                VStack(alignment: .leading, spacing: Space.s4) {
+                    HStack(alignment: .center) {
+                        Text("Practice round")
+                            .font(.title2.weight(.bold))
+                            .foregroundStyle(Color.textPrimary)
+                        Spacer(minLength: Space.s8)
+                        SimulationTag()
+                    }
+                    Text("Sell whenever you think it's the top.")
+                        .font(.rowSubtitle)
                         .foregroundStyle(Color.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.top, Space.s24)
+                .padding(.top, Space.s16)
 
                 if let replay {
                     card(replay)
@@ -104,11 +105,6 @@ struct PracticeRoundStep: View {
         }
     }
 
-    private var subtitle: String {
-        guard let replay else { return "" }
-        return "A replay of real \(replay.symbol) prices from \(replay.dateLabel), sped up. You're in with $1,000 of practice money. Sell whenever you think it's the top."
-    }
-
     // MARK: - Card
 
     private func card(_ replay: PracticeReplay) -> some View {
@@ -122,13 +118,18 @@ struct PracticeRoundStep: View {
 
         return VStack(alignment: .leading, spacing: Space.s16) {
             HStack(spacing: Metrics.avatarGap) {
-                // WIF's real mint, so its actual logo loads (gray monogram fallback).
-                TokenAvatar(mint: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", symbol: replay.symbol)
+                // The coin's real logo, bundled so it shows offline.
+                Image("CoinWIF")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: Metrics.avatar, height: Metrics.avatar)
+                    .clipShape(Circle())
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(replay.symbol)
                         .font(.rowTitle)
                         .foregroundStyle(Color.textPrimary)
-                    Text("\(replay.pair) · \(replay.dateLabel)")
+                    Text("\(replay.name) · \(replay.dateLabel)")
                         .font(.caption13Digits)
                         .foregroundStyle(Color.textSecondary)
                 }
@@ -143,14 +144,20 @@ struct PracticeRoundStep: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: Space.s4) {
-                Text(phase == .ready ? "Practice stake" : "Your practice position")
-                    .font(.caption13)
-                    .foregroundStyle(Color.textSecondary)
-                Text(PriceFormat.usd(Decimal(value)))
-                    .heroPriceStyle()
-                    .foregroundStyle(Color.textPrimary)
-                    .contentTransition(.numericText())
+            ReplayChart(prices: prices, revealed: shown.count, entry: replay.entry, soldAt: soldIndex)
+                .frame(height: 240)
+
+            HStack(alignment: .lastTextBaseline) {
+                VStack(alignment: .leading, spacing: Space.s4) {
+                    Text(phase == .ready ? "Your stake" : "Your position")
+                        .font(.caption13)
+                        .foregroundStyle(Color.textSecondary)
+                    Text(PriceFormat.usd(Decimal(value)))
+                        .heroPriceStyle()
+                        .foregroundStyle(Color.textPrimary)
+                        .contentTransition(.numericText())
+                }
+                Spacer(minLength: Space.s8)
                 Text(phase == .ready
                      ? "Buy at \(PriceFormat.price(replay.entryPrice))"
                      : "\(PriceFormat.signedUSD(Decimal(pnl))) (\(PriceFormat.change(Decimal(percent))))")
@@ -158,13 +165,9 @@ struct PracticeRoundStep: View {
                     .foregroundStyle(phase == .ready ? Color.textSecondary : pnlColor)
             }
 
-            ReplayChart(prices: prices, revealed: shown.count, entry: replay.entry, soldAt: soldIndex)
-                .frame(height: 180)
-
-            Text("\(replay.durationLabel) of real 1-minute prices in about 30 seconds · \(replay.source) \(replay.pair)")
+            Text("\(replay.source) \(replay.pair) · 1-minute prices")
                 .font(.caption13)
                 .foregroundStyle(Color.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
 
             if case .finished(let soldAt, let heldToEnd) = phase {
                 result(replay: replay, soldAt: soldAt, heldToEnd: heldToEnd)
@@ -224,7 +227,7 @@ struct PracticeRoundStep: View {
                 .font(.rowSubtitle)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("High \(PriceFormat.change(Decimal(peak * 100))) · Low \(PriceFormat.change(Decimal(low * 100))) · Practice money only")
+            Text("High \(PriceFormat.change(Decimal(peak * 100))) · Low \(PriceFormat.change(Decimal(low * 100)))")
                 .font(.caption13Digits)
                 .foregroundStyle(Color.textTertiary)
         }
