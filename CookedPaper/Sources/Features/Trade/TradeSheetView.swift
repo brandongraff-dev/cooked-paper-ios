@@ -296,7 +296,7 @@ private struct FillConfirmationView: View {
 /// A 3×4 keypad that edits a plain decimal string: digits, one decimal point, at
 /// most two decimals, a sane length cap, and delete. Borderless keys with a press
 /// state and a light haptic.
-private struct NumericKeypad: View {
+struct NumericKeypad: View {
     @Binding var text: String
 
     private let keys: [String] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "delete"]
@@ -344,7 +344,7 @@ private struct NumericKeypad: View {
     }
 }
 
-private struct KeypadKeyStyle: ButtonStyle {
+struct KeypadKeyStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(

@@ -172,6 +172,18 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         app.swipeUp()
         Thread.sleep(forTimeInterval: 0.6)
         attach(app, name: "10-portfolio-scrolled")
+        let leveragedRow = app.buttons["portfolio.leveraged.0"]
+        if leveragedRow.waitForExistence(timeout: 3) {
+            if !leveragedRow.isHittable { app.swipeUp() }
+            leveragedRow.tap()
+            Thread.sleep(forTimeInterval: 1.2)
+            attach(app, name: "10b-leveraged-position")
+            let close = app.buttons["Close"].firstMatch
+            if close.waitForExistence(timeout: 3) { close.tap() } else { app.swipeDown() }
+            Thread.sleep(forTimeInterval: 0.8)
+        } else {
+            unreachedSteps.append("no leveraged position row in Portfolio")
+        }
         visitTab(app, label: "Leaderboard", screenshotName: "11-leaderboard", unreachedSteps: &unreachedSteps)
         visitTab(app, label: "Settings", screenshotName: "12-settings", unreachedSteps: &unreachedSteps)
 
@@ -251,12 +263,43 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             unreachedSteps.append("no Buy button on the token detail screen")
         }
 
+        visitLeverageSheet(app, unreachedSteps: &unreachedSteps)
+
         let backButton = app.navigationBars.buttons.element(boundBy: 0)
         if backButton.waitForExistence(timeout: 3) {
             backButton.tap()
         } else {
             unreachedSteps.append("no back button found on the token detail screen")
         }
+    }
+
+    /// Token detail → Leverage: 5x long with $500 of margin, quoted live, then opened.
+    @MainActor
+    private func visitLeverageSheet(_ app: XCUIApplication, unreachedSteps: inout [String]) {
+        let leverageButton = app.buttons["tokenDetail.leverage"].firstMatch
+        guard leverageButton.waitForExistence(timeout: 5) else {
+            unreachedSteps.append("no Leverage button on the token detail screen")
+            return
+        }
+        leverageButton.tap()
+        guard app.buttons["leverage.open"].waitForExistence(timeout: 5) else {
+            unreachedSteps.append("leverage sheet never appeared")
+            return
+        }
+        for key in ["5", "0", "0"] { app.buttons[key].firstMatch.tap() }
+        Thread.sleep(forTimeInterval: 1.5) // debounce + quote
+        attach(app, name: "08b-leverage-sheet")
+        app.buttons["leverage.open"].tap()
+        if app.buttons["leverage.done"].waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.6)
+            attach(app, name: "08c-leverage-opened")
+            app.buttons["leverage.done"].tap()
+        } else {
+            unreachedSteps.append("leverage position never opened")
+            let cancel = app.buttons["Cancel"].firstMatch
+            if cancel.exists { cancel.tap() }
+        }
+        Thread.sleep(forTimeInterval: 0.8)
     }
 
     @MainActor

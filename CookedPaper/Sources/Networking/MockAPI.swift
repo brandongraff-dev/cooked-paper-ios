@@ -61,6 +61,8 @@ nonisolated enum MockAPI {
             if match("POST", "paper/portfolios/:/trades") != nil { return FreshAccount.execute(body) }
         }
 
+        if let leverage = MockLeverage.route(method: method, parts: parts, body: body) { return leverage }
+
         if match("POST", "paper/portfolios/starter") != nil {
             return (200, [
                 "portfolio": portfolio,
@@ -246,7 +248,7 @@ nonisolated enum MockAPI {
     private static var portfolio: [String: Any] {
         [
             "id": portfolioId, "name": "Paper Portfolio", "startingBalanceUsd": "10000",
-            "cashUsd": "6412.37", "createdAt": iso(daysFromNow: -12), "resetAt": NSNull(),
+            "cashUsd": "5612.37", "createdAt": iso(daysFromNow: -12), "resetAt": NSNull(),
             "resetCount": 0, "archivedAt": NSNull(), "isGuest": true,
         ]
     }
@@ -280,10 +282,17 @@ nonisolated enum MockAPI {
             let equity = 10_000 + Double(i) * 42 + 180 * sin(Double(i) / 3)
             points.append(["at": iso(daysFromNow: Double(i - 29) * 0.4), "equityUsd": dec(equity), "kind": i == 0 ? "start" : "mark"])
         }
-        points.append(["at": iso(daysFromNow: 0), "equityUsd": "11248.91", "kind": "mark"])
+        // Cash already excludes the margin locked in leveraged positions.
+        let lev = MockLeverage.totals
+        let totalEquity = 5612.37 + 4836.54 + lev.value
+        points.append(["at": iso(daysFromNow: 0), "equityUsd": String(format: "%.2f", totalEquity), "kind": "mark"])
         return [
             "portfolio": portfolio, "portfolioId": portfolioId,
-            "cashUsd": "6412.37", "positionsValueUsd": "4836.54", "equityUsd": "11248.91",
+            "cashUsd": "5612.37", "positionsValueUsd": "4836.54", "equityUsd": String(format: "%.2f", totalEquity),
+            "leveragedPositions": MockLeverage.openPositions,
+            "leveragedRoundTrips": MockLeverage.roundTrips,
+            "leveragedValueUsd": String(format: "%.2f", lev.value),
+            "lockedMarginUsd": String(format: "%.2f", lev.margin),
             "positions": [
                 position(tokens[0], qty: "92000000", cost: "1650.00", avg: "0.00001793", value: "2128.88", pnl: "478.88", pct: "29.02"),
                 position(tokens[1], qty: "820", cost: "1612.50", avg: "1.9665", value: "1504.04", pnl: "-108.46", pct: "-6.73"),
@@ -297,7 +306,7 @@ nonisolated enum MockAPI {
             "stats": [
                 "returnPct": pct("12.49", n: 3), "winRatePct": pct("66.67", n: 3),
                 "maxDrawdownPct": pct("4.81", n: 3),
-                "realizedPnlUsd": usd("291.70", n: 3), "unrealizedPnlUsd": usd("564.04", n: 3),
+                "realizedPnlUsd": usd("291.70", n: 3), "unrealizedPnlUsd": usd(String(format: "%.2f", 564.04 + lev.unrealized), n: 5),
                 "feesPaidUsd": "18.42", "tradeCount": 9, "roundTripCount": 3, "winCount": 2, "lossCount": 1,
             ] as [String: Any],
             "equityCurve": ["maxDrawdownPct": "4.81", "peakEquityUsd": "11302.10", "points": points] as [String: Any],
@@ -335,10 +344,10 @@ nonisolated enum MockAPI {
         let t = tokens[0]
         return [
             "trade": trade(id: "t-new", t, side: "buy", qty: "10803802", price: t.price, value: "250.00", daysAgo: 0),
-            "cashUsd": "6162.37",
+            "cashUsd": "5362.37",
             "fill": ["fillPriceUsd": t.price, "marketPriceUsd": t.price],
             "summary": [
-                "side": "buy", "slippageCostUsd": "1.05", "cashAfterUsd": "6162.37",
+                "side": "buy", "slippageCostUsd": "1.05", "cashAfterUsd": "5362.37",
                 "vsQuote": ["expectedPriceUsd": t.price, "fillPriceUsd": t.price, "deltaBps": 0, "direction": "flat"] as [String: Any],
             ] as [String: Any],
         ]

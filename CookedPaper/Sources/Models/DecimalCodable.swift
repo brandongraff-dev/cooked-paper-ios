@@ -78,3 +78,11 @@ extension Decimal {
         return "\(sign)\(formatted(.number.precision(.fractionLength(fractionDigits))))%"
     }
 }
+
+extension KeyedDecodingContainer {
+    /// A missing key decodes as nil, like a plain `Decimal?` would, so additive
+    /// server fields (e.g. `leveragedValueUsd`) don't break decoding older responses.
+    func decode(_ type: OptionalDecimalString.Type, forKey key: Key) throws -> OptionalDecimalString {
+        try decodeIfPresent(type, forKey: key) ?? OptionalDecimalString(wrappedValue: nil)
+    }
+}

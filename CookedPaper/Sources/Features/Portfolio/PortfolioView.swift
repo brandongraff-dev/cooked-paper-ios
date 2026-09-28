@@ -5,6 +5,7 @@ struct PortfolioView: View {
     private let portfolioStore = PortfolioStore.shared
     private let live = LiveSocket.shared
     @State private var scrubIndex: Int?
+    @State private var selectedLeveraged: LeveragedSelection?
 
     var body: some View {
         Group {
@@ -23,6 +24,9 @@ struct PortfolioView: View {
         .navigationBarTitleDisplayMode(.large)
         .navigationDestination(for: String.self) { mint in
             TokenDetailView(mint: mint)
+        }
+        .sheet(item: $selectedLeveraged) { selection in
+            LeveragedPositionSheet(positionId: selection.id)
         }
     }
 
@@ -57,11 +61,39 @@ struct PortfolioView: View {
                     }
                 }
 
-                if !snapshot.roundTrips.isEmpty {
+                let leveraged = snapshot.leveragedPositions ?? []
+                if !leveraged.isEmpty {
+                    VStack(alignment: .leading, spacing: Space.headerGap) {
+                        SectionHeader(
+                            title: "Leverage",
+                            caption: snapshot.lockedMarginUsd.map { "\(PriceFormat.usd($0)) margin" }
+                        )
+                        VStack(spacing: 0) {
+                            ForEach(Array(leveraged.enumerated()), id: \.element.id) { index, position in
+                                Button {
+                                    Haptics.tap()
+                                    selectedLeveraged = LeveragedSelection(id: position.id)
+                                } label: {
+                                    LeveragedPositionRow(position: position)
+                                }
+                                .buttonStyle(.pressable)
+                                .accessibilityIdentifier("portfolio.leveraged.\(index)")
+                                if index < leveraged.count - 1 { RowSeparator() }
+                            }
+                        }
+                    }
+                }
+
+                let closedLeveraged = Array((snapshot.leveragedRoundTrips ?? []).prefix(5))
+                if !snapshot.roundTrips.isEmpty || !closedLeveraged.isEmpty {
                     let closed = Array(snapshot.roundTrips.prefix(10))
                     VStack(alignment: .leading, spacing: Space.headerGap) {
                         SectionHeader(title: "Recently closed")
                         VStack(spacing: 0) {
+                            ForEach(Array(closedLeveraged.enumerated()), id: \.element.id) { index, roundTrip in
+                                LeveragedRoundTripRow(roundTrip: roundTrip)
+                                if index < closedLeveraged.count - 1 || !closed.isEmpty { RowSeparator() }
+                            }
                             ForEach(Array(closed.enumerated()), id: \.element.id) { index, roundTrip in
                                 RoundTripRow(roundTrip: roundTrip)
                                 if index < closed.count - 1 { RowSeparator() }
@@ -179,6 +211,76 @@ private struct RoundTripRow: View {
         ListRow(
             title: roundTrip.token?.symbol ?? "?",
             subtitle: roundTrip.returnPct.map { "\(PriceFormat.change($0)) return" }
+        ) {
+            TokenAvatar(mint: roundTrip.tokenMint, symbol: roundTrip.token?.symbol)
+        } trailing: {
+            Text(PriceFormat.signedUSD(roundTrip.realizedPnlUsd))
+                .font(.rowValue)
+                .foregroundStyle(Color.direction(roundTrip.realizedPnlUsd))
+        }
+    }
+}
+
+private struct LeveragedSelection: Identifiable {
+    let id: String
+}
+
+/// Avatar | symbol + "5x Long" over liquidation distance | value over return on margin.
+private struct LeveragedPositionRow: View {
+    let position: PaperLeveragedPosition
+
+    private var subtitle: String {
+        guard let distance = position.distanceToLiquidationPct else {
+            return "Liq. \(PriceFormat.price(position.liquidationPriceUsd))"
+        }
+        let away = abs(distance).formatted(.number.precision(.fractionLength(1)))
+        return "Liq. \(PriceFormat.price(position.liquidationPriceUsd)) · \(away)% away"
+    }
+
+    var body: some View {
+        HStack(spacing: Metrics.avatarGap) {
+            TokenAvatar(mint: position.tokenMint, symbol: position.token?.symbol)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: Space.s8) {
+                    Text(position.symbol)
+                        .font(.rowTitle)
+                        .foregroundStyle(Color.textPrimary)
+                    LeverageBadge(position: position)
+                }
+                Text(subtitle)
+                    .font(.rowSubvalue)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: Space.s8)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(PriceFormat.usd(position.valueUsd))
+                    .font(.rowValue)
+                    .foregroundStyle(Color.textPrimary)
+                    .contentTransition(.numericText())
+                if position.unrealizedPnlUsd == nil {
+                    Text("Unmeasured")
+                        .font(.rowSubvalue)
+                        .foregroundStyle(Color.textTertiary)
+                } else {
+                    ChangeText(percent: position.unrealizedReturnOnMarginPct)
+                }
+            }
+        }
+        .frame(minHeight: Metrics.rowHeight)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct LeveragedRoundTripRow: View {
+    let roundTrip: PaperLeveragedRoundTrip
+
+    var body: some View {
+        ListRow(
+            title: roundTrip.token?.symbol ?? "?",
+            subtitle: roundTrip.isLiquidated
+                ? "\(roundTrip.leverage)x \(roundTrip.direction.title) · Liquidated"
+                : "\(roundTrip.leverage)x \(roundTrip.direction.title) · \(PriceFormat.change(roundTrip.returnOnMarginPct)) on margin"
         ) {
             TokenAvatar(mint: roundTrip.tokenMint, symbol: roundTrip.token?.symbol)
         } trailing: {

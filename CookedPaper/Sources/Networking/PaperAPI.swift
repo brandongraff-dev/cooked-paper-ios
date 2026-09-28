@@ -56,4 +56,46 @@ enum PaperAPI {
             Endpoint(path: "/paper/portfolios/\(portfolioId)/reset", method: "POST")
         )
     }
+
+    // MARK: - Leverage
+
+    static func leverageConfig() async throws -> PaperLeverageConfigResponse {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/leverage/config"),
+            as: PaperLeverageConfigResponse.self
+        )
+    }
+
+    static func leverageQuote(portfolioId: String, body: PaperLeverageQuoteBody) async throws -> PaperLeverageQuoteResponse {
+        try await APIClient.shared.send(
+            Endpoint(
+                path: "/paper/portfolios/\(portfolioId)/leverage/quote",
+                method: "POST",
+                body: APIClient.shared.encode(body)
+            ),
+            as: PaperLeverageQuoteResponse.self
+        )
+    }
+
+    static func openLeveraged(portfolioId: String, body: OpenPaperLeveragedBody) async throws -> PaperLeveragedMutationResponse {
+        try await APIClient.shared.send(
+            Endpoint(
+                path: "/paper/portfolios/\(portfolioId)/leverage/positions",
+                method: "POST",
+                body: APIClient.shared.encode(body)
+            ),
+            as: PaperLeveragedMutationResponse.self
+        )
+    }
+
+    static func closeLeveraged(portfolioId: String, positionId: String, body: ClosePaperLeveragedBody) async throws -> PaperLeveragedMutationResponse {
+        try await APIClient.shared.send(
+            Endpoint(
+                path: "/paper/portfolios/\(portfolioId)/leverage/positions/\(positionId)/close",
+                method: "POST",
+                body: APIClient.shared.encode(body)
+            ),
+            as: PaperLeveragedMutationResponse.self
+        )
+    }
 }

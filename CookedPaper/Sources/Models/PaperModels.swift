@@ -130,6 +130,11 @@ struct PaperSnapshotResponse: Decodable {
     let roundTrips: [PaperRoundTrip]
     let stats: PaperStats
     let equityCurve: EquityCurve
+    // Leverage (additive; absent on servers that predate it).
+    let leveragedPositions: [PaperLeveragedPosition]?
+    let leveragedRoundTrips: [PaperLeveragedRoundTrip]?
+    @OptionalDecimalString var leveragedValueUsd: Decimal?
+    @OptionalDecimalString var lockedMarginUsd: Decimal?
 }
 
 // MARK: - Trades (fill history)

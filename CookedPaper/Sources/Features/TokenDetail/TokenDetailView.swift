@@ -12,6 +12,7 @@ struct TokenDetailView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var tradeSide: TradeSide?
+    @State private var showsLeverage = false
 
     private var position: PaperPosition? {
         PortfolioStore.shared.snapshot?.positions.first { $0.tokenMint == mint }
@@ -44,6 +45,9 @@ struct TokenDetailView: View {
                 tokenSymbol: profile?.token.symbol ?? "token",
                 priceUsd: profile?.market.priceUsd.value
             )
+        }
+        .sheet(isPresented: $showsLeverage) {
+            LeverageSheetView(mint: mint, tokenSymbol: profile?.token.symbol ?? "token")
         }
         .task { await load() }
         .onChange(of: range) { _, _ in
@@ -245,6 +249,15 @@ struct TokenDetailView: View {
                 }
                 .buttonStyle(.secondary)
             }
+            Button {
+                Haptics.tap()
+                showsLeverage = true
+            } label: {
+                Label("Leverage", systemImage: "bolt.fill")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.secondary)
+            .accessibilityIdentifier("tokenDetail.leverage")
             Button("Buy") {
                 Haptics.tap()
                 tradeSide = .buy
