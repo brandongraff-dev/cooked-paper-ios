@@ -64,6 +64,22 @@ jobs:
           echo "Using simulator: $DEVICE_LINE"
           echo "DEVICE_UDID=$DEVICE_UDID" >> "$GITHUB_ENV"
 
+      # `xcodebuild test` boots the simulator itself if it isn't already running,
+      # then launches the app under test essentially immediately — leaving no time
+      # for the simulator's own network/DNS stack to finish settling after a cold
+      # boot. Confirmed from a real run: Settings (no network calls) rendered
+      # perfectly while Discover/Leaderboard/Portfolio (all fired a request within
+      # the first couple of seconds after launch) failed identically with "The
+      # request failed." Booting ahead of time and waiting for `bootstatus`, plus a
+      # small extra margin, is the standard mitigation for exactly this class of
+      # iOS Simulator CI flakiness.
+      - name: Pre-boot simulator and let networking settle
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "$DEVICE_UDID" || true
+          xcrun simctl bootstatus "$DEVICE_UDID" -b
+          sleep 10
+
       - name: Build and test (unit tests + UI screenshot walkthrough)
         run: |
           xcodebuild test \
