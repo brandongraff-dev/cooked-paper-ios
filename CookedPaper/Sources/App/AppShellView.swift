@@ -32,21 +32,21 @@ struct AppShellView: View {
                 PortfolioView()
             }
             .accessibilityIdentifier("tab.portfolio")
-            .tabItem { Label("Portfolio", systemImage: "chart.pie.fill") }
+            .tabItem { Label("Portfolio", systemImage: "chart.pie") }
 
             NavigationStack {
                 LeaderboardView()
             }
             .accessibilityIdentifier("tab.leaderboard")
-            .tabItem { Label("Leaderboard", systemImage: "trophy.fill") }
+            .tabItem { Label("Leaderboard", systemImage: "trophy") }
 
             NavigationStack {
                 SettingsView()
             }
             .accessibilityIdentifier("tab.settings")
-            .tabItem { Label("Settings", systemImage: "gearshape.fill") }
+            .tabItem { Label("Settings", systemImage: "gearshape") }
         }
-        .tint(CookedColor.Brand.fill)
+        .tint(Color.accentFlame)
         .modifier(TabBarMinimizeOnScroll())
         .task {
             await portfolioStore.bootstrapIfNeeded()

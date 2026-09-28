@@ -16,67 +16,66 @@ struct SettingsView: View {
             Section {
                 accountRow
             }
-            .listRowBackground(rowBackground)
+            .listRowBackground(Color.appSurface)
 
             Section("Subscription") {
                 Button { showManageSubscriptions = true } label: {
-                    SettingsRow(symbol: "crown.fill", color: CookedColor.Prism.amber, title: "Manage Subscription")
+                    SettingsRow(symbol: "creditcard", title: "Manage subscription")
                 }
                 Button { Task { await subscriptionStore.restore() } } label: {
-                    SettingsRow(symbol: "arrow.clockwise", color: CookedColor.Brand.fill, title: "Restore Purchases")
+                    SettingsRow(symbol: "arrow.clockwise", title: "Restore purchases")
                 }
             }
-            .listRowBackground(rowBackground)
-
-            Section("Portfolio") {
-                Button(role: .destructive) { showResetConfirm = true } label: {
-                    SettingsRow(symbol: "arrow.counterclockwise", color: CookedColor.Brand.dangerFill, title: "Reset Portfolio", titleColor: CookedColor.Terminal.sell)
-                }
-                .disabled(isResetting)
-                if isResetting {
-                    ProgressView().tint(CookedColor.Brand.fill)
-                }
-            }
-            .listRowBackground(rowBackground)
+            .listRowBackground(Color.appSurface)
 
             Section("Alerts") {
                 if session.isGuest {
                     Button { showLinkAccount = true } label: {
-                        SettingsRow(symbol: "bell.badge.fill", color: CookedColor.Product.lineStrong, title: "Save Progress to set price alerts", titleColor: CookedColor.Terminal.textMuted)
+                        SettingsRow(symbol: "bell", title: "Price alerts", detail: "Save progress first")
                     }
                 } else {
                     NavigationLink { AlertsView() } label: {
-                        SettingsRow(symbol: "bell.badge.fill", color: CookedColor.Brand.dangerFill, title: "Price Alerts")
+                        SettingsRow(symbol: "bell", title: "Price alerts")
                     }
                     .accessibilityIdentifier("settings.priceAlerts")
                 }
             }
-            .listRowBackground(rowBackground)
-
-            Section("Legal") {
-                Link(destination: LegalLinks.terms) {
-                    SettingsRow(symbol: "doc.text.fill", color: CookedColor.Prism.indigo, title: "Terms of Use", trailingSymbol: "arrow.up.right")
-                }
-                Link(destination: LegalLinks.privacy) {
-                    SettingsRow(symbol: "hand.raised.fill", color: CookedColor.Prism.teal, title: "Privacy Policy", trailingSymbol: "arrow.up.right")
-                }
-            }
-            .listRowBackground(rowBackground)
+            .listRowBackground(Color.appSurface)
 
             Section {
-                HStack(alignment: .top, spacing: CookedSpacing.sm) {
-                    Image(systemName: "checkmark.shield.fill")
-                        .foregroundStyle(CookedColor.Terminal.buy)
-                    Text("Cooked Paper is a simulated trading experience. Nothing in this app involves real money, and nothing you do here executes on-chain.")
-                        .font(CookedFont.caption(12))
-                        .foregroundStyle(CookedColor.Terminal.textMuted)
+                Link(destination: LegalLinks.terms) {
+                    SettingsRow(symbol: "doc.text", title: "Terms of Use", trailingSymbol: "arrow.up.right")
                 }
+                Link(destination: LegalLinks.privacy) {
+                    SettingsRow(symbol: "hand.raised", title: "Privacy Policy", trailingSymbol: "arrow.up.right")
+                }
+            } header: {
+                Text("Legal")
+            } footer: {
+                Text("Cooked Paper is a simulated trading experience. Nothing here involves real money or executes on-chain.")
+                    .font(.caption13)
+                    .foregroundStyle(Color.textTertiary)
             }
-            .listRowBackground(rowBackground)
+            .listRowBackground(Color.appSurface)
+
+            Section {
+                Button(role: .destructive) { showResetConfirm = true } label: {
+                    HStack {
+                        Text("Reset portfolio")
+                            .font(.body)
+                            .foregroundStyle(Color.negative)
+                        Spacer()
+                        if isResetting { ProgressView() }
+                    }
+                }
+                .disabled(isResetting)
+            }
+            .listRowBackground(Color.appSurface)
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(AmbientBackground(colors: [CookedColor.Prism.indigo, CookedColor.Prism.sky, CookedColor.Prism.teal], intensity: 0.8))
+        .background(Color.appBackground)
+        .tint(Color.textPrimary)
         .navigationTitle("Settings")
         .sheet(isPresented: $showLinkAccount) { LinkAccountSheet() }
         .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
@@ -92,46 +91,34 @@ struct SettingsView: View {
         }
     }
 
-    /// Frosted rows over the aurora — translucent enough to let its color through.
-    private var rowBackground: some View {
-        Rectangle().fill(.ultraThinMaterial).overlay(Color.white.opacity(0.03))
-    }
-
     private var accountRow: some View {
-        HStack(spacing: CookedSpacing.sm) {
-            TokenAvatar(
-                seed: session.username ?? "guest",
-                label: session.username ?? "G",
-                size: 52
-            )
-            VStack(alignment: .leading, spacing: 3) {
+        HStack(spacing: Metrics.avatarGap) {
+            MonogramAvatar(text: session.isGuest ? "Guest" : (session.username ?? "You"), size: 48)
+            VStack(alignment: .leading, spacing: Space.s4) {
+                Text(session.isGuest ? "Guest" : (session.username ?? "Signed in"))
+                    .font(.rowTitle)
+                    .foregroundStyle(Color.textPrimary)
                 if session.isGuest {
-                    Text("Guest session")
-                        .font(CookedFont.headline())
-                        .foregroundStyle(CookedColor.Terminal.textPrimary)
-                    Label("Not saved past 7 days", systemImage: "clock.badge.exclamationmark")
-                        .font(CookedFont.caption(12))
-                        .foregroundStyle(CookedColor.Terminal.warn)
+                    Label("Progress is deleted after 7 days", systemImage: "exclamationmark.circle")
+                        .labelStyle(InlineIconLabelStyle())
                 } else {
-                    Text(session.username ?? "Signed in")
-                        .font(CookedFont.headline(18))
-                        .foregroundStyle(CookedColor.Terminal.textPrimary)
-                    Label("Progress saved to your account", systemImage: "checkmark.icloud.fill")
-                        .font(CookedFont.caption(12))
-                        .foregroundStyle(CookedColor.Terminal.buy)
+                    Label("Progress saved to your account", systemImage: "checkmark.circle")
+                        .labelStyle(InlineIconLabelStyle())
                 }
             }
-            Spacer()
+            Spacer(minLength: Space.s8)
             if session.isGuest {
-                Button("Save Progress") { showLinkAccount = true }
-                    .buttonStyle(.cookedCompact)
+                Button("Save progress") { showLinkAccount = true }
+                    .buttonStyle(.compact)
+                    .accessibilityIdentifier("settings.saveProgress")
             } else {
-                Button("Sign Out") { Task { await signOut() } }
-                    .font(CookedFont.body())
-                    .foregroundStyle(CookedColor.Terminal.sell)
+                Button("Sign out") { Task { await signOut() } }
+                    .font(.caption13)
+                    .foregroundStyle(Color.negative)
+                    .buttonStyle(.borderless)
             }
         }
-        .padding(.vertical, CookedSpacing.xs)
+        .padding(.vertical, Space.s8)
     }
 
     private func resetPortfolio() async {
@@ -151,27 +138,49 @@ struct SettingsView: View {
     }
 }
 
-/// One Settings row: a colored icon tile, a title, and an optional trailing glyph.
+/// One Settings row: a plain SF Symbol in secondary gray, a title, and an optional
+/// detail or trailing glyph.
 private struct SettingsRow: View {
     let symbol: String
-    let color: Color
     let title: String
-    var titleColor: Color = CookedColor.Terminal.textPrimary
+    var detail: String? = nil
     var trailingSymbol: String? = nil
 
     var body: some View {
-        HStack(spacing: CookedSpacing.sm) {
-            IconTile(symbol: symbol, color: color, size: 30)
+        HStack(spacing: Space.s12) {
+            Image(systemName: symbol)
+                .font(.body)
+                .foregroundStyle(Color.textSecondary)
+                .frame(width: 24)
+                .accessibilityHidden(true)
             Text(title)
-                .font(CookedFont.body(16))
-                .foregroundStyle(titleColor)
+                .font(.body)
+                .foregroundStyle(Color.textPrimary)
             Spacer()
+            if let detail {
+                Text(detail)
+                    .font(.rowSubtitle)
+                    .foregroundStyle(Color.textTertiary)
+            }
             if let trailingSymbol {
                 Image(systemName: trailingSymbol)
-                    .font(.system(size: CookedIconSize.xs, weight: .bold))
-                    .foregroundStyle(CookedColor.Terminal.textMuted)
+                    .font(.caption13)
+                    .foregroundStyle(Color.textTertiary)
+                    .accessibilityHidden(true)
             }
         }
         .contentShape(Rectangle())
+    }
+}
+
+/// Icon and text on one line with a tight gap — for the account card's status line.
+private struct InlineIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: Space.s4) {
+            configuration.icon
+            configuration.title
+        }
+        .font(.rowSubtitle)
+        .foregroundStyle(Color.textSecondary)
     }
 }

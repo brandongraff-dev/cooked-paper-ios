@@ -1,194 +1,18 @@
 import Foundation
 import SwiftUI
-import UIKit
 
-/// A raised card in the dense/terminal surface family: `bgSurface` fill, one hairline
-/// edge, no drop shadow — this palette separates layers by the hairline, not by a big
-/// lightness jump (design-tokens.ts: "a card reads as a card from its hairline").
-struct CookedCard<Content: View>: View {
-    var padding: CGFloat = CookedSpacing.md
-    @ViewBuilder var content: Content
+// MARK: - Avatars
 
-    var body: some View {
-        content
-            .padding(padding)
-            .background(CookedColor.Terminal.bgSurface)
-            .clipShape(RoundedRectangle(cornerRadius: CookedRadius.md, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: CookedRadius.md, style: .continuous)
-                    .strokeBorder(CookedColor.Terminal.border, lineWidth: 1)
-            )
-    }
-}
-
-/// The one primary action style in the app — brand blue fill, near-black-of-the-hue
-/// ink on top (never white; see `CookedColor.Brand`). Presses respond on pointer-down
-/// via `ButtonStyle`'s `configuration.isPressed`, which SwiftUI drives from the touch
-/// itself — no debounce, no waiting for touch-up (apple-design §1).
-struct PrimaryButtonStyle: ButtonStyle {
-    var isDestructive: Bool = false
-    var isEnabled: Bool = true
-
-    func makeBody(configuration: Configuration) -> some View {
-        let fill = isDestructive ? CookedColor.Brand.dangerFill : CookedColor.Brand.fill
-        let ink = isDestructive ? CookedColor.Brand.onDanger : CookedColor.Brand.onFill
-        let shape = RoundedRectangle(cornerRadius: CookedRadius.button, style: .continuous)
-
-        configuration.label
-            .font(CookedFont.headline())
-            .foregroundStyle(ink)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(
-                LinearGradient(
-                    colors: [fill.opacity(isEnabled ? 1 : 0.4), fill.opacity(isEnabled ? 0.8 : 0.32)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                in: shape
-            )
-            // A light-catching top rim — what makes the fill read as a lit, raised
-            // object rather than a flat rectangle.
-            .overlay(
-                shape.strokeBorder(
-                    LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.05)], startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1
-                )
-            )
-            .shadow(color: fill.opacity(isEnabled ? 0.45 : 0), radius: 16, y: 6)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .brightness(configuration.isPressed ? -0.05 : 0)
-            .animation(CookedMotion.press, value: configuration.isPressed)
-    }
-}
-
-struct SecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(CookedFont.headline())
-            .foregroundStyle(CookedColor.Terminal.textPrimary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .glassPanel(cornerRadius: CookedRadius.button)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(CookedMotion.press, value: configuration.isPressed)
-    }
-}
-
-extension ButtonStyle where Self == PrimaryButtonStyle {
-    static var cookedPrimary: PrimaryButtonStyle { PrimaryButtonStyle() }
-    static func cookedPrimary(destructive: Bool = false, enabled: Bool = true) -> PrimaryButtonStyle {
-        PrimaryButtonStyle(isDestructive: destructive, isEnabled: enabled)
-    }
-}
-
-extension ButtonStyle where Self == SecondaryButtonStyle {
-    static var cookedSecondary: SecondaryButtonStyle { SecondaryButtonStyle() }
-}
-
-/// An inline, row-trailing CTA — "Save Progress" in Settings' account row, and
-/// anywhere else a full-width `PrimaryButtonStyle` would be wrong for the context.
-/// A glass pill where available (this is exactly the "context-sensitive control"
-/// Apple's own Liquid Glass guidance calls out), a tinted material pill below iOS 26.
-struct CompactButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        let label = configuration.label
-            .font(CookedFont.label())
-            .foregroundStyle(CookedColor.Brand.onFill)
-            .padding(.horizontal, CookedSpacing.sm)
-            .padding(.vertical, CookedSpacing.xxs + 2)
-
-        Group {
-            if #available(iOS 26.0, *) {
-                label.glassEffect(.regular.tint(CookedColor.Brand.fill).interactive(), in: .capsule)
-            } else {
-                label.background(CookedColor.Brand.fill).clipShape(Capsule())
-            }
-        }
-        .scaleEffect(configuration.isPressed ? 0.95 : 1)
-        .animation(CookedMotion.press, value: configuration.isPressed)
-    }
-}
-
-extension ButtonStyle where Self == CompactButtonStyle {
-    static var cookedCompact: CompactButtonStyle { CompactButtonStyle() }
-}
-
-/// A quick-size chip for the trade sheet's 25/50/75/100% row and the timeframe
-/// selector on the chart — the app's one genuinely pill-shaped control family.
-/// Fires its own selection haptic (Apple's dedicated generator for a picker/segment
-/// changing) — callers pass only the state change, never their own haptic, so every
-/// chip in the app feels identical without each screen having to remember to add one.
-struct CookedChip: View {
-    let title: String
-    let isSelected: Bool
-    var action: () -> Void
-
-    var body: some View {
-        Button {
-            Haptics.selection()
-            action()
-        } label: {
-            Text(title)
-                .font(CookedFont.label())
-                .foregroundStyle(isSelected ? CookedColor.Brand.onFill : CookedColor.Terminal.textSecondary)
-                .padding(.horizontal, CookedSpacing.sm)
-                .padding(.vertical, CookedSpacing.chip)
-                .modifier(ChipBackground(isSelected: isSelected))
-                .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .animation(CookedMotion.standard, value: isSelected)
-    }
-}
-
-/// The three visual states a chip can be in — unselected, selected-with-glass
-/// (iOS 26+), selected-solid (below iOS 26) — genuinely need different view trees
-/// (`glassEffect` vs. a flat color), which is why this is its own `ViewModifier`
-/// rather than a `.background()` value picked by a ternary.
-private struct ChipBackground: ViewModifier {
-    let isSelected: Bool
-
-    func body(content: Content) -> some View {
-        if isSelected, #available(iOS 26.0, *) {
-            content.glassEffect(.regular.tint(CookedColor.Brand.fill).interactive(), in: .capsule)
-        } else if isSelected {
-            content.background(CookedColor.Brand.fill)
-        } else {
-            content.background(CookedColor.Terminal.bgSurfaceHi)
-        }
-    }
-}
-
-/// The literal "PAPER · SIMULATED" disclosure the backend requires travel with every
-/// paper-leaderboard entry — mirrored here as a persistent badge so paper vs. real
-/// data is never presented as a reskin of the same screen (apps/api won't even let a
-/// paper stat serialize without this string attached).
-struct SimulatedBadge: View {
-    var body: some View {
-        Text("PAPER · SIMULATED")
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
-            .tracking(0.06 * 10)
-            .foregroundStyle(CookedColor.Terminal.textMuted)
-            .padding(.horizontal, CookedSpacing.xs)
-            .padding(.vertical, 3)
-            .cookedGlass(in: Capsule())
-    }
-}
-
-/// A token's icon, loaded from `GET /tokens/:mint/logo` — cacheable for a year
-/// server-side, so `AsyncImage`'s default `URLCache` behavior is exactly right with
-/// no extra caching layer needed here.
-///
-/// Until (or unless) the image arrives, it shows a generated `TokenAvatar` keyed on
-/// the mint, so a token without a logo still gets a distinct, stable identity.
-struct TokenLogo: View {
+/// A token's real logo (the feed's `logoUri` when present, else the API's logo
+/// endpoint), falling back to a gray circle with a white monogram.
+struct TokenAvatar: View {
     let mint: String
     var symbol: String? = nil
-    var size: CGFloat = 32
+    var logoURL: URL? = nil
+    var size: CGFloat = Metrics.avatar
 
     var body: some View {
-        AsyncImage(url: TokenAPI.logoURL(mint: mint)) { phase in
+        AsyncImage(url: logoURL ?? TokenAPI.logoURL(mint: mint)) { phase in
             if case .success(let image) = phase {
                 image
                     .resizable()
@@ -196,117 +20,383 @@ struct TokenLogo: View {
                     .frame(width: size, height: size)
                     .clipShape(Circle())
             } else {
-                TokenAvatar(seed: mint, label: symbol ?? mint, size: size)
+                MonogramAvatar(text: symbol ?? mint, size: size)
             }
         }
         .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 
-/// A gain/loss figure. Color is the ONLY channel `buy`/`sell` ever carry — never
-/// reused for anything else in this app (brand's own rule: red/green must mean
-/// direction and nothing else).
-struct PnLText: View {
-    let value: Decimal?
-    let isPercent: Bool
-    var font: Font = CookedFont.priceMedium()
+/// Gray circle, white single-letter monogram. People and logo-less tokens.
+struct MonogramAvatar: View {
+    let text: String
+    var size: CGFloat = Metrics.avatar
 
     var body: some View {
-        if let value {
-            let isGain = value >= 0
-            Text(formatted(value))
-                .font(font)
-                .foregroundStyle(isGain ? CookedColor.Terminal.buy : CookedColor.Terminal.sell)
-        } else {
-            // Null is "unpriced", never zero — apps/api's own rule, carried into the UI.
-            Text("—")
-                .font(font)
-                .foregroundStyle(CookedColor.Terminal.textMuted)
-        }
-    }
-
-    private func formatted(_ value: Decimal) -> String {
-        let sign = value >= 0 ? "+" : ""
-        if isPercent {
-            return "\(sign)\(value.formatted(.number.precision(.fractionLength(2))))%"
-        }
-        return "\(sign)\(value.formatted(.currency(code: "USD").precision(.fractionLength(2))))"
+        Circle()
+            .fill(Color.appFill)
+            .frame(width: size, height: size)
+            .overlay(
+                Text(String(text.first(where: { $0.isLetter || $0.isNumber }) ?? "?").uppercased())
+                    .font(.system(size: size * 0.42, weight: .semibold))
+                    .foregroundStyle(Color.textPrimary)
+            )
+            .accessibilityHidden(true)
     }
 }
 
-/// A loading placeholder — `bgSurfaceHi` fill with a moving highlight, so a screen's
-/// first frame reads as "content is arriving" rather than "content vanished behind a
-/// spinner." The highlight is a `LinearGradient` band swept across on a plain
-/// `repeatForever` loop, not a spring: this is an ambient, un-interruptible loop with
-/// no gesture or state behind it, so `CookedMotion`'s springs and one-shot curves
-/// don't apply — but it keeps that system's spirit of no bounce/overshoot (`.linear`
-/// and `.easeInOut` only). Respects `UIAccessibility.isReduceMotionEnabled`
-/// (apple-design §14): the sweep is dropped for a static, non-spatial opacity pulse.
-struct SkeletonView: View {
-    var cornerRadius: CGFloat = CookedRadius.xs
-    @State private var isAnimating = false
+// MARK: - Numbers
 
-    private var reduceMotion: Bool { UIAccessibility.isReduceMotionEnabled }
+/// A price, formatted by `PriceFormat.price` and animated digit-by-digit when it
+/// changes.
+struct PriceText: View {
+    let value: Decimal?
+    var font: Font = .rowValue
+    var color: Color = .textPrimary
+
+    var body: some View {
+        Text(value.map(PriceFormat.price) ?? "—")
+            .font(font)
+            .monospacedDigit()
+            .foregroundStyle(color)
+            .contentTransition(.numericText(value: value.map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0))
+            .animation(Motion.standard, value: value)
+    }
+}
+
+/// "+3.07%" / "−4.12%" as colored text. No pill, no arrow.
+struct ChangeText: View {
+    let percent: Decimal?
+    var font: Font = .rowSubvalue
+
+    var body: some View {
+        Text(PriceFormat.change(percent))
+            .font(font)
+            .monospacedDigit()
+            .foregroundStyle(Color.direction(percent))
+            .contentTransition(.numericText())
+    }
+}
+
+// MARK: - Buttons
+
+/// White capsule, black label, 56pt. Disabled keeps its shape at 35% opacity.
+struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.buttonLabel)
+            .foregroundStyle(Color.inverseText)
+            .frame(maxWidth: .infinity)
+            .frame(height: Metrics.buttonHeight)
+            .background(Color.inverseFill, in: Capsule())
+            .opacity(isEnabled ? 1 : 0.35)
+            .pressEffect(configuration.isPressed)
+    }
+}
+
+/// Elevated-surface capsule, white label, 56pt.
+struct SecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.buttonLabel)
+            .foregroundStyle(Color.textPrimary)
+            .frame(maxWidth: .infinity)
+            .frame(height: Metrics.buttonHeight)
+            .background(Color.appSurfaceElevated, in: Capsule())
+            .opacity(isEnabled ? 1 : 0.35)
+            .pressEffect(configuration.isPressed)
+    }
+}
+
+/// A small white capsule for inline actions ("Save progress").
+struct CompactButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.caption13)
+            .foregroundStyle(Color.inverseText)
+            .padding(.horizontal, Space.s12)
+            .frame(height: Metrics.chipHeight)
+            .background(Color.inverseFill, in: Capsule())
+            .pressEffect(configuration.isPressed)
+    }
+}
+
+/// Press feedback for tappable rows and cards: a quick 0.97 scale.
+struct PressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .pressEffect(configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == PrimaryButtonStyle {
+    static var primary: PrimaryButtonStyle { PrimaryButtonStyle() }
+}
+
+extension ButtonStyle where Self == SecondaryButtonStyle {
+    static var secondary: SecondaryButtonStyle { SecondaryButtonStyle() }
+}
+
+extension ButtonStyle where Self == CompactButtonStyle {
+    static var compact: CompactButtonStyle { CompactButtonStyle() }
+}
+
+extension ButtonStyle where Self == PressableStyle {
+    static var pressable: PressableStyle { PressableStyle() }
+}
+
+private struct PressEffect: ViewModifier {
+    let isPressed: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPressed && !reduceMotion ? 0.97 : 1)
+            .opacity(isPressed && reduceMotion ? 0.7 : 1)
+            .animation(Motion.press, value: isPressed)
+    }
+}
+
+extension View {
+    func pressEffect(_ isPressed: Bool) -> some View {
+        modifier(PressEffect(isPressed: isPressed))
+    }
+}
+
+// MARK: - Chips
+
+/// A filter/segment chip. Selected: white fill, black text. Unselected: surface
+/// fill, secondary text. Fires the selection haptic itself.
+struct Chip: View {
+    let title: String
+    let isSelected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            guard !isSelected else { return }
+            Haptics.selection()
+            action()
+        } label: {
+            Text(title)
+                .font(.caption13)
+                .foregroundStyle(isSelected ? Color.inverseText : Color.textSecondary)
+                .padding(.horizontal, Space.s12)
+                .frame(height: Metrics.chipHeight)
+                .background(isSelected ? Color.inverseFill : Color.appSurface, in: Capsule())
+        }
+        .buttonStyle(.pressable)
+        .animation(Motion.standard, value: isSelected)
+    }
+}
+
+/// A plain-text segment: selected is white text on an elevated capsule.
+struct Segment: View {
+    let title: String
+    let isSelected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            guard !isSelected else { return }
+            Haptics.selection()
+            action()
+        } label: {
+            Text(title)
+                .font(.caption13)
+                .foregroundStyle(isSelected ? Color.textPrimary : Color.textSecondary)
+                .frame(maxWidth: .infinity)
+                .frame(height: Metrics.chipHeight)
+                .background(isSelected ? Color.appSurfaceElevated : Color.clear, in: Capsule())
+        }
+        .buttonStyle(.pressable)
+        .animation(Motion.standard, value: isSelected)
+    }
+}
+
+// MARK: - Layout pieces
+
+/// 20 semibold, sentence case, on the screen margin.
+struct SectionHeader: View {
+    let title: String
+    var caption: String? = nil
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(.sectionHeader)
+                .foregroundStyle(Color.textPrimary)
+            Spacer()
+            if let caption {
+                Text(caption)
+                    .font(.caption13)
+                    .foregroundStyle(Color.textTertiary)
+            }
+        }
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// The standard 68pt row: 40pt leading view, title over subtitle, and an optional
+/// right-aligned value over sub-value.
+struct ListRow<Leading: View, Trailing: View>: View {
+    let title: String
+    var subtitle: String? = nil
+    @ViewBuilder var leading: Leading
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        HStack(spacing: Metrics.avatarGap) {
+            leading
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.rowTitle)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.rowSubvalue)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: Space.s8)
+            VStack(alignment: .trailing, spacing: 2) {
+                trailing
+            }
+        }
+        .frame(minHeight: Metrics.rowHeight)
+        .contentShape(Rectangle())
+    }
+}
+
+/// A hairline between rows, inset to start under the row's text (past the avatar).
+struct RowSeparator: View {
+    var leadingInset: CGFloat = Metrics.avatar + Metrics.avatarGap
+
+    var body: some View {
+        Rectangle()
+            .fill(Color.appSeparator)
+            .frame(height: 1)
+            .padding(.leading, leadingInset)
+    }
+}
+
+struct StatItem: Identifiable {
+    let label: String
+    let value: String
+    var color: Color = .textPrimary
+    var id: String { label }
+}
+
+/// Two columns of label (13 secondary) over value (17 semibold) on a neutral card.
+struct StatGrid: View {
+    let items: [StatItem]
+
+    var body: some View {
+        LazyVGrid(
+            columns: [GridItem(.flexible(), spacing: Space.s16, alignment: .leading), GridItem(.flexible(), spacing: Space.s16, alignment: .leading)],
+            alignment: .leading,
+            spacing: Space.s20
+        ) {
+            ForEach(items) { item in
+                VStack(alignment: .leading, spacing: Space.s4) {
+                    Text(item.label)
+                        .font(.caption13)
+                        .foregroundStyle(Color.textSecondary)
+                    Text(item.value)
+                        .font(.rowValue)
+                        .foregroundStyle(item.color)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(Space.s16)
+        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+    }
+}
+
+/// "Paper · Simulated" — the disclosure the backend requires on paper stats, as a
+/// quiet caption rather than a badge.
+struct SimulatedCaption: View {
+    var body: some View {
+        Text("Paper · Simulated")
+            .font(.caption13)
+            .foregroundStyle(Color.textTertiary)
+    }
+}
+
+struct EmptyStateView: View {
+    let symbol: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(spacing: Space.s8) {
+            Image(systemName: symbol)
+                .font(.title2)
+                .foregroundStyle(Color.textTertiary)
+            Text(title)
+                .font(.rowTitle)
+                .foregroundStyle(Color.textPrimary)
+            Text(detail)
+                .font(.rowSubtitle)
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.vertical, Space.s48)
+        .padding(.horizontal, Space.s24)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Loading placeholders
+
+/// A neutral placeholder block with a slow opacity pulse (static under Reduce
+/// Motion).
+struct SkeletonBlock: View {
+    var width: CGFloat? = nil
+    var height: CGFloat
+    var cornerRadius: CGFloat = 6
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dim = false
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(CookedColor.Terminal.bgSurfaceHi)
-            .overlay { if !reduceMotion { shimmer } }
-            .opacity(reduceMotion && isAnimating ? 0.55 : 1)
+            .fill(Color.appSurfaceElevated)
+            .frame(width: width, height: height)
+            .opacity(dim ? 0.5 : 1)
             .onAppear {
-                let animation: Animation = reduceMotion
-                    ? .easeInOut(duration: 1.1).repeatForever(autoreverses: true)
-                    : .linear(duration: 1.6).repeatForever(autoreverses: false)
-                withAnimation(animation) { isAnimating = true }
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { dim = true }
             }
-    }
-
-    private var shimmer: some View {
-        GeometryReader { proxy in
-            LinearGradient(
-                colors: [.clear, Color.white.opacity(0.07), .clear],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .frame(width: proxy.size.width * 0.7)
-            .offset(x: isAnimating ? proxy.size.width : -proxy.size.width)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 
-/// A placeholder for a row shaped like `DiscoverRow`/`PositionRow` — a logo circle,
-/// two leading lines, two trailing lines — so the swap from skeleton to real content
-/// doesn't reflow the row.
+/// Shaped like a `ListRow`, so the swap to real content doesn't reflow.
 struct SkeletonRow: View {
     var body: some View {
-        HStack(spacing: CookedSpacing.sm) {
-            SkeletonView(cornerRadius: 18)
-                .frame(width: 36, height: 36)
-
-            VStack(alignment: .leading, spacing: 6) {
-                SkeletonView().frame(width: 110, height: 14)
-                SkeletonView().frame(width: 70, height: 11)
+        HStack(spacing: Metrics.avatarGap) {
+            SkeletonBlock(width: Metrics.avatar, height: Metrics.avatar, cornerRadius: Metrics.avatar / 2)
+            VStack(alignment: .leading, spacing: Space.s8) {
+                SkeletonBlock(width: 96, height: 14)
+                SkeletonBlock(width: 64, height: 12)
             }
-
             Spacer()
-
-            VStack(alignment: .trailing, spacing: 6) {
-                SkeletonView().frame(width: 64, height: 14)
-                SkeletonView().frame(width: 40, height: 11)
+            VStack(alignment: .trailing, spacing: Space.s8) {
+                SkeletonBlock(width: 72, height: 14)
+                SkeletonBlock(width: 48, height: 12)
             }
         }
-        .padding(.vertical, 4)
-    }
-}
-
-/// A placeholder sized like the candlestick chart area (`TokenDetailView` renders
-/// `CandleChartView` at a fixed 280pt height).
-struct SkeletonChart: View {
-    var height: CGFloat = 280
-
-    var body: some View {
-        SkeletonView(cornerRadius: CookedRadius.md)
-            .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+        .frame(height: Metrics.rowHeight)
     }
 }

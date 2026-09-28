@@ -2,21 +2,17 @@ import Foundation
 import SwiftUI
 
 /// Price-crossing alerts only — the one `AlertRule` kind this app builds
-/// (`AlertModels.swift`). Not yet reachable from any tab or nav link; a separate
-/// integration pass wires an entry point to this screen once concurrent work lands.
+/// (`AlertModels.swift`). Reached from Settings for signed-in accounts.
 struct AlertsView: View {
     @State private var alerts: [PriceAlert] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showCreateSheet = false
-    @State private var animatedRowIDs: Set<String> = []
 
     private var isGuest: Bool { SessionStore.shared.isGuest }
 
     var body: some View {
-        ZStack {
-            AmbientBackground(colors: [CookedColor.Brand.dangerFill, CookedColor.Prism.amber, CookedColor.Prism.indigo], intensity: 0.8)
-
+        Group {
             if isGuest {
                 EmptyStateView(
                     symbol: "bell.slash",
@@ -24,7 +20,7 @@ struct AlertsView: View {
                     detail: "Price alerts are tied to your account, so a guest session can't create or see them."
                 )
             } else if isLoading {
-                ProgressView().tint(CookedColor.Brand.fill)
+                ProgressView()
             } else if let errorMessage {
                 EmptyStateView(symbol: "wifi.slash", title: "Couldn't load your alerts", detail: errorMessage)
             } else if alerts.isEmpty {
@@ -37,7 +33,9 @@ struct AlertsView: View {
                 list
             }
         }
-        .navigationTitle("Price Alerts")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.appBackground)
+        .navigationTitle("Price alerts")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             if !isGuest {
@@ -47,7 +45,9 @@ struct AlertsView: View {
                         showCreateSheet = true
                     } label: {
                         Image(systemName: "plus")
+                            .foregroundStyle(Color.textPrimary)
                     }
+                    .accessibilityLabel("Add")
                 }
             }
         }
@@ -61,11 +61,10 @@ struct AlertsView: View {
 
     private var list: some View {
         List {
-            ForEach(Array(alerts.enumerated()), id: \.element.id) { index, alert in
+            ForEach(alerts) { alert in
                 AlertRow(alert: alert)
-                    .listRowBackground(Rectangle().fill(.ultraThinMaterial))
-                    .listRowSeparatorTint(CookedColor.Terminal.border)
-                    .staggeredEntrance(index: index, id: alert.id, animatedIDs: $animatedRowIDs)
+                    .listRowBackground(Color.appSurface)
+                    .listRowSeparatorTint(Color.appSeparator)
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             Task { await delete(alert) }
@@ -111,58 +110,27 @@ private struct AlertRow: View {
     var body: some View {
         switch alert.rule {
         case .priceCrossed(let mint, let direction, let priceUsd):
-            HStack(spacing: CookedSpacing.sm) {
-                TokenLogo(mint: mint, size: 36)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(alert.name)
-                        .font(CookedFont.headline())
-                        .foregroundStyle(CookedColor.Terminal.textPrimary)
-                        .lineLimit(1)
-                    Text(mint)
-                        .font(CookedFont.caption())
-                        .foregroundStyle(CookedColor.Terminal.textMuted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-
-                Spacer()
-
-                HStack(spacing: 4) {
-                    Image(systemName: direction == .above ? "arrow.up" : "arrow.down")
-                        .font(.system(size: CookedIconSize.xs, weight: .semibold))
-                        .foregroundStyle(CookedColor.Terminal.textSecondary)
-                    Text(priceUsd.usdString(fractionDigits: priceUsd < 1 ? 6 : 2))
-                        .font(CookedFont.priceMedium())
-                        .foregroundStyle(CookedColor.Terminal.textPrimary)
-                }
+            ListRow(title: alert.name, subtitle: "\(mint.prefix(4))…\(mint.suffix(4))") {
+                TokenAvatar(mint: mint)
+            } trailing: {
+                Text((direction == .above ? "Above " : "Below ") + PriceFormat.price(priceUsd))
+                    .font(.rowSubvalue)
+                    .foregroundStyle(Color.textSecondary)
             }
-            .padding(.vertical, 4)
 
         case .unsupported(let kind):
             // Created elsewhere (e.g. the web app) with a rule this app doesn't build
             // or edit. Shown so it isn't silently missing from the list, never as an
             // editable row.
-            HStack(spacing: CookedSpacing.sm) {
-                Image(systemName: "questionmark.circle")
-                    .font(.system(size: CookedIconSize.md))
-                    .foregroundStyle(CookedColor.Terminal.textMuted)
-                    .frame(width: 36, height: 36)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(alert.name)
-                        .font(CookedFont.headline())
-                        .foregroundStyle(CookedColor.Terminal.textMuted)
-                        .lineLimit(1)
-                    Text("Alert kind \u{201c}\(kind)\u{201d} isn\u{2019}t supported here")
-                        .font(CookedFont.caption())
-                        .foregroundStyle(CookedColor.Terminal.textMuted)
-                }
-
-                Spacer()
+            ListRow(title: alert.name, subtitle: "\u{201c}\(kind)\u{201d} alerts aren\u{2019}t supported here") {
+                Circle()
+                    .fill(Color.appFill)
+                    .frame(width: Metrics.avatar, height: Metrics.avatar)
+                    .overlay(Image(systemName: "questionmark").foregroundStyle(Color.textTertiary))
+            } trailing: {
+                EmptyView()
             }
-            .padding(.vertical, 4)
-            .opacity(0.5)
+            .opacity(0.6)
         }
     }
 }
@@ -190,84 +158,80 @@ private struct CreateAlertSheet: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                CookedColor.Terminal.bgBase.ignoresSafeArea()
-
-                VStack(alignment: .leading, spacing: CookedSpacing.lg) {
-                    VStack(alignment: .leading, spacing: CookedSpacing.xs) {
-                        Text("Token mint")
-                            .font(CookedFont.caption())
-                            .foregroundStyle(CookedColor.Terminal.textMuted)
-                        // No search picker in this pass — Discover's token search
-                        // could feed this field once alerts get an entry point there.
-                        TextField("Mint address", text: $mint)
-                            .font(.system(.body, design: .monospaced))
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .padding(CookedSpacing.sm)
-                            .background(CookedColor.Terminal.bgSurfaceHi)
-                            .clipShape(RoundedRectangle(cornerRadius: CookedRadius.sm, style: .continuous))
-                            .foregroundStyle(CookedColor.Terminal.textPrimary)
-                    }
-
-                    VStack(alignment: .leading, spacing: CookedSpacing.xs) {
-                        Text("Direction")
-                            .font(CookedFont.caption())
-                            .foregroundStyle(CookedColor.Terminal.textMuted)
-                        HStack(spacing: CookedSpacing.xs) {
-                            CookedChip(title: "Above", isSelected: direction == .above) {
-                                direction = .above
-                            }
-                            CookedChip(title: "Below", isSelected: direction == .below) {
-                                direction = .below
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: CookedSpacing.xs) {
-                        Text("Price (USD)")
-                            .font(CookedFont.caption())
-                            .foregroundStyle(CookedColor.Terminal.textMuted)
-                        TextField("0.00", text: $priceText)
-                            .keyboardType(.decimalPad)
-                            .padding(CookedSpacing.sm)
-                            .background(CookedColor.Terminal.bgSurfaceHi)
-                            .clipShape(RoundedRectangle(cornerRadius: CookedRadius.sm, style: .continuous))
-                            .foregroundStyle(CookedColor.Terminal.textPrimary)
-                    }
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(CookedFont.caption())
-                            .foregroundStyle(CookedColor.Terminal.sell)
-                    }
-
-                    Spacer()
-
-                    Button {
-                        Task { await submit() }
-                    } label: {
-                        if isBusy {
-                            ProgressView().tint(CookedColor.Brand.onFill)
-                        } else {
-                            Text("Create alert")
-                        }
-                    }
-                    .buttonStyle(.cookedPrimary(enabled: canSubmit))
-                    .disabled(!canSubmit || isBusy)
+            VStack(alignment: .leading, spacing: Space.s24) {
+                field("Token mint") {
+                    // No search picker in this pass — Discover's token search could
+                    // feed this field once alerts get an entry point there.
+                    TextField("Mint address", text: $mint)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                 }
-                .padding(CookedSpacing.lg)
+
+                VStack(alignment: .leading, spacing: Space.s8) {
+                    Text("Direction")
+                        .font(.caption13)
+                        .foregroundStyle(Color.textSecondary)
+                    HStack(spacing: Space.s8) {
+                        Chip(title: "Above", isSelected: direction == .above) { direction = .above }
+                        Chip(title: "Below", isSelected: direction == .below) { direction = .below }
+                    }
+                }
+
+                field("Price (USD)") {
+                    TextField("0.00", text: $priceText)
+                        .keyboardType(.decimalPad)
+                        .monospacedDigit()
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption13)
+                        .foregroundStyle(Color.negative)
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await submit() }
+                } label: {
+                    if isBusy {
+                        ProgressView().tint(Color.inverseText)
+                    } else {
+                        Text("Create alert")
+                    }
+                }
+                .buttonStyle(.primary)
+                .disabled(!canSubmit || isBusy)
             }
-            .navigationTitle("New Price Alert")
+            .padding(.horizontal, Space.margin)
+            .padding(.vertical, Space.s16)
+            .background(Color.appSurfaceElevated)
+            .navigationTitle("New price alert")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .foregroundStyle(Color.textPrimary)
                 }
             }
         }
         .presentationDetents([.medium])
-        .presentationBackground(CookedColor.Terminal.bgBase)
+        .presentationCornerRadius(Radius.sheet)
+        .presentationBackground(Color.appSurfaceElevated)
+    }
+
+    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: Space.s8) {
+            Text(label)
+                .font(.caption13)
+                .foregroundStyle(Color.textSecondary)
+            content()
+                .font(.body)
+                .foregroundStyle(Color.textPrimary)
+                .padding(.horizontal, Space.s16)
+                .frame(height: 48)
+                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+        }
     }
 
     private func submit() async {
@@ -275,7 +239,7 @@ private struct CreateAlertSheet: View {
         isBusy = true
         errorMessage = nil
         do {
-            let name = "\(direction == .above ? "Above" : "Below") \(priceUsd.usdString(fractionDigits: priceUsd < 1 ? 6 : 2))"
+            let name = "\(direction == .above ? "Above" : "Below") \(PriceFormat.price(priceUsd))"
             let created = try await AlertsAPI.create(
                 name: name,
                 mint: trimmedMint,

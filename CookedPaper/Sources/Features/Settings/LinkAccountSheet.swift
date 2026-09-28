@@ -24,7 +24,7 @@ struct LinkAccountSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: CookedSpacing.lg) {
+            VStack(spacing: Space.s20) {
                 switch stage {
                 case .chooseMethod: chooseMethod
                 case .enterEmail: enterEmail
@@ -34,15 +34,15 @@ struct LinkAccountSheet: View {
 
                 if let errorMessage {
                     Text(errorMessage)
-                        .font(CookedFont.caption())
-                        .foregroundStyle(CookedColor.Terminal.sell)
+                        .font(Font.caption13)
+                        .foregroundStyle(Color.negative)
                         .multilineTextAlignment(.center)
                 }
 
                 Spacer()
             }
-            .padding(CookedSpacing.lg)
-            .background(CookedColor.Product.graphite.ignoresSafeArea())
+            .padding(Space.margin)
+            .background(Color.appSurfaceElevated.ignoresSafeArea())
             .navigationTitle("Save your progress")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -52,58 +52,60 @@ struct LinkAccountSheet: View {
             }
         }
         .presentationDetents([.medium])
+        .presentationCornerRadius(Radius.sheet)
+        .presentationBackground(Color.appSurfaceElevated)
     }
 
     private var chooseMethod: some View {
-        VStack(spacing: CookedSpacing.sm) {
+        VStack(spacing: Space.s12) {
             Text("Your practice portfolio is only saved on this device for 7 days. Sign in to keep it forever.")
-                .font(CookedFont.body())
-                .foregroundStyle(CookedColor.Product.chalkMuted)
+                .font(Font.body)
+                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.bottom, CookedSpacing.md)
+                .padding(.bottom, Space.s16)
 
             Button {
                 Task { await signIn { try await privy.signInWithApple(username: nil) } }
             } label: {
                 Label("Continue with Apple", systemImage: "apple.logo")
             }
-            .buttonStyle(.cookedSecondary)
+            .buttonStyle(.secondary)
 
             Button {
                 Task { await signIn { try await privy.signInWithGoogle(username: nil) } }
             } label: {
                 Label("Continue with Google", systemImage: "g.circle.fill")
             }
-            .buttonStyle(.cookedSecondary)
+            .buttonStyle(.secondary)
 
             Button {
                 stage = .enterEmail
             } label: {
-                // Deliberately not `.cookedSecondary`: social sign-in is the fast,
+                // Deliberately not `.secondary`: social sign-in is the fast,
                 // expected path on iOS, so email reads as the slower fallback link,
                 // not a third identical option.
                 Text("Continue with email")
-                    .font(CookedFont.body())
-                    .foregroundStyle(CookedColor.Product.chalkMuted)
+                    .font(Font.body)
+                    .foregroundStyle(Color.textSecondary)
             }
             .buttonStyle(.plain)
-            .padding(.top, CookedSpacing.xxs)
+            .padding(.top, Space.s4)
 
-            if isBusy { ProgressView().tint(CookedColor.Brand.fill).padding(.top, CookedSpacing.sm) }
+            if isBusy { ProgressView().padding(.top, Space.s12) }
         }
     }
 
     private var enterEmail: some View {
-        VStack(spacing: CookedSpacing.sm) {
+        VStack(spacing: Space.s12) {
             TextField("you@example.com", text: $email)
                 .textContentType(.emailAddress)
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .padding(CookedSpacing.sm)
-                .background(CookedColor.Product.slate)
-                .clipShape(RoundedRectangle(cornerRadius: CookedRadius.sm, style: .continuous))
-                .foregroundStyle(CookedColor.Product.chalk)
+                .padding(Space.s12)
+                .background(Color.appSurface)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+                .foregroundStyle(Color.textPrimary)
                 .focused($isEmailFieldFocused)
                 .toolbar {
                     ToolbarItemGroup(placement: .keyboard) {
@@ -125,27 +127,27 @@ struct LinkAccountSheet: View {
                     isBusy = false
                 }
             } label: {
-                if isBusy { ProgressView().tint(CookedColor.Brand.onFill) } else { Text("Send code") }
+                if isBusy { ProgressView().tint(Color.inverseText) } else { Text("Send code") }
             }
-            .buttonStyle(.cookedPrimary(enabled: !email.isEmpty))
+            .buttonStyle(.primary)
             .disabled(email.isEmpty || isBusy)
         }
     }
 
     private var enterCode: some View {
-        VStack(spacing: CookedSpacing.sm) {
+        VStack(spacing: Space.s12) {
             Text("Enter the code sent to \(email)")
-                .font(CookedFont.caption())
-                .foregroundStyle(CookedColor.Product.chalkMuted)
+                .font(Font.caption13)
+                .foregroundStyle(Color.textSecondary)
 
             TextField("123456", text: $code)
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.center)
-                .font(CookedFont.priceLarge())
-                .padding(CookedSpacing.sm)
-                .background(CookedColor.Product.slate)
-                .clipShape(RoundedRectangle(cornerRadius: CookedRadius.sm, style: .continuous))
-                .foregroundStyle(CookedColor.Product.chalk)
+                .font(Font.title2.weight(.semibold).monospacedDigit())
+                .padding(Space.s12)
+                .background(Color.appSurface)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+                .foregroundStyle(Color.textPrimary)
                 .focused($isCodeFieldFocused)
                 .toolbar {
                     ToolbarItemGroup(placement: .keyboard) {
@@ -159,23 +161,23 @@ struct LinkAccountSheet: View {
                     await signIn { try await privy.verifyEmailCode(code, sentTo: email, username: nil) }
                 }
             } label: {
-                if isBusy { ProgressView().tint(CookedColor.Brand.onFill) } else { Text("Verify") }
+                if isBusy { ProgressView().tint(Color.inverseText) } else { Text("Verify") }
             }
-            .buttonStyle(.cookedPrimary(enabled: code.count >= 4))
+            .buttonStyle(.primary)
             .disabled(code.count < 4 || isBusy)
         }
     }
 
     private var done: some View {
-        VStack(spacing: CookedSpacing.sm) {
+        VStack(spacing: Space.s12) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: CookedIconSize.xl))
-                .foregroundStyle(CookedColor.Terminal.buy)
+                .font(.system(size: 48))
+                .foregroundStyle(Color.positive)
             Text("You're signed in")
-                .font(CookedFont.headline())
-                .foregroundStyle(CookedColor.Product.chalk)
+                .font(Font.rowTitle)
+                .foregroundStyle(Color.textPrimary)
             Button("Done") { dismiss() }
-                .buttonStyle(.cookedPrimary)
+                .buttonStyle(.primary)
         }
     }
 

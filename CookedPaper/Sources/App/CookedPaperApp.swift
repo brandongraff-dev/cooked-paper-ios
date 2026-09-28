@@ -39,17 +39,18 @@ struct RootView: View {
                 PaywallView()
             }
         }
-        .animation(CookedMotion.calm, value: store.isSubscribed)
+        .animation(Motion.standard, value: store.isSubscribed)
     }
 }
 
 private struct LaunchScreen: View {
     var body: some View {
         ZStack {
-            CookedColor.Product.graphite.ignoresSafeArea()
-            Text("Cooked Paper")
-                .font(CookedFont.title())
-                .foregroundStyle(CookedColor.Product.chalkMuted)
+            Color.appBackground.ignoresSafeArea()
+            Image(systemName: "flame.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(Color.accentFlame)
+                .accessibilityLabel("Cooked Paper")
         }
     }
 }

@@ -139,7 +139,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         // Last on purpose: this sheet initializes the Privy SDK, which still has a
         // placeholder app id in this repo. If that ever takes the app down, only this
         // one screenshot is lost.
-        let saveProgress = app.buttons["Save Progress"].firstMatch
+        let saveProgress = app.buttons["settings.saveProgress"].firstMatch
         if saveProgress.waitForExistence(timeout: 5) {
             saveProgress.tap()
             Thread.sleep(forTimeInterval: 1)

@@ -39,9 +39,7 @@ struct CandleChartView: View {
 
     /// `.calm`'s curve retimed to `.slow` — `.speed` is the only way to stretch an
     /// existing `Animation` without duplicating its curve literal outside Motion.swift.
-    private var revealAnimation: Animation {
-        CookedMotion.calm.speed(CookedMotion.Duration.base / CookedMotion.Duration.slow)
-    }
+    private var revealAnimation: Animation { Motion.standard }
 
     var body: some View {
         GeometryReader { geometry in
@@ -71,11 +69,11 @@ struct CandleChartView: View {
                     }
                     for level in alertLevels {
                         let y = Self.yPosition(for: level.price, priceRange: priceRange, height: size.height)
-                        drawPriceLine(at: y, color: CookedColor.Terminal.warn, context: context, size: size)
+                        drawPriceLine(at: y, color: Color.textSecondary, context: context, size: size)
                     }
                     if let lastCandle {
                         let y = Self.yPosition(for: lastCandle.close, priceRange: priceRange, height: size.height)
-                        drawPriceLine(at: y, color: CookedColor.Terminal.accent, context: context, size: size)
+                        drawPriceLine(at: y, color: Color.textSecondary, context: context, size: size)
                     }
                     if let crosshairIndex, visible.indices.contains(crosshairIndex) {
                         drawCrosshair(at: crosshairIndex, in: visible, priceRange: priceRange, context: context, size: size)
@@ -91,9 +89,9 @@ struct CandleChartView: View {
 
                 ForEach(priceLabels) { label in
                     Text(label.text)
-                        .font(CookedFont.caption())
-                        .foregroundStyle(CookedColor.Terminal.textMuted)
-                        .frame(width: geometry.size.width - CookedSpacing.xs * 2, alignment: .trailing)
+                        .font(Font.caption2.monospacedDigit())
+                        .foregroundStyle(Color.textTertiary)
+                        .frame(width: geometry.size.width - Space.s8 * 2, alignment: .trailing)
                         .position(x: geometry.size.width / 2, y: label.y)
                 }
 
@@ -107,15 +105,15 @@ struct CandleChartView: View {
                     // caption size.
                     let x = min(max(rawX, 20), geometry.size.width - 20)
                     Text(label.text)
-                        .font(CookedFont.caption())
-                        .foregroundStyle(CookedColor.Terminal.textMuted)
-                        .position(x: x, y: geometry.size.height - CookedSpacing.xs)
+                        .font(Font.caption2.monospacedDigit())
+                        .foregroundStyle(Color.textTertiary)
+                        .position(x: x, y: geometry.size.height - Space.s8)
                 }
 
                 if let lastCandle {
                     let y = Self.yPosition(for: lastCandle.close, priceRange: priceRange, height: geometry.size.height)
-                    ChartPricePill(price: lastCandle.close, color: CookedColor.Terminal.accent)
-                        .frame(width: geometry.size.width - CookedSpacing.xs * 2, alignment: .trailing)
+                    ChartPricePill(price: lastCandle.close, color: Color.textSecondary)
+                        .frame(width: geometry.size.width - Space.s8 * 2, alignment: .trailing)
                         .position(x: geometry.size.width / 2, y: y)
                 }
 
@@ -127,27 +125,27 @@ struct CandleChartView: View {
                 ForEach(alertLevels) { level in
                     let y = Self.yPosition(for: level.price, priceRange: priceRange, height: geometry.size.height)
                     AlertLevelLabel(level: level)
-                        .frame(width: geometry.size.width - CookedSpacing.xs * 2, alignment: .leading)
+                        .frame(width: geometry.size.width - Space.s8 * 2, alignment: .leading)
                         .position(x: geometry.size.width / 2, y: y)
                 }
 
                 if let crosshairCandle {
                     let y = Self.yPosition(for: crosshairCandle.close, priceRange: priceRange, height: geometry.size.height)
-                    ChartPricePill(price: crosshairCandle.close, color: CookedColor.Terminal.chartCrosshair)
-                        .frame(width: geometry.size.width - CookedSpacing.xs * 2, alignment: .trailing)
+                    ChartPricePill(price: crosshairCandle.close, color: Color.textTertiary)
+                        .frame(width: geometry.size.width - Space.s8 * 2, alignment: .trailing)
                         .position(x: geometry.size.width / 2, y: y)
                 }
 
                 if let crosshairIndex, let candle = visible[safe: crosshairIndex] ?? nil {
                     CrosshairLabel(candle: candle)
-                        .padding(CookedSpacing.chip)
+                        .padding(Space.s8)
                 }
 
                 if showMovingAverage, let maPeriod {
                     Text("MA \(maPeriod)")
-                        .font(CookedFont.caption())
-                        .foregroundStyle(CookedColor.Terminal.textMuted)
-                        .padding(CookedSpacing.chip)
+                        .font(Font.caption2.monospacedDigit())
+                        .foregroundStyle(Color.textTertiary)
+                        .padding(Space.s8)
                         // Leading, not trailing: the trailing edge belongs to the price
                         // axis labels, and the top one would print underneath this.
                         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -259,7 +257,7 @@ struct CandleChartView: View {
             let rawY = height / CGFloat(gridRowCount) * CGFloat(row)
             let y = min(max(rawY, 7), height - 7) // keeps the top/bottom label from clipping at the canvas edge
             let price = priceRange.upperBound - (Decimal(row) / Decimal(gridRowCount)) * span
-            return PriceAxisLabel(id: row, y: y, text: price.usdString(fractionDigits: price < 1 ? 6 : 2))
+            return PriceAxisLabel(id: row, y: y, text: price.priceFormatted)
         }
     }
 
@@ -309,7 +307,7 @@ struct CandleChartView: View {
             var path = Path()
             path.move(to: CGPoint(x: 0, y: y))
             path.addLine(to: CGPoint(x: size.width, y: y))
-            context.stroke(path, with: .color(CookedColor.Terminal.chartGrid), lineWidth: 1)
+            context.stroke(path, with: .color(Color.appSeparator), lineWidth: 1)
         }
     }
 
@@ -333,7 +331,7 @@ struct CandleChartView: View {
             guard let candle else { continue } // a genuine gap — draw nothing, never interpolate
             let x = slot * CGFloat(index) + slot / 2
             let isUp = candle.close >= candle.open
-            let color = isUp ? CookedColor.Terminal.buy : CookedColor.Terminal.sell
+            let color = isUp ? Color.positive : Color.negative
 
             var wick = Path()
             wick.move(to: CGPoint(x: x, y: y(candle.high)))
@@ -370,7 +368,7 @@ struct CandleChartView: View {
             let barHeight = max(1, bandHeight * fraction)
             let x = slot * CGFloat(index) + slot / 2
             let isUp = candle.close >= candle.open
-            let color = isUp ? CookedColor.Terminal.buy : CookedColor.Terminal.sell
+            let color = isUp ? Color.positive : Color.negative
             let rect = CGRect(x: x - barWidth / 2, y: bandTop + (bandHeight - barHeight), width: barWidth, height: barHeight)
             context.fill(Path(rect), with: .color(color.opacity(0.5)))
         }
@@ -394,7 +392,7 @@ struct CandleChartView: View {
             }
         }
 
-        context.stroke(path, with: .color(CookedColor.Terminal.accent), lineWidth: 1.5)
+        context.stroke(path, with: .color(Color.textSecondary), lineWidth: 1.5)
     }
 
     private func drawCrosshair(at index: Int, in visible: [Candle?], priceRange: ClosedRange<Decimal>, context: GraphicsContext, size: CGSize) {
@@ -404,11 +402,11 @@ struct CandleChartView: View {
         var vertical = Path()
         vertical.move(to: CGPoint(x: x, y: 0))
         vertical.addLine(to: CGPoint(x: x, y: size.height))
-        context.stroke(vertical, with: .color(CookedColor.Terminal.chartCrosshair), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+        context.stroke(vertical, with: .color(Color.textTertiary), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
 
         if let candle = visible[index] { // a gap has no close price for the horizontal half of the crosshair
             let y = Self.yPosition(for: candle.close, priceRange: priceRange, height: size.height)
-            drawPriceLine(at: y, color: CookedColor.Terminal.chartCrosshair, context: context, size: size)
+            drawPriceLine(at: y, color: Color.textTertiary, context: context, size: size)
         }
     }
 }
@@ -418,24 +416,24 @@ private struct CrosshairLabel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text("O \(candle.open.usdString(fractionDigits: 6))")
-            Text("H \(candle.high.usdString(fractionDigits: 6))")
-            Text("L \(candle.low.usdString(fractionDigits: 6))")
-            Text("C \(candle.close.usdString(fractionDigits: 6))")
+            Text("O \(candle.open.priceFormatted)")
+            Text("H \(candle.high.priceFormatted)")
+            Text("L \(candle.low.priceFormatted)")
+            Text("C \(candle.close.priceFormatted)")
             Text("V \(candle.volume.formatted(.number.precision(.fractionLength(0))))")
         }
-        // Smaller and monospaced, not `CookedFont.caption()` — five stacked OHLCV rows
+        // Smaller and monospaced, not `Font.caption2.monospacedDigit()` — five stacked OHLCV rows
         // need tabular figures at a size that still leaves room for the volume row.
-        .font(.system(size: 10, weight: .medium, design: .monospaced))
-        .foregroundStyle(CookedColor.Terminal.textPrimary)
-        .padding(CookedSpacing.chip)
-        .background(CookedColor.Terminal.bgSurfaceHi.opacity(0.9))
-        .clipShape(RoundedRectangle(cornerRadius: CookedRadius.xs, style: .continuous))
+        .font(Font.caption2.monospacedDigit())
+        .foregroundStyle(Color.textPrimary)
+        .padding(Space.s8)
+        .background(Color.appSurfaceElevated.opacity(0.9))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
     }
 }
 
 /// A price pill pinned to the chart's trailing edge — the live last-close price in
-/// `CookedColor.Terminal.accent`, or the scrubbed crosshair price in
+/// `Color.textSecondary`, or the scrubbed crosshair price in
 /// `.chartCrosshair`, so which one is "live" vs. "what you're scrubbing" is never
 /// ambiguous from color alone.
 private struct ChartPricePill: View {
@@ -443,11 +441,11 @@ private struct ChartPricePill: View {
     let color: Color
 
     var body: some View {
-        Text(price.usdString(fractionDigits: price < 1 ? 6 : 2))
-            .font(CookedFont.caption())
+        Text(price.priceFormatted)
+            .font(Font.caption2.monospacedDigit())
             .foregroundStyle(color)
-            .padding(.horizontal, CookedSpacing.xs)
-            .padding(.vertical, CookedSpacing.chip)
+            .padding(.horizontal, Space.s8)
+            .padding(.vertical, Space.s8)
             .background(color.opacity(0.15))
             .clipShape(Capsule())
     }
@@ -463,14 +461,14 @@ private struct AlertLevelLabel: View {
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: level.direction == .above ? "arrow.up" : "arrow.down")
-                .font(.system(size: CookedIconSize.xs, weight: .semibold))
-            Text(level.price.usdString(fractionDigits: level.price < 1 ? 6 : 2))
-                .font(CookedFont.caption())
+                .font(Font.caption2.weight(.semibold))
+            Text(level.price.priceFormatted)
+                .font(Font.caption2.monospacedDigit())
         }
-        .foregroundStyle(CookedColor.Terminal.warn)
-        .padding(.horizontal, CookedSpacing.xs)
-        .padding(.vertical, CookedSpacing.chip)
-        .background(CookedColor.Terminal.warn.opacity(0.15))
+        .foregroundStyle(Color.textSecondary)
+        .padding(.horizontal, Space.s8)
+        .padding(.vertical, Space.s8)
+        .background(Color.textSecondary.opacity(0.15))
         .clipShape(Capsule())
     }
 }
@@ -491,4 +489,8 @@ private extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
     }
+}
+
+private extension Decimal {
+    var priceFormatted: String { PriceFormat.price(self) }
 }
