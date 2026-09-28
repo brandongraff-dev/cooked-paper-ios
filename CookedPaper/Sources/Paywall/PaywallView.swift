@@ -8,7 +8,7 @@ import SwiftUI
 /// here). Every price, period and trial term shown is read from StoreKit.
 struct PaywallView: View {
     let store = SubscriptionStore.shared
-    @State private var selectedProductID = ProductID.weekly
+    @State private var selectedProductID = ProductID.annual
     @State private var isPurchasing = false
     /// Product ids whose introductory offer this Apple ID can still redeem — a trial
     /// is only ever advertised to someone who will actually get it.
@@ -49,9 +49,10 @@ struct PaywallView: View {
                 .padding(.top, Space.s8)
         }
         .preferredColorScheme(.dark)
+        .task { await PortfolioStore.shared.bootstrapIfNeeded() }
         .task(id: store.products.map(\.id)) {
             await refreshTrialEligibility()
-            if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.weekly }) ?? orderedPlans.first {
+            if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.annual }) ?? orderedPlans.first {
                 selectedProductID = first.id
             }
         }
@@ -72,25 +73,76 @@ struct PaywallView: View {
 
     // MARK: - Sections
 
+    /// The positions the user just opened in onboarding (or holds from before) —
+    /// the paywall is about keeping them.
+    private var heldPositions: [PaperPosition] {
+        PortfolioStore.shared.snapshot?.positions ?? []
+    }
+
     private var hero: some View {
         VStack(spacing: Space.s20) {
-            BrandMark(height: 96)
+            BrandWordmark(height: 34)
                 .padding(.top, Space.s48)
 
-            Text("Trade live prices\nwith paper money.")
+            Text(heldPositions.isEmpty ? "Trade live prices\nwith paper money." : "Keep your\nportfolio.")
                 .font(.system(size: 34, weight: .bold))
                 .tracking(-0.8)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Color.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Every fill uses the real market price. Every loss stays on your record.")
+            Text(heldPositions.isEmpty
+                 ? "Every fill uses the real market price. Every loss stays on your record."
+                 : "\(positionNames) \(heldPositions.count == 1 ? "is" : "are") moving with the market right now. Subscribe to keep trading them.")
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if !heldPositions.isEmpty {
+                positionsCard
+            }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// "WIF, BONK and JUP"
+    private var positionNames: String {
+        let names = heldPositions.prefix(3).map { $0.token?.symbol ?? "Your coin" }
+        switch names.count {
+        case 0: return ""
+        case 1: return names[0]
+        default: return names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
+        }
+    }
+
+    private var positionsCard: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(heldPositions.prefix(3).enumerated()), id: \.element.id) { index, position in
+                HStack(spacing: Space.s12) {
+                    TokenAvatar(mint: position.tokenMint, symbol: position.token?.symbol, size: 32)
+                    Text(position.token?.symbol ?? "?")
+                        .font(.rowTitle)
+                        .foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(PriceFormat.usd(position.valueUsd))
+                            .font(.rowValue)
+                            .foregroundStyle(Color.textPrimary)
+                        Text(position.unrealizedPnlUsd.map(PriceFormat.signedUSD) ?? "—")
+                            .font(.caption13Digits)
+                            .foregroundStyle(Color.direction(position.unrealizedPnlUsd))
+                    }
+                }
+                .padding(.horizontal, Space.s16)
+                .frame(minHeight: 60)
+                if index < min(heldPositions.count, 3) - 1 {
+                    RowSeparator(leadingInset: Space.s16 + 32 + Space.s12)
+                }
+            }
+        }
+        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .padding(.top, Space.s4)
     }
 
     private var features: some View {
@@ -221,10 +273,11 @@ struct PaywallView: View {
 
     private var ctaTitle: String {
         if orderedPlans.isEmpty { return "Try again" }
-        if let selectedProduct, let offer = trialOffer(selectedProduct) {
+        guard let selectedProduct else { return "Continue" }
+        if let offer = trialOffer(selectedProduct) {
             return "Start my \(offer.period.value)-\(unitName(offer.period.unit)) free trial"
         }
-        return "Continue"
+        return "Subscribe · \(selectedProduct.displayPrice)/\(unitName(periodUnit(selectedProduct)))"
     }
 
     private func planTitle(_ product: Product) -> String {
@@ -303,9 +356,9 @@ struct PaywallView: View {
         }
         let unit = unitName(periodUnit(selectedProduct))
         if let offer = trialOffer(selectedProduct) {
-            return "Free for \(trialLength(offer)), then \(selectedProduct.displayPrice) every \(unit) until you cancel. Cancel anytime in Settings."
+            return "Free for \(trialLength(offer)), then \(selectedProduct.displayPrice) every \(unit) until you cancel. Cancel before the trial ends and you won't be charged."
         }
-        return "\(selectedProduct.displayPrice) every \(unit) until you cancel. Cancel anytime in Settings."
+        return "\(selectedProduct.displayPrice) today, then every \(unit) until you cancel. Cancel anytime in Settings."
     }
 }
 

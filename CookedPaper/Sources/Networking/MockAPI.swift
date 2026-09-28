@@ -31,7 +31,7 @@ nonisolated enum MockAPI {
 
     // MARK: - Routing
 
-    nonisolated static func response(method: String, path: String, query: [String: String]) -> (Int, Any) {
+    nonisolated static func response(method: String, path: String, query: [String: String], body: Data? = nil) -> (Int, Any) {
         let parts = path.split(separator: "/").map(String.init)
 
         /// Matches `parts` against a route template like `"tokens/:/profile"`, where
@@ -45,6 +45,20 @@ nonisolated enum MockAPI {
                 if segment == ":" { captures.append(part) } else if segment != part { return nil }
             }
             return captures
+        }
+
+        // A brand-new account for the onboarding walkthrough: $10,000 cash, no
+        // positions, and buys/sells that actually change the book.
+        if FreshAccount.isEnabled {
+            if match("POST", "paper/portfolios/starter") != nil {
+                return (200, [
+                    "portfolio": FreshAccount.portfolio(), "created": true,
+                    "guestToken": "demo-guest-token", "guestTokenExpiresAt": iso(daysFromNow: 7),
+                ] as [String: Any])
+            }
+            if match("GET", "paper/portfolios/:") != nil { return (200, FreshAccount.snapshot()) }
+            if match("GET", "paper/portfolios/:/trades") != nil { return (200, ["trades": [] as [Any]] as [String: Any]) }
+            if match("POST", "paper/portfolios/:/trades") != nil { return FreshAccount.execute(body) }
         }
 
         if match("POST", "paper/portfolios/starter") != nil {
@@ -380,7 +394,12 @@ nonisolated final class MockURLProtocol: URLProtocol {
         for item in URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [] {
             query[item.name] = item.value
         }
-        let (status, body) = MockAPI.response(method: request.httpMethod ?? "GET", path: url.path, query: query)
+        let (status, body) = MockAPI.response(
+            method: request.httpMethod ?? "GET",
+            path: url.path,
+            query: query,
+            body: request.httpBody ?? request.httpBodyStream.map(Self.readAll)
+        )
         let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
         let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -389,5 +408,163 @@ nonisolated final class MockURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+
+    /// URLSession hands a protocol its body as a stream, not `httpBody`.
+    private static func readAll(_ stream: InputStream) -> Data {
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: buffer.count)
+            guard read > 0 else { break }
+            data.append(buffer, count: read)
+        }
+        return data
+    }
+}
+
+/// `UITEST_MOCK_FRESH=1`: a stateful brand-new paper account. Marks drift gently
+/// with time so the walkthrough's position charts have a shape — this is the
+/// DEBUG screenshot fixture only; the real app only ever shows server prices.
+nonisolated enum FreshAccount {
+    static var isEnabled: Bool {
+        ProcessInfo.processInfo.environment["UITEST_MOCK_FRESH"] == "1"
+    }
+
+    private struct Holding {
+        let mint: String
+        var qty: Double
+        var cost: Double
+        let openedAt: Date
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var cash: Double = 10_000
+    nonisolated(unsafe) private static var holdings: [Holding] = []
+
+    private static func mark(_ token: MockAPI.DemoToken) -> Double {
+        let base = Double(token.price) ?? 1
+        let seed = Double(token.symbol.unicodeScalars.reduce(0) { $0 + Int($1.value) })
+        let t = Date().timeIntervalSince1970
+        return base * (1 + 0.012 * sin(t / 4 + seed) + 0.006 * sin(t / 1.7 + seed))
+    }
+
+    private static func dec(_ value: Double) -> String { String(format: "%.10g", value) }
+
+    static func portfolio() -> [String: Any] {
+        lock.lock(); defer { lock.unlock() }
+        return portfolioLocked()
+    }
+
+    private static func portfolioLocked() -> [String: Any] {
+        [
+            "id": MockAPI.portfolioId, "name": "Paper Portfolio", "startingBalanceUsd": "10000",
+            "cashUsd": dec(cash), "createdAt": MockISO.string(Date()), "resetAt": NSNull(),
+            "resetCount": 0, "archivedAt": NSNull(), "isGuest": true,
+        ]
+    }
+
+    static func snapshot() -> [String: Any] {
+        lock.lock(); defer { lock.unlock() }
+        var positionsValue = 0.0
+        var unrealized = 0.0
+        let positions: [[String: Any]] = holdings.map { holding in
+            let token = MockAPI.token(for: holding.mint)
+            let price = mark(token)
+            let value = holding.qty * price
+            positionsValue += value
+            unrealized += value - holding.cost
+            let identity: [String: Any] = ["mint": token.mint, "symbol": token.symbol, "name": token.name, "hasLogo": false, "isVerified": token.verified]
+            return [
+                "tokenMint": holding.mint, "qty": dec(holding.qty), "costUsd": dec(holding.cost),
+                "avgCostUsd": dec(holding.cost / holding.qty), "markPriceUsd": dec(price), "markState": "fresh",
+                "markFromLastFill": false, "valueUsd": dec(value), "unrealizedPnlUsd": dec(value - holding.cost),
+                "unrealizedReturnPct": dec((value - holding.cost) / holding.cost * 100), "roundTripCount": 0,
+                "token": identity, "marketCapUsd": token.marketCap, "liquidityUsd": token.liquidity,
+            ]
+        }
+        let equity = cash + positionsValue
+        func measured(_ key: String, _ value: String?) -> [String: Any] {
+            let reading: Any = value.map { $0 as Any } ?? NSNull()
+            let unavailable: Any = value == nil ? "no_round_trips" as Any : NSNull()
+            return [key: reading, "sampleSize": 0, "sampleOf": "round_trips", "unavailable": unavailable]
+        }
+        return [
+            "portfolio": portfolioLocked(), "portfolioId": MockAPI.portfolioId,
+            "cashUsd": dec(cash), "positionsValueUsd": dec(positionsValue), "equityUsd": dec(equity),
+            "positions": positions, "roundTrips": [] as [Any],
+            "stats": [
+                "returnPct": measured("pct", dec((equity - 10_000) / 100)),
+                "winRatePct": measured("pct", nil), "maxDrawdownPct": measured("pct", nil),
+                "realizedPnlUsd": measured("usd", "0"), "unrealizedPnlUsd": measured("usd", dec(unrealized)),
+                "feesPaidUsd": "0", "tradeCount": holdings.count, "roundTripCount": 0, "winCount": 0, "lossCount": 0,
+            ] as [String: Any],
+            "equityCurve": [
+                "maxDrawdownPct": "0", "peakEquityUsd": dec(max(equity, 10_000)),
+                "points": [
+                    ["at": MockISO.string(Date().addingTimeInterval(-60)), "equityUsd": "10000", "kind": "start"],
+                    ["at": MockISO.string(Date()), "equityUsd": dec(equity), "kind": "mark"],
+                ],
+            ] as [String: Any],
+        ]
+    }
+
+    static func execute(_ body: Data?) -> (Int, Any) {
+        guard let body,
+              let request = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let mint = request["tokenMint"] as? String,
+              let side = request["side"] as? String else {
+            return (400, ["error": "bad_request", "message": "Malformed order."])
+        }
+        lock.lock(); defer { lock.unlock() }
+        let token = MockAPI.token(for: mint)
+        let price = mark(token)
+        var qty = 0.0
+        var value = 0.0
+
+        if side == "buy" {
+            let notional = Double(request["notionalUsd"] as? String ?? "") ?? 0
+            guard notional > 0, notional <= cash else {
+                return (422, ["error": "insufficient_cash", "message": "Not enough paper cash for that order."])
+            }
+            qty = notional / price
+            value = notional
+            cash -= notional
+            if let index = holdings.firstIndex(where: { $0.mint == mint }) {
+                holdings[index].qty += qty
+                holdings[index].cost += notional
+            } else {
+                holdings.append(Holding(mint: mint, qty: qty, cost: notional, openedAt: Date()))
+            }
+        } else {
+            guard let index = holdings.firstIndex(where: { $0.mint == mint }) else {
+                return (422, ["error": "no_position", "message": "You don't hold this token."])
+            }
+            let percent = Double(request["sellPercent"] as? Int ?? 100) / 100
+            qty = holdings[index].qty * percent
+            value = qty * price
+            cash += value
+            holdings[index].cost *= (1 - percent)
+            holdings[index].qty -= qty
+            if holdings[index].qty <= 0.000_000_1 { holdings.remove(at: index) }
+        }
+
+        let trade: [String: Any] = [
+            "id": UUID().uuidString, "tokenMint": mint, "side": side, "qty": dec(qty), "priceUsd": dec(price),
+            "valueUsd": dec(value), "slippageBps": 0, "priceImpactBps": 0, "marketCapUsd": token.marketCap,
+            "executedAt": MockISO.string(Date()),
+        ]
+        return (200, [
+            "trade": trade, "cashUsd": dec(cash),
+            "fill": ["fillPriceUsd": dec(price), "marketPriceUsd": dec(price)],
+            "summary": ["side": side, "slippageCostUsd": "0", "cashAfterUsd": dec(cash), "vsQuote": NSNull()] as [String: Any],
+        ] as [String: Any])
+    }
+}
+
+nonisolated enum MockISO {
+    nonisolated(unsafe) private static let formatter = ISO8601DateFormatter()
+    static func string(_ date: Date) -> String { formatter.string(from: date) }
 }
 #endif

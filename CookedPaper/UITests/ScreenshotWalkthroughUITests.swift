@@ -34,48 +34,71 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
     func testOnboardingAndPaywall() throws {
         let app = XCUIApplication()
 
-        // `RootView` gates onboarding on `@AppStorage("hasSeenOnboarding")`, which
-        // reads straight from UserDefaults. There is no supported way to set an
-        // @AppStorage-backed value from the test side before the app reads it —
-        // `launchArguments`/`launchEnvironment` are both invisible to the property
-        // wrapper, which only observes UserDefaults itself. A fresh simulator
-        // install has no UserDefaults for this bundle at all, so the flag defaults
-        // to `false` and onboarding shows on its own — relying on that clean-
-        // install state is the reliable path here, not fighting UserDefaults from
-        // the test side.
+        // `RootView` gates onboarding on `@AppStorage("hasSeenOnboarding")`; a fresh
+        // simulator install has no UserDefaults for this bundle, so onboarding shows
+        // on its own. The mock API runs as a brand-new account ($10,000 cash, no
+        // positions) so the flow's buys land in a real, changing book.
+        app.launchEnvironment["UITEST_MOCK_API"] = "1"
+        app.launchEnvironment["UITEST_MOCK_FRESH"] = "1"
         app.launchEnvironment["UITEST_STILL_FRAMES"] = "1"
         app.launch()
 
         var unreachedSteps: [String] = []
 
-        let nextButton = app.buttons["onboarding.next"]
-        if nextButton.waitForExistence(timeout: 15) {
-            attach(app, name: "01-onboarding")
-            nextButton.tap()
-            Thread.sleep(forTimeInterval: 1)
-            attach(app, name: "02-onboarding-chart")
-            nextButton.tap()
-            Thread.sleep(forTimeInterval: 1)
-            attach(app, name: "02-onboarding-final")
-
-            let getStartedButton = app.buttons["onboarding.getStarted"]
-            if getStartedButton.waitForExistence(timeout: 5) {
-                getStartedButton.tap()
-            } else {
-                unreachedSteps.append("onboarding.getStarted never appeared")
+        func tapIfPresent(_ id: String, timeout: TimeInterval = 10) -> Bool {
+            let element = app.buttons[id]
+            guard element.waitForExistence(timeout: timeout) else {
+                unreachedSteps.append("\(id) never appeared")
+                return false
             }
+            element.tap()
+            return true
+        }
+
+        if app.buttons["onboarding.balance.continue"].waitForExistence(timeout: 20) {
+            Thread.sleep(forTimeInterval: 1.8) // let the balance finish counting up
+            attach(app, name: "01-onboarding-balance")
+            _ = tapIfPresent("onboarding.balance.continue")
         } else {
-            unreachedSteps.append("onboarding.next never appeared")
+            unreachedSteps.append("onboarding balance step never appeared")
+        }
+
+        if app.buttons["onboarding.answer.little"].waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.6)
+            attach(app, name: "02-onboarding-experience")
+            _ = tapIfPresent("onboarding.answer.little")
+        }
+
+        if app.buttons["onboarding.coin.0"].waitForExistence(timeout: 10) {
+            Thread.sleep(forTimeInterval: 0.6)
+            attach(app, name: "03-onboarding-pick")
+            for index in 0..<3 { _ = tapIfPresent("onboarding.coin.\(index)", timeout: 3) }
+            Thread.sleep(forTimeInterval: 0.4)
+            attach(app, name: "04-onboarding-picked")
+            _ = tapIfPresent("onboarding.buy")
+        } else {
+            unreachedSteps.append("coin list never appeared")
+        }
+
+        let keep = app.buttons["onboarding.keep"]
+        if keep.waitForExistence(timeout: 10) {
+            // Wait for every fill and a couple of live refreshes so the charts have shape.
+            let enabled = NSPredicate(format: "isEnabled == true")
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: keep)], timeout: 20)
+            Thread.sleep(forTimeInterval: 7)
+            attach(app, name: "05-onboarding-portfolio")
+            keep.tap()
+        } else {
+            unreachedSteps.append("onboarding.keep never appeared")
         }
 
         // No StoreKit Configuration reaches the process under `xcodebuild test`
-        // (see the class doc comment), so `store.products` is reliably empty here
-        // and this screenshot will show the paywall's hero/features but no plan
-        // cards and a disabled Subscribe button — that is the accurate, expected
-        // CI result, not a bug to chase. This test stops here on purpose.
+        // (see the class doc comment), so the plan list can't load here; this
+        // screenshot shows the personalized header and the no-plans state.
         let subscribeButton = app.buttons["paywall.subscribeButton"]
         if subscribeButton.waitForExistence(timeout: 15) {
-            attach(app, name: "03-paywall")
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "06-paywall")
         } else {
             unreachedSteps.append("paywall.subscribeButton never appeared")
         }
