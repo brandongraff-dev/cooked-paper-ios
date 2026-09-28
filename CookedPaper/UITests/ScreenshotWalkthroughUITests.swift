@@ -1,3 +1,4 @@
+import StoreKitTest
 import XCTest
 
 /// UI tests run on XCTest, not Swift Testing — Apple has not shipped Swift Testing
@@ -11,6 +12,38 @@ import XCTest
 /// override a nonisolated declaration with an isolated one. Every method that
 /// actually touches the UI is still explicitly `@MainActor` below.
 nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
+    /// Drives StoreKit testing directly from the test process via Apple's
+    /// `StoreKitTest` framework, rather than relying on the scheme's "StoreKit
+    /// Configuration" setting. The scheme-level route turned out unreliable here:
+    /// XcodeGen only writes that setting onto a scheme's LaunchAction, never its
+    /// TestAction (there is no such field on its Test model at all), so a
+    /// `postGenCommand` was added to clone the LaunchAction's
+    /// StoreKitConfigurationFileReference into TestAction after every generate —
+    /// and the first real run still came back with an EMPTY product catalog on the
+    /// paywall (no plan cards rendered, confirmed from the screenshot), meaning
+    /// that cloned reference isn't actually reaching `xcodebuild test`'s launched
+    /// process. `SKTestSession` sidesteps the whole scheme question: it configures
+    /// StoreKit testing for the launched app directly from the test target's own
+    /// bundle, which is the API Apple specifically ships for driving purchases in
+    /// UI tests, and `disableDialogs = true` also removes any system purchase-
+    /// confirmation sheet as a variable. Requires `StoreKit/Products.storekit` to
+    /// be a resource of the CookedPaperUITests target too (see project.yml) —
+    /// `configurationFileNamed:` resolves against the calling (test) bundle, not
+    /// the app-under-test's bundle.
+    private var storeKitSession: SKTestSession?
+
+    override func setUpWithError() throws {
+        continueAfterFailure = true
+        let session = try SKTestSession(configurationFileNamed: "Products")
+        session.disableDialogs = true
+        session.clearTransactions()
+        storeKitSession = session
+    }
+
+    override func tearDown() {
+        storeKitSession = nil
+    }
+
     @MainActor
     func testWalkthroughAndScreenshots() throws {
         let app = XCUIApplication()
