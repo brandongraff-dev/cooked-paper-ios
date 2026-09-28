@@ -165,6 +165,7 @@ struct LeverageSheetView: View {
             Text(liquidationSentence)
                 .font(.caption13)
                 .foregroundStyle(Color.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentTransition(.numericText())
         }
