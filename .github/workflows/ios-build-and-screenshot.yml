@@ -80,6 +80,22 @@ jobs:
           xcrun simctl bootstatus "$DEVICE_UDID" -b
           sleep 10
 
+      # The pre-boot settle time above did NOT fix the same failure on a prior run,
+      # which means "simulator network still warming up" was the wrong diagnosis,
+      # or at least not the only one. This step answers a narrower question before
+      # spending another full build+test cycle guessing further: can the RUNNER
+      # itself (outside the simulator entirely) reach the production API at all?
+      # If this fails, the problem is network/DNS/firewall/rate-limiting above the
+      # simulator layer; if it succeeds, the problem is specific to how the
+      # simulator's network stack or the app's own request is behaving.
+      - name: Diagnose API reachability from the runner
+        continue-on-error: true
+        run: |
+          echo "--- DNS resolution ---"
+          host totem-api-production-0323.up.railway.app || nslookup totem-api-production-0323.up.railway.app || true
+          echo "--- curl -v to /health ---"
+          curl -v --max-time 15 https://totem-api-production-0323.up.railway.app/health || true
+
       - name: Build and test (unit tests + UI screenshot walkthrough)
         run: |
           xcodebuild test \
