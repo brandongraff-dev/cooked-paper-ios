@@ -26,6 +26,11 @@ struct DiscoverView: View {
         }
         .navigationTitle("Discover")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                BrandMark(height: 22)
+            }
+        }
         .searchable(text: $searchText, prompt: "Search tokens")
         .onChange(of: searchText) { _, newValue in
             searchTask?.cancel()

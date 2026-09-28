@@ -44,12 +44,10 @@ struct PaywallView: View {
 
     private var brandCard: some View {
         HStack(spacing: Space.s12) {
-            Image(systemName: "flame.fill")
-                .font(.title2)
-                .foregroundStyle(Color.accentFlame)
-            Text("Cooked Paper")
+            BrandWordmark(height: 26)
+            Text("Paper")
                 .font(.rowTitle)
-                .foregroundStyle(Color.textPrimary)
+                .foregroundStyle(Color.textSecondary)
             Spacer()
             Text("PRO")
                 .font(.caption13.weight(.bold))
@@ -57,7 +55,7 @@ struct PaywallView: View {
                 .foregroundStyle(Color.inverseText)
                 .padding(.horizontal, Space.s8)
                 .padding(.vertical, 2)
-                .background(Color.accentFlame, in: Capsule())
+                .background(Color.accent, in: Capsule())
         }
         .padding(Space.s20)
         .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))

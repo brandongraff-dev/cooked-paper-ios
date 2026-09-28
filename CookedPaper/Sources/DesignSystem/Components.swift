@@ -1,6 +1,40 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Brand
+
+/// The Cooked pan mark (template image, so it takes the foreground color).
+struct BrandMark: View {
+    var height: CGFloat = 28
+    var color: Color = .textPrimary
+
+    var body: some View {
+        Image("LogoPan")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .frame(height: height)
+            .foregroundStyle(color)
+            .accessibilityLabel("Cooked")
+    }
+}
+
+/// The "Cooked" wordmark with the pan as its "o".
+struct BrandWordmark: View {
+    var height: CGFloat = 24
+    var color: Color = .textPrimary
+
+    var body: some View {
+        Image("LogoWordmark")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .frame(height: height)
+            .foregroundStyle(color)
+            .accessibilityLabel("Cooked")
+    }
+}
+
 // MARK: - Avatars
 
 /// A token's real logo (the feed's `logoUri` when present, else the API's logo

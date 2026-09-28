@@ -69,6 +69,15 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(isResetting)
+            } footer: {
+                VStack(spacing: Space.s8) {
+                    BrandWordmark(height: 22, color: .textTertiary)
+                    Text("Paper trading · Version \(appVersion)")
+                        .font(.caption13)
+                        .foregroundStyle(Color.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, Space.s32)
             }
             .listRowBackground(Color.appSurface)
         }
@@ -89,6 +98,10 @@ struct SettingsView: View {
         } message: {
             Text("This deletes every trade in this portfolio and restores your starting balance. It can't be undone.")
         }
+    }
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
 
     private var accountRow: some View {

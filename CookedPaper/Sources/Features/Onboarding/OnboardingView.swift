@@ -30,6 +30,11 @@ struct OnboardingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            BrandWordmark(height: 28)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Space.margin)
+                .padding(.top, Space.s8)
+
             TabView(selection: $page) {
                 ForEach(Array(pages.enumerated()), id: \.offset) { index, item in
                     OnboardingPageView(page: item)
@@ -121,8 +126,7 @@ private struct BalancePreview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s8) {
             HStack(spacing: Space.s8) {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(Color.accentFlame)
+                BrandMark(height: 16)
                 Text("Paper balance")
                     .font(.caption13)
                     .foregroundStyle(Color.textSecondary)

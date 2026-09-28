@@ -32,8 +32,10 @@ extension Color {
     /// Text on `inverseFill`.
     static let inverseText = Color.black
 
-    /// Flame orange. Reserved for the logo, the PRO badge and the selected tab.
-    static let accentFlame = Color(rgb: 0xFF7A1A)
+    /// Brand light blue. Used sparingly: the selected tab, the PRO badge, links.
+    static let accent = Color(rgb: 0x5AA9FF)
+    /// The selected tab's circle — a quiet lift, not a color.
+    static let selectedFill = Color.white.opacity(0.12)
 
     /// Green for a gain, red for a loss, secondary gray for "unknown".
     static func direction(_ value: Decimal?) -> Color {

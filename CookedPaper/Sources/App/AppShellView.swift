@@ -20,34 +20,36 @@ struct AppShellView: View {
         )
     }
 
+    @State private var selection: AppTab = .discover
+
     var body: some View {
-        TabView {
-            NavigationStack {
-                DiscoverView()
+        // All four stacks stay alive (so each keeps its navigation and scroll
+        // state); only the selected one is visible, hit-testable and in the
+        // accessibility tree. This replaces the system tab bar entirely, so it can't
+        // reappear on a pushed screen the way a hidden TabView bar can.
+        ZStack {
+            ForEach(AppTab.allCases) { tab in
+                let isSelected = tab == selection
+                NavigationStack {
+                    root(for: tab)
+                }
+                // Keeps every screen's content (and pinned bars like the Buy button)
+                // clear of the floating tab bar drawn below.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: FloatingTabBar.height + Space.s8)
+                }
+                .opacity(isSelected ? 1 : 0)
+                .allowsHitTesting(isSelected)
+                .accessibilityHidden(!isSelected)
+                .zIndex(isSelected ? 1 : 0)
             }
-            .accessibilityIdentifier("tab.discover")
-            .tabItem { Label("Discover", systemImage: "magnifyingglass") }
-
-            NavigationStack {
-                PortfolioView()
-            }
-            .accessibilityIdentifier("tab.portfolio")
-            .tabItem { Label("Portfolio", systemImage: "chart.pie") }
-
-            NavigationStack {
-                LeaderboardView()
-            }
-            .accessibilityIdentifier("tab.leaderboard")
-            .tabItem { Label("Leaderboard", systemImage: "trophy") }
-
-            NavigationStack {
-                SettingsView()
-            }
-            .accessibilityIdentifier("tab.settings")
-            .tabItem { Label("Settings", systemImage: "gearshape") }
         }
-        .tint(Color.accentFlame)
-        .modifier(TabBarMinimizeOnScroll())
+        .overlay(alignment: .bottom) {
+            FloatingTabBar(selection: $selection)
+                .padding(.bottom, Space.s4)
+                .ignoresSafeArea(.keyboard, edges: .bottom)
+        }
+        .tint(Color.accent)
         .task {
             await portfolioStore.bootstrapIfNeeded()
         }
@@ -58,21 +60,101 @@ struct AppShellView: View {
             .presentationDragIndicator(.visible)
         }
     }
+
+    @ViewBuilder
+    private func root(for tab: AppTab) -> some View {
+        switch tab {
+        case .discover: DiscoverView()
+        case .portfolio: PortfolioView()
+        case .leaderboard: LeaderboardView()
+        case .settings: SettingsView()
+        }
+    }
+}
+
+enum AppTab: String, CaseIterable, Identifiable {
+    case discover, portfolio, leaderboard, settings
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .discover: "Discover"
+        case .portfolio: "Portfolio"
+        case .leaderboard: "Leaderboard"
+        case .settings: "Settings"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .discover: "safari"
+        case .portfolio: "wallet.bifold"
+        case .leaderboard: "trophy"
+        case .settings: "gearshape"
+        }
+    }
+}
+
+/// A compact floating bar: four icons in a capsule, the selected one in the accent
+/// color on a small circle that slides between tabs. Sized to its icons rather than
+/// stretched across the screen, so the selection circle stays snug.
+private struct FloatingTabBar: View {
+    @Binding var selection: AppTab
+    @Namespace private var namespace
+
+    static let itemSize: CGFloat = 44
+    static let inset: CGFloat = 6
+    static let height: CGFloat = itemSize + inset * 2
+
+    var body: some View {
+        HStack(spacing: Space.s12) {
+            ForEach(AppTab.allCases) { tab in
+                let isSelected = tab == selection
+                Button {
+                    guard !isSelected else { return }
+                    Haptics.selection()
+                    withAnimation(Motion.standard) { selection = tab }
+                } label: {
+                    Image(systemName: tab.symbol)
+                        .symbolVariant(isSelected ? .fill : .none)
+                        .font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(isSelected ? Color.accent : Color.textSecondary)
+                        .frame(width: Self.itemSize, height: Self.itemSize)
+                        .background {
+                            if isSelected {
+                                Circle()
+                                    .fill(Color.selectedFill)
+                                    .matchedGeometryEffect(id: "selection", in: namespace)
+                            }
+                        }
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.pressable)
+                .accessibilityLabel(tab.title)
+                .accessibilityIdentifier("tab.\(tab.rawValue)")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+        .padding(Self.inset)
+        .modifier(TabBarBackground())
+    }
+}
+
+/// Liquid Glass on iOS 26, a solid elevated capsule with a hairline before that.
+private struct TabBarBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background(Color.appSurfaceElevated, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.appSeparator, lineWidth: 1))
+        }
+    }
 }
 
 private struct DeepLinkTarget: Identifiable {
     let mint: String
     var id: String { mint }
-}
-
-/// iOS 26's floating Liquid Glass tab bar can shrink out of the way while scrolling
-/// down through a feed and come back on the way up.
-private struct TabBarMinimizeOnScroll: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.tabBarMinimizeBehavior(.onScrollDown)
-        } else {
-            content
-        }
-    }
 }

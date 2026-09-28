@@ -102,7 +102,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
 
         var unreachedSteps: [String] = []
 
-        let discoverTab = app.tabBars.buttons["Discover"]
+        let discoverTab = app.buttons["tab.discover"]
         if discoverTab.waitForExistence(timeout: 20) {
             _ = app.buttons["discover.row.0"].waitForExistence(timeout: 10)
             Thread.sleep(forTimeInterval: 1)
@@ -277,7 +277,8 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         screenshotName: String,
         unreachedSteps: inout [String]
     ) {
-        let tabButton = app.tabBars.buttons[label]
+        // The app draws its own floating tab bar; its buttons carry `tab.<name>` ids.
+        let tabButton = app.buttons["tab.\(label.lowercased())"]
         guard tabButton.waitForExistence(timeout: 5) else {
             unreachedSteps.append("\(label) tab button never appeared")
             attach(app, name: screenshotName)

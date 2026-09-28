@@ -47,10 +47,7 @@ private struct LaunchScreen: View {
     var body: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
-            Image(systemName: "flame.fill")
-                .font(.system(size: 44))
-                .foregroundStyle(Color.accentFlame)
-                .accessibilityLabel("Cooked Paper")
+            BrandMark(height: 96)
         }
     }
 }
