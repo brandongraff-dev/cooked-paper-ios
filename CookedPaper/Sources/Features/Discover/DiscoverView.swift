@@ -200,6 +200,8 @@ private struct TrendingCard: View {
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
                 PriceText(value: entry.paperTradeable.priceUsd, font: .rowSubvalue, color: .textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                 ChangeText(percent: entry.metrics.priceChangePct, font: .caption13Digits)
             }
         }

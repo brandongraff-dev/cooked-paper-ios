@@ -92,31 +92,31 @@ struct SettingsView: View {
     }
 
     private var accountRow: some View {
-        HStack(spacing: Metrics.avatarGap) {
-            MonogramAvatar(text: session.isGuest ? "Guest" : (session.username ?? "You"), size: 48)
-            VStack(alignment: .leading, spacing: Space.s4) {
+        VStack(alignment: .leading, spacing: Space.s12) {
+            HStack(spacing: Metrics.avatarGap) {
+                MonogramAvatar(text: session.isGuest ? "Guest" : (session.username ?? "You"), size: 48)
                 Text(session.isGuest ? "Guest" : (session.username ?? "Signed in"))
                     .font(.rowTitle)
                     .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: Space.s8)
                 if session.isGuest {
-                    Label("Progress is deleted after 7 days", systemImage: "exclamationmark.circle")
-                        .labelStyle(InlineIconLabelStyle())
+                    Button("Save progress") { showLinkAccount = true }
+                        .buttonStyle(.compact)
+                        .accessibilityIdentifier("settings.saveProgress")
                 } else {
-                    Label("Progress saved to your account", systemImage: "checkmark.circle")
-                        .labelStyle(InlineIconLabelStyle())
+                    Button("Sign out") { Task { await signOut() } }
+                        .font(.caption13)
+                        .foregroundStyle(Color.negative)
+                        .buttonStyle(.borderless)
                 }
             }
-            Spacer(minLength: Space.s8)
-            if session.isGuest {
-                Button("Save progress") { showLinkAccount = true }
-                    .buttonStyle(.compact)
-                    .accessibilityIdentifier("settings.saveProgress")
-            } else {
-                Button("Sign out") { Task { await signOut() } }
-                    .font(.caption13)
-                    .foregroundStyle(Color.negative)
-                    .buttonStyle(.borderless)
-            }
+            Label(
+                session.isGuest ? "Progress is deleted after 7 days" : "Progress is saved to your account",
+                systemImage: session.isGuest ? "exclamationmark.circle" : "checkmark.circle"
+            )
+            .labelStyle(InlineIconLabelStyle())
+            .lineLimit(1)
         }
         .padding(.vertical, Space.s8)
     }

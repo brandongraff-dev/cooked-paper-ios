@@ -164,7 +164,7 @@ struct TokenDetailView: View {
 
             HStack(spacing: Space.s4) {
                 if let change = shown.change, let percent = shown.percent {
-                    Text("\(PriceFormat.signedPrice(change)) (\(PriceFormat.change(percent)))")
+                    Text("\(PriceFormat.signedPrice(change, reference: shown.price)) (\(PriceFormat.change(percent)))")
                         .foregroundStyle(Color.direction(percent))
                         .contentTransition(.numericText())
                 } else {

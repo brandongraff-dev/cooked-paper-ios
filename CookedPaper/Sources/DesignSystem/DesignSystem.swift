@@ -200,9 +200,14 @@ enum PriceFormat {
         return (double < 0 ? minus : "+") + abs(double).formatted(.number.precision(.fractionLength(2))) + "%"
     }
 
-    /// +$0.08 / −$0.08 — the price-change amount, formatted like a price.
-    static func signedPrice(_ value: Decimal) -> String {
+    /// +$0.08 / −$0.08 — a price-change amount. For a token priced at $1 or more
+    /// it uses cents like the price itself does; below that it follows the
+    /// price's significant-digit rules so a sub-cent move still reads.
+    static func signedPrice(_ value: Decimal, reference: Decimal? = nil) -> String {
         let sign = value < 0 ? minus : "+"
+        if let reference, reference >= 1 {
+            return sign + usd(value.magnitude)
+        }
         return sign + price(value.magnitude)
     }
 
