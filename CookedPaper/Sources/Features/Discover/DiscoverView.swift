@@ -19,6 +19,7 @@ struct DiscoverView: View {
             }
         }
         .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.immediately)
         .background(Color.appBackground)
         .refreshable { await load() }
         .navigationDestination(for: String.self) { mint in

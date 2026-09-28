@@ -206,9 +206,10 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
 
         // Back to the feed: clear the query, dismiss the keyboard, leave search mode.
         // iOS versions differ on which of these controls exist, so try each.
+        // Delete the query, then press the keyboard's Search/return key (typing a
+        // newline does that), which submits and dismisses the keyboard.
         searchField.typeText(XCUIKeyboardKey.delete.rawValue)
-        let searchKey = app.keyboards.buttons.matching(NSPredicate(format: "label ==[c] 'search'")).firstMatch
-        if searchKey.exists { searchKey.tap() }
+        searchField.typeText("\n")
         for label in ["Cancel", "Close"] {
             let button = app.buttons[label].firstMatch
             if button.exists && button.isHittable {

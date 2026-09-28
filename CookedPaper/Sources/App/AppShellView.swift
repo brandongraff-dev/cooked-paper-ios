@@ -1,4 +1,6 @@
+import Combine
 import SwiftUI
+import UIKit
 
 struct AppShellView: View {
     let portfolioStore = PortfolioStore.shared
@@ -21,6 +23,7 @@ struct AppShellView: View {
     }
 
     @State private var selection: AppTab = .discover
+    @State private var isKeyboardVisible = false
 
     var body: some View {
         // All four stacks stay alive (so each keeps its navigation and scroll
@@ -45,9 +48,23 @@ struct AppShellView: View {
             }
         }
         .overlay(alignment: .bottom) {
+            // Steps aside while typing, like the system tab bar does.
             FloatingTabBar(selection: $selection)
                 .padding(.bottom, Space.s4)
-                .ignoresSafeArea(.keyboard, edges: .bottom)
+                .opacity(isKeyboardVisible ? 0 : 1)
+                .allowsHitTesting(!isKeyboardVisible)
+                .animation(Motion.standard, value: isKeyboardVisible)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardVisible = false
+        }
+        .onChange(of: selection) { _, _ in
+            // A search field focused in the tab being left must not keep its
+            // keyboard up over the next one.
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         }
         .tint(Color.accent)
         .task {
