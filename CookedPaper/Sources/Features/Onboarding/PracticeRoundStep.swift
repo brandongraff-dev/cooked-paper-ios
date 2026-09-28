@@ -63,6 +63,7 @@ struct PracticeRoundStep: View {
     @State private var playback: Task<Void, Never>?
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: Space.s24) {
                 VStack(alignment: .leading, spacing: Space.s12) {
@@ -95,6 +96,12 @@ struct PracticeRoundStep: View {
                 .background(Color.appBackground)
         }
         .onDisappear { playback?.cancel() }
+        .onChange(of: phase) { _, newPhase in
+            // Bring the result into view the moment the round ends.
+            guard case .finished = newPhase else { return }
+            withAnimation(Motion.standard) { proxy.scrollTo("practice.result", anchor: .bottom) }
+        }
+        }
     }
 
     private var subtitle: String {
@@ -161,6 +168,7 @@ struct PracticeRoundStep: View {
 
             if case .finished(let soldAt, let heldToEnd) = phase {
                 result(replay: replay, soldAt: soldAt, heldToEnd: heldToEnd)
+                    .id("practice.result")
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
