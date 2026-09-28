@@ -54,7 +54,11 @@ struct CandleChartView: View {
             let slot = visible.isEmpty ? 0 : geometry.size.width / CGFloat(visible.count)
             let lastCandle = visible.compactMap { $0 }.last
             let crosshairCandle: Candle? = crosshairIndex.flatMap { visible[safe: $0] ?? nil }
+            let lastPriceY: CGFloat? = lastCandle.map { Self.yPosition(for: $0.close, priceRange: priceRange, height: geometry.size.height) }
+            // An axis label within a pill's height of the live-price pill would print
+            // underneath it (both are trailing-aligned), so it yields to the pill.
             let priceLabels = Self.priceAxisLabels(priceRange: priceRange, height: geometry.size.height)
+                .filter { label in lastPriceY.map { abs($0 - label.y) > 16 } ?? true }
             let timeLabels = Self.timeLabels(for: visible, interval: interval)
 
             ZStack(alignment: .topLeading) {
@@ -144,19 +148,10 @@ struct CandleChartView: View {
                         .font(CookedFont.caption())
                         .foregroundStyle(CookedColor.Terminal.textMuted)
                         .padding(CookedSpacing.chip)
-                        .frame(maxWidth: .infinity, alignment: .topTrailing)
-                }
-
-                if isRelayed {
-                    Text("Relayed data · GeckoTerminal")
-                        .font(CookedFont.caption())
-                        .foregroundStyle(CookedColor.Terminal.textMuted)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(CookedColor.Terminal.bgSurfaceHi.opacity(0.8))
-                        .clipShape(Capsule())
-                        .padding(CookedSpacing.chip)
-                        .frame(maxWidth: .infinity, alignment: .bottomTrailing)
+                        // Leading, not trailing: the trailing edge belongs to the price
+                        // axis labels, and the top one would print underneath this.
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .opacity(crosshairIndex == nil ? 1 : 0)
                 }
             }
         }

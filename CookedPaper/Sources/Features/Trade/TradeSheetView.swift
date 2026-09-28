@@ -34,7 +34,12 @@ struct TradeSheetView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                CookedColor.Terminal.bgBase.ignoresSafeArea()
+                AmbientBackground(
+                    colors: side == .buy
+                        ? [CookedColor.Terminal.buy, CookedColor.Prism.teal, CookedColor.Brand.fill]
+                        : [CookedColor.Terminal.sell, CookedColor.Brand.dangerFill, CookedColor.Prism.amber],
+                    intensity: 0.8
+                )
 
                 if let fillResult {
                     FillConfirmationView(result: fillResult, symbol: tokenSymbol) { dismiss() }
@@ -51,11 +56,35 @@ struct TradeSheetView: View {
             }
         }
         .presentationDetents([.medium, .large])
-        .presentationBackground(CookedColor.Terminal.bgBase)
+        .presentationCornerRadius(CookedRadius.xl)
     }
 
     private var form: some View {
         VStack(spacing: CookedSpacing.lg) {
+            HStack(spacing: CookedSpacing.sm) {
+                TokenLogo(mint: mint, symbol: tokenSymbol, size: 34)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(side == .buy ? "Buying \(tokenSymbol)" : "Selling \(tokenSymbol)")
+                        .font(CookedFont.headline(15))
+                        .foregroundStyle(CookedColor.Terminal.textPrimary)
+                    Text(side == .buy ? "\(cashUsd.usdString()) available" : (position.map { "\($0.valueUsd.usdString()) held" } ?? "No position"))
+                        .font(CookedFont.caption(12))
+                        .foregroundStyle(CookedColor.Terminal.textMuted)
+                }
+                Spacer()
+                Text("PAPER")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(0.6)
+                    .foregroundStyle(CookedColor.Terminal.textMuted)
+                    .padding(.horizontal, CookedSpacing.xs)
+                    .padding(.vertical, 3)
+                    .cookedGlass(in: Capsule())
+            }
+            .padding(CookedSpacing.sm)
+            .glassPanel(cornerRadius: CookedRadius.md)
+            .padding(.horizontal, CookedSpacing.lg)
+            .padding(.top, CookedSpacing.sm)
+
             VStack(spacing: CookedSpacing.xs) {
                 Text(side == .buy ? "Amount to spend" : "Amount to sell")
                     .font(CookedFont.caption())
@@ -64,11 +93,11 @@ struct TradeSheetView: View {
                 if side == .buy {
                     HStack {
                         Text("$")
-                            .font(CookedFont.priceDisplay(36))
+                            .font(CookedFont.priceDisplay(44))
                             .foregroundStyle(CookedColor.Terminal.textMuted)
                         TextField("0", text: $amountText)
                             .keyboardType(.decimalPad)
-                            .font(CookedFont.priceDisplay(36))
+                            .font(CookedFont.priceDisplay(44))
                             .foregroundStyle(CookedColor.Terminal.textPrimary)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: 160)
@@ -83,7 +112,9 @@ struct TradeSheetView: View {
                     }
                 } else {
                     Text(sellPercent.map { "\($0)%" } ?? "—")
-                        .font(CookedFont.priceDisplay(36))
+                        .font(CookedFont.priceDisplay(44))
+                        .contentTransition(.numericText())
+                        .animation(CookedMotion.calm, value: sellPercent)
                         .foregroundStyle(CookedColor.Terminal.textPrimary)
                     if let position, let percent = sellPercent {
                         let estimate = TradeAmountMath.quickSellEstimate(positionValueUsd: position.valueUsd, percent: percent)
@@ -93,7 +124,6 @@ struct TradeSheetView: View {
                     }
                 }
             }
-            .padding(.top, CookedSpacing.lg)
 
             quickAmountRow
 
@@ -136,6 +166,7 @@ struct TradeSheetView: View {
     }
 
     private var quickAmountRow: some View {
+        CookedGlassContainer(spacing: CookedSpacing.xs) {
         HStack(spacing: CookedSpacing.xs) {
             ForEach([25, 50, 75, 100], id: \.self) { percent in
                 let isDisabled = isBuyQuickAmountDisabled(percent)
@@ -146,6 +177,7 @@ struct TradeSheetView: View {
                 // Same 0.4 dimming `PrimaryButtonStyle` uses for its own disabled state.
                 .opacity(isDisabled ? 0.4 : 1)
             }
+        }
         }
     }
 
@@ -174,7 +206,7 @@ struct TradeSheetView: View {
     }
 
     private func quotePreview(_ quote: PaperQuoteResponse) -> some View {
-        CookedCard {
+        VStack(spacing: 0) {
             VStack(spacing: CookedSpacing.xs) {
                 previewRow("Price", quote.priceUsd.usdString(fractionDigits: quote.priceUsd < 1 ? 6 : 2))
                 previewRow("Price impact", quote.priceImpactPct.signedPercentString())
@@ -192,8 +224,11 @@ struct TradeSheetView: View {
                     .padding(.top, 2)
                 }
             }
+            .padding(CookedSpacing.md)
         }
+        .glassPanel(cornerRadius: CookedRadius.md)
         .padding(.horizontal, CookedSpacing.lg)
+        .transition(.opacity.combined(with: .scale(scale: 0.97)))
     }
 
     private func previewRow(_ title: String, _ value: String) -> some View {
@@ -272,26 +307,58 @@ private struct FillConfirmationView: View {
     let symbol: String
     let onDone: () -> Void
 
+    @State private var burst = false
+
+    private var color: Color {
+        result.trade.side == .buy ? CookedColor.Terminal.buy : CookedColor.Terminal.sell
+    }
+
     var body: some View {
         VStack(spacing: CookedSpacing.lg) {
             Spacer()
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: CookedIconSize.hero))
-                .foregroundStyle(CookedColor.Terminal.buy)
+            ZStack {
+                ForEach(0..<3, id: \.self) { ring in
+                    Circle()
+                        .strokeBorder(color.opacity(0.5 - Double(ring) * 0.15), lineWidth: 2)
+                        .frame(width: 96, height: 96)
+                        .scaleEffect(burst ? 1.4 + CGFloat(ring) * 0.35 : 0.6)
+                        .opacity(burst ? 0 : 1)
+                        .animation(.easeOut(duration: 1.1).delay(Double(ring) * 0.12), value: burst)
+                }
+                Circle()
+                    .fill(RadialGradient(colors: [color.opacity(0.45), .clear], center: .center, startRadius: 0, endRadius: 80))
+                    .frame(width: 160, height: 160)
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: CookedIconSize.hero))
+                    .foregroundStyle(.white, color)
+                    .symbolEffect(.bounce, value: burst)
+                    .shadow(color: color.opacity(0.7), radius: 20)
+            }
             Text(result.trade.side == .buy ? "Bought \(symbol)" : "Sold \(symbol)")
-                .font(CookedFont.title())
+                .displayTextStyle(size: 28)
                 .foregroundStyle(CookedColor.Terminal.textPrimary)
-            Text("Filled at \(result.fill.fillPriceUsd.usdString(fractionDigits: result.fill.fillPriceUsd < 1 ? 6 : 2))")
-                .font(CookedFont.body())
-                .foregroundStyle(CookedColor.Terminal.textSecondary)
-            Text("Cash balance: \(result.cashUsd.usdString())")
-                .font(CookedFont.caption())
-                .foregroundStyle(CookedColor.Terminal.textMuted)
+            VStack(spacing: CookedSpacing.xs) {
+                fillRow("Filled at", result.fill.fillPriceUsd.priceString())
+                fillRow("Amount", result.trade.valueUsd.usdString())
+                fillRow("Cash balance", result.cashUsd.usdString())
+            }
+            .padding(CookedSpacing.md)
+            .glassPanel(cornerRadius: CookedRadius.md)
+            .padding(.horizontal, CookedSpacing.lg)
             Spacer()
             Button("Done", action: onDone)
                 .buttonStyle(.cookedPrimary)
                 .padding(.horizontal, CookedSpacing.lg)
                 .padding(.bottom, CookedSpacing.lg)
+        }
+        .onAppear { burst = true }
+    }
+
+    private func fillRow(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title).font(CookedFont.caption(12)).foregroundStyle(CookedColor.Terminal.textMuted)
+            Spacer()
+            Text(value).font(CookedFont.priceSmall()).foregroundStyle(CookedColor.Terminal.textPrimary)
         }
     }
 }

@@ -59,7 +59,13 @@ jobs:
       - name: Select simulator UDID
         run: |
           set -euo pipefail
-          DEVICE_LINE=$(grep -m 1 "iPhone" simctl-devices.txt)
+          # Newest iOS runtime's iPhone 17 Pro: `simctl` lists runtimes oldest first,
+          # so the last match wins. Liquid Glass only renders on iOS 26+, so the old
+          # "first iPhone in the list" pick (an iOS 18 device) hid the app's real UI.
+          DEVICE_LINE=$(awk '/^-- iOS /{ios=1; next} /^-- /{ios=0} ios && /iPhone 17 Pro \(/ {line=$0} END{print line}' simctl-devices.txt)
+          if [ -z "$DEVICE_LINE" ]; then
+            DEVICE_LINE=$(awk '/^-- iOS /{ios=1; next} /^-- /{ios=0} ios && /iPhone/ {line=$0} END{print line}' simctl-devices.txt)
+          fi
           DEVICE_UDID=$(echo "$DEVICE_LINE" | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}')
           echo "Using simulator: $DEVICE_LINE"
           echo "DEVICE_UDID=$DEVICE_UDID" >> "$GITHUB_ENV"

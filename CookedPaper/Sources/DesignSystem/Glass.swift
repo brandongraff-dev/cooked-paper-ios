@@ -30,6 +30,42 @@ extension View {
     }
 }
 
+/// A content-level glass card: the hero cards, stat tiles, and grouped panels that
+/// sit on top of an `AmbientBackground`. Real Liquid Glass on iOS 26+; below that, a
+/// frosted material with a light-catching gradient rim so it still reads as glass.
+struct GlassPanel: ViewModifier {
+    var cornerRadius: CGFloat = CookedRadius.lg
+    var tint: Color?
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(cookedGlassConfiguration(tint: tint?.opacity(0.22), interactive: false), in: shape)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .background((tint ?? .clear).opacity(0.14), in: shape)
+                .overlay(
+                    shape.strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.24), .white.opacity(0.04), .white.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+                )
+        }
+    }
+}
+
+extension View {
+    func glassPanel(cornerRadius: CGFloat = CookedRadius.lg, tint: Color? = nil) -> some View {
+        modifier(GlassPanel(cornerRadius: cornerRadius, tint: tint))
+    }
+}
+
 @available(iOS 26.0, *)
 private func cookedGlassConfiguration(tint: Color?, interactive: Bool) -> Glass {
     var glass = Glass.regular

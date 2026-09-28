@@ -50,9 +50,11 @@ enum CookedRadius {
     static let md: CGFloat = 16
     static let lg: CGFloat = 20
     static let pill: CGFloat = 999
-    /// Buttons render at 12px, deliberately not the full pill radius — pills are
-    /// reserved for genuine chips (timeframe segments, network badges).
-    static let button: CGFloat = 12
+    /// Buttons render at 16pt continuous corners, deliberately not the full pill
+    /// radius — pills are reserved for genuine chips (timeframe segments, badges).
+    static let button: CGFloat = 16
+    /// Hero cards (portfolio equity, onboarding art, the paywall's membership card).
+    static let xl: CGFloat = 28
 }
 
 enum CookedSpacing {

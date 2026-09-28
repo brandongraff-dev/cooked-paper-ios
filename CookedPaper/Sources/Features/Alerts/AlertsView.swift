@@ -15,7 +15,7 @@ struct AlertsView: View {
 
     var body: some View {
         ZStack {
-            CookedColor.Terminal.bgBase.ignoresSafeArea()
+            AmbientBackground(colors: [CookedColor.Brand.dangerFill, CookedColor.Prism.amber, CookedColor.Prism.indigo], intensity: 0.8)
 
             if isGuest {
                 EmptyStateView(
@@ -63,7 +63,7 @@ struct AlertsView: View {
         List {
             ForEach(Array(alerts.enumerated()), id: \.element.id) { index, alert in
                 AlertRow(alert: alert)
-                    .listRowBackground(CookedColor.Terminal.bgBase)
+                    .listRowBackground(Rectangle().fill(.ultraThinMaterial))
                     .listRowSeparatorTint(CookedColor.Terminal.border)
                     .staggeredEntrance(index: index, id: alert.id, animatedIDs: $animatedRowIDs)
                     .swipeActions(edge: .trailing) {
@@ -75,7 +75,8 @@ struct AlertsView: View {
                     }
             }
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
         .refreshable { await load() }
     }
 

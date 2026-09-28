@@ -11,7 +11,6 @@ struct PaywallView: View {
     let store = SubscriptionStore.shared
     @State private var selectedProductID = ProductID.annual
     @State private var isPurchasing = false
-    @State private var isGlowPulsing = false
     @State private var isHeaderVisible = false
     @State private var isFeaturesVisible = false
     @State private var isPlansVisible = false
@@ -20,30 +19,34 @@ struct PaywallView: View {
 
     var body: some View {
         ZStack {
-            CookedColor.Product.graphite.ignoresSafeArea()
-            heroGlow
+            AmbientBackground(
+                colors: [CookedColor.Prism.indigo, CookedColor.Brand.fill, CookedColor.Prism.amber],
+                base: CookedColor.Product.graphite
+            )
 
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(spacing: CookedSpacing.xxl) {
-                        header
+                    VStack(spacing: CookedSpacing.xl) {
+                        heroCard
                             .entrance(isHeaderVisible, reduceMotion: reduceMotion)
+                        header
+                            .entrance(isHeaderVisible, reduceMotion: reduceMotion, delay: 0.05)
                         features
-                            .entrance(isFeaturesVisible, reduceMotion: reduceMotion, delay: 0.08)
+                            .entrance(isFeaturesVisible, reduceMotion: reduceMotion, delay: 0.1)
                         plans
                             .entrance(isPlansVisible, reduceMotion: reduceMotion, delay: 0.16)
                     }
                     .padding(.horizontal, CookedSpacing.lg)
-                    .padding(.top, CookedSpacing.xxxl)
+                    .padding(.top, CookedSpacing.xl)
                     .padding(.bottom, CookedSpacing.md)
                 }
+                .scrollIndicators(.hidden)
 
                 footer
             }
         }
         .preferredColorScheme(.dark)
         .onAppear {
-            if !reduceMotion { isGlowPulsing = true }
             isHeaderVisible = true
             isFeaturesVisible = true
             isPlansVisible = true
@@ -52,55 +55,93 @@ struct PaywallView: View {
 
     // MARK: - Sections
 
-    /// The pulse is a plain `easeInOut` loop, not a `CookedMotion` spring — nothing
-    /// here is gesture-driven, and the ~2.5s period is far outside the spring tokens'
-    /// range, which are all state-change durations under half a second. Dropped
-    /// entirely under reduce-motion rather than reduced in amplitude (apple-design
-    /// §14): a full-bleed radial glow breathing behind the content is exactly the kind
-    /// of large moving surface that guidance calls out.
-    private var heroGlow: some View {
-        RadialGradient(
-            colors: [CookedColor.Prism.indigo.opacity(isGlowPulsing ? 0.4 : 0.24), .clear],
-            center: .top,
-            startRadius: 0,
-            endRadius: isGlowPulsing ? 470 : 400
-        )
-        .ignoresSafeArea()
-        .animation(
-            reduceMotion ? nil : .easeInOut(duration: 2.6).repeatForever(autoreverses: true),
-            value: isGlowPulsing
-        )
+    /// The membership card — the one object this purchase actually buys, drawn as a
+    /// glass card with a light sweep across it and tokens floating around it.
+    private var heroCard: some View {
+        ZStack {
+            CoinView(size: 44, symbol: "chart.line.uptrend.xyaxis")
+                .offset(x: -140, y: -58)
+                .floating(amplitude: 6, period: 3)
+            CoinView(size: 34, symbol: "bolt.fill", colors: [CookedColor.Prism.cyan, CookedColor.Prism.indigo])
+                .offset(x: 146, y: 54)
+                .floating(amplitude: 5, period: 2.6, delay: 0.5)
+
+            VStack(alignment: .leading, spacing: CookedSpacing.sm) {
+                HStack {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(
+                            LinearGradient(colors: [CookedColor.Prism.amber, CookedColor.Brand.dangerFill], startPoint: .top, endPoint: .bottom)
+                        )
+                    Text("COOKED PAPER")
+                        .font(CookedFont.label(12))
+                        .tracking(1.6)
+                        .foregroundStyle(.white.opacity(0.9))
+                    Spacer()
+                    Text("PRO")
+                        .font(CookedFont.badge(11))
+                        .tracking(1)
+                        .foregroundStyle(CookedColor.Brand.onFill)
+                        .padding(.horizontal, CookedSpacing.xs)
+                        .padding(.vertical, 3)
+                        .background(
+                            LinearGradient(colors: [CookedColor.Prism.cyan, CookedColor.Brand.fill], startPoint: .leading, endPoint: .trailing),
+                            in: Capsule()
+                        )
+                }
+                Spacer(minLength: 0)
+                Text("$10,000.00")
+                    .font(CookedFont.priceDisplay(30))
+                    .foregroundStyle(.white)
+                Text("Unlimited paper trading · every market")
+                    .font(CookedFont.caption(12))
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .padding(CookedSpacing.lg)
+            .frame(maxWidth: 300)
+            .frame(height: 160)
+            .background(
+                LinearGradient(
+                    colors: [CookedColor.Prism.indigo.opacity(0.6), CookedColor.Brand.fill.opacity(0.2), CookedColor.Prism.amber.opacity(0.25)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: CookedRadius.xl, style: .continuous)
+            )
+            .glassPanel(cornerRadius: CookedRadius.xl, tint: CookedColor.Prism.indigo)
+            .shineSweep(cornerRadius: CookedRadius.xl)
+            .shadow(color: CookedColor.Prism.indigo.opacity(0.55), radius: 30, y: 14)
+            .rotation3DEffect(.degrees(-6), axis: (x: 1, y: 0.3, z: 0), perspective: 0.5)
+            .floating(amplitude: 4, period: 4)
+        }
+        .frame(height: 200)
     }
 
     private var header: some View {
         VStack(spacing: CookedSpacing.sm) {
-            Text("Cooked Paper")
-                .font(CookedFont.label(13))
-                .tracking(0.06 * 13)
-                .foregroundStyle(CookedColor.Brand.text)
-                .textCase(.uppercase)
-
             Text("Trade like it's real.\nBecause it isn't.")
                 .multilineTextAlignment(.center)
                 .displayTextStyle(size: 32)
                 .foregroundStyle(CookedColor.Product.chalk)
 
             Text("Practice with $10,000 in virtual cash on live market prices. No real money, ever.")
-                .font(CookedFont.body())
+                .font(CookedFont.body(16))
                 .foregroundStyle(CookedColor.Product.chalkMuted)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, CookedSpacing.md)
+                .padding(.horizontal, CookedSpacing.sm)
         }
     }
 
     private var features: some View {
-        VStack(alignment: .leading, spacing: CookedSpacing.md) {
-            FeatureRow(symbol: "chart.xyaxis.line", text: "Live charts on real market prices")
-            FeatureRow(symbol: "bolt.fill", text: "Instant buy/sell, no setup")
-            FeatureRow(symbol: "trophy.fill", text: "See how your picks would've done")
-            FeatureRow(symbol: "checkmark.shield.fill", text: "Simulated trading only — nothing here is real money")
+        LazyVGrid(
+            columns: [GridItem(.flexible(), spacing: CookedSpacing.sm), GridItem(.flexible(), spacing: CookedSpacing.sm)],
+            spacing: CookedSpacing.sm
+        ) {
+            FeatureTile(symbol: "chart.xyaxis.line", color: CookedColor.Prism.teal, title: "Live charts", detail: "Real market prices")
+            FeatureTile(symbol: "bolt.fill", color: CookedColor.Prism.amber, title: "Instant fills", detail: "Buy & sell in a tap")
+            FeatureTile(symbol: "trophy.fill", color: CookedColor.Prism.indigo, title: "Leaderboard", detail: "Rank against traders")
+            FeatureTile(symbol: "checkmark.shield.fill", color: CookedColor.Terminal.buy, title: "Zero risk", detail: "Never real money")
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var plans: some View {
@@ -132,6 +173,25 @@ struct PaywallView: View {
                         }
                     }
                 }
+            }
+
+            if !store.isLoadingProducts && store.products.isEmpty {
+                HStack(spacing: CookedSpacing.sm) {
+                    IconTile(symbol: "icloud.slash", color: CookedColor.Product.lineStrong, size: 32)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Plans unavailable")
+                            .font(CookedFont.headline(15))
+                            .foregroundStyle(CookedColor.Product.chalk)
+                        Text("Couldn't reach the App Store. Check your connection.")
+                            .font(CookedFont.caption(12))
+                            .foregroundStyle(CookedColor.Product.chalkMuted)
+                    }
+                    Spacer(minLength: 0)
+                    Button("Retry") { Task { await store.loadProducts() } }
+                        .buttonStyle(.cookedCompact)
+                }
+                .padding(CookedSpacing.md)
+                .glassPanel(cornerRadius: CookedRadius.md)
             }
 
             if let error = store.purchaseError {
@@ -248,20 +308,25 @@ extension View {
     }
 }
 
-private struct FeatureRow: View {
+private struct FeatureTile: View {
     let symbol: String
-    let text: String
+    let color: Color
+    let title: String
+    let detail: String
 
     var body: some View {
-        HStack(spacing: CookedSpacing.sm) {
-            Image(systemName: symbol)
-                .font(.system(size: CookedIconSize.sm, weight: .semibold))
-                .foregroundStyle(CookedColor.Brand.text)
-                .frame(width: 24)
-            Text(text)
-                .font(CookedFont.body())
+        VStack(alignment: .leading, spacing: CookedSpacing.xs) {
+            IconTile(symbol: symbol, color: color, size: 34)
+            Text(title)
+                .font(CookedFont.headline(15))
                 .foregroundStyle(CookedColor.Product.chalk)
+            Text(detail)
+                .font(CookedFont.caption(12))
+                .foregroundStyle(CookedColor.Product.chalkMuted)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(CookedSpacing.md)
+        .glassPanel(cornerRadius: CookedRadius.lg, tint: color)
     }
 }
 
@@ -329,13 +394,7 @@ private struct PlanCardBackground: ViewModifier {
                 in: RoundedRectangle(cornerRadius: CookedRadius.md, style: .continuous)
             )
         } else {
-            content
-                .background(CookedColor.Product.slate)
-                .clipShape(RoundedRectangle(cornerRadius: CookedRadius.md, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: CookedRadius.md, style: .continuous)
-                        .strokeBorder(CookedColor.Product.line, lineWidth: 1)
-                )
+            content.glassPanel(cornerRadius: CookedRadius.md)
         }
     }
 }

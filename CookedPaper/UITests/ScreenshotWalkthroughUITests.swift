@@ -43,6 +43,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         // to `false` and onboarding shows on its own — relying on that clean-
         // install state is the reliable path here, not fighting UserDefaults from
         // the test side.
+        app.launchEnvironment["UITEST_STILL_FRAMES"] = "1"
         app.launch()
 
         var unreachedSteps: [String] = []
@@ -51,7 +52,10 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         if nextButton.waitForExistence(timeout: 15) {
             attach(app, name: "01-onboarding")
             nextButton.tap()
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "02-onboarding-chart")
             nextButton.tap()
+            Thread.sleep(forTimeInterval: 1)
             attach(app, name: "02-onboarding-final")
 
             let getStartedButton = app.buttons["onboarding.getStarted"]
@@ -91,13 +95,17 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         // the production backend isn't reachable from CI, and without this every
         // data-backed screen screenshots as an empty/error state.
         app.launchEnvironment["UITEST_MOCK_API"] = "1"
+        // Freezes ambient loops (see AmbientMotion) so the app can go idle between
+        // steps and every screenshot is deterministic.
+        app.launchEnvironment["UITEST_STILL_FRAMES"] = "1"
         app.launch()
 
         var unreachedSteps: [String] = []
 
         let discoverTab = app.tabBars.buttons["Discover"]
         if discoverTab.waitForExistence(timeout: 20) {
-            _ = app.cells.firstMatch.waitForExistence(timeout: 10)
+            _ = app.buttons["discover.row.0"].waitForExistence(timeout: 10)
+            Thread.sleep(forTimeInterval: 1)
             attach(app, name: "04-discover")
         } else {
             XCTFail("Main tab bar never appeared within 20s of a bypassed launch.")
@@ -153,13 +161,14 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         app.launchEnvironment["UITEST_BYPASS_PAYWALL"] = "1"
         app.launchEnvironment["UITEST_MOCK_API"] = "1"
         app.launchEnvironment["UITEST_MOCK_SIGNED_IN"] = "1"
+        app.launchEnvironment["UITEST_STILL_FRAMES"] = "1"
         app.launch()
 
         var unreachedSteps: [String] = []
 
         visitTab(app, label: "Settings", screenshotName: "14-settings-signed-in", unreachedSteps: &unreachedSteps)
 
-        let alertsLink = app.buttons["Price Alerts"].firstMatch
+        let alertsLink = app.buttons["settings.priceAlerts"].firstMatch
         if alertsLink.waitForExistence(timeout: 5) {
             alertsLink.tap()
             _ = app.cells.firstMatch.waitForExistence(timeout: 5)
@@ -194,9 +203,20 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         searchField.typeText("o")
         Thread.sleep(forTimeInterval: 1.2)
         attach(app, name: "06-discover-search")
-        let cancel = app.buttons["Cancel"].firstMatch
-        if cancel.exists { cancel.tap() }
-        Thread.sleep(forTimeInterval: 0.5)
+
+        // Back to the feed: clear the query, dismiss the keyboard, leave search mode.
+        // iOS versions differ on which of these controls exist, so try each.
+        searchField.typeText(XCUIKeyboardKey.delete.rawValue)
+        let searchKey = app.keyboards.buttons.matching(NSPredicate(format: "label ==[c] 'search'")).firstMatch
+        if searchKey.exists { searchKey.tap() }
+        for label in ["Cancel", "Close"] {
+            let button = app.buttons[label].firstMatch
+            if button.exists && button.isHittable {
+                button.tap()
+                break
+            }
+        }
+        Thread.sleep(forTimeInterval: 0.8)
     }
 
     @MainActor
@@ -209,15 +229,15 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
 
     @MainActor
     private func visitFirstDiscoverRow(_ app: XCUIApplication, unreachedSteps: inout [String]) {
-        // `app.tables.cells` would miss this if DiscoverView's List ever renders as a
-        // plain container instead of a table-backed accessibility tree; `app.cells`
-        // matches a cell regardless of the underlying container type.
-        let firstRow = app.cells.firstMatch
+        // Discover's feed is a glass panel in a ScrollView, not a List, so its rows
+        // are found by their `discover.row.N` identifiers rather than as cells.
+        let firstRow = app.buttons["discover.row.0"]
         guard firstRow.waitForExistence(timeout: 10) else {
             unreachedSteps.append("no row in the Discover list to open")
             attach(app, name: "07-token-detail")
             return
         }
+        if !firstRow.isHittable { app.swipeUp() }
         firstRow.tap()
 
         // The nav bar lands before the chart/network calls it triggers finish, so wait
@@ -226,7 +246,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 1.5)
         attach(app, name: "07-token-detail")
 
-        let buyButton = app.buttons["Buy"].firstMatch
+        let buyButton = app.buttons["tokenDetail.buy"].firstMatch
         if buyButton.waitForExistence(timeout: 5) {
             buyButton.tap()
             Thread.sleep(forTimeInterval: 1.2)

@@ -32,15 +32,32 @@ struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let fill = isDestructive ? CookedColor.Brand.dangerFill : CookedColor.Brand.fill
         let ink = isDestructive ? CookedColor.Brand.onDanger : CookedColor.Brand.onFill
+        let shape = RoundedRectangle(cornerRadius: CookedRadius.button, style: .continuous)
 
         configuration.label
             .font(CookedFont.headline())
             .foregroundStyle(ink)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(fill.opacity(isEnabled ? 1 : 0.4))
-            .clipShape(RoundedRectangle(cornerRadius: CookedRadius.button, style: .continuous))
+            .padding(.vertical, 16)
+            .background(
+                LinearGradient(
+                    colors: [fill.opacity(isEnabled ? 1 : 0.4), fill.opacity(isEnabled ? 0.8 : 0.32)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                in: shape
+            )
+            // A light-catching top rim — what makes the fill read as a lit, raised
+            // object rather than a flat rectangle.
+            .overlay(
+                shape.strokeBorder(
+                    LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.05)], startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1
+                )
+            )
+            .shadow(color: fill.opacity(isEnabled ? 0.45 : 0), radius: 16, y: 6)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .brightness(configuration.isPressed ? -0.05 : 0)
             .animation(CookedMotion.press, value: configuration.isPressed)
     }
 }
@@ -51,13 +68,8 @@ struct SecondaryButtonStyle: ButtonStyle {
             .font(CookedFont.headline())
             .foregroundStyle(CookedColor.Terminal.textPrimary)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(CookedColor.Terminal.bgSurfaceHi)
-            .clipShape(RoundedRectangle(cornerRadius: CookedRadius.button, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: CookedRadius.button, style: .continuous)
-                    .strokeBorder(CookedColor.Terminal.borderStrong, lineWidth: 1)
-            )
+            .padding(.vertical, 16)
+            .glassPanel(cornerRadius: CookedRadius.button)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(CookedMotion.press, value: configuration.isPressed)
     }
@@ -167,27 +179,27 @@ struct SimulatedBadge: View {
 /// A token's icon, loaded from `GET /tokens/:mint/logo` — cacheable for a year
 /// server-side, so `AsyncImage`'s default `URLCache` behavior is exactly right with
 /// no extra caching layer needed here.
+///
+/// Until (or unless) the image arrives, it shows a generated `TokenAvatar` keyed on
+/// the mint, so a token without a logo still gets a distinct, stable identity.
 struct TokenLogo: View {
     let mint: String
+    var symbol: String? = nil
     var size: CGFloat = 32
 
     var body: some View {
         AsyncImage(url: TokenAPI.logoURL(mint: mint)) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().scaledToFill()
-            default:
-                Circle()
-                    .fill(CookedColor.Terminal.bgSurfaceHi)
-                    .overlay(
-                        Text(String(mint.prefix(1)))
-                            .font(.system(size: size * 0.4, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(CookedColor.Terminal.textMuted)
-                    )
+            if case .success(let image) = phase {
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+            } else {
+                TokenAvatar(seed: mint, label: symbol ?? mint, size: size)
             }
         }
         .frame(width: size, height: size)
-        .clipShape(Circle())
     }
 }
 

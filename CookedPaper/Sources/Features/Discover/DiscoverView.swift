@@ -15,20 +15,16 @@ struct DiscoverView: View {
 
     var body: some View {
         ZStack {
-            CookedColor.Terminal.bgBase.ignoresSafeArea()
+            AmbientBackground.brand
 
-            VStack(spacing: 0) {
-                feedPicker
-
-                if isSearching {
-                    searchList
-                } else {
-                    feedList
-                }
+            if isSearching {
+                searchList
+            } else {
+                feedScroll
             }
-            .navigationDestination(for: String.self) { mint in
-                TokenDetailView(mint: mint)
-            }
+        }
+        .navigationDestination(for: String.self) { mint in
+            TokenDetailView(mint: mint)
         }
         .navigationTitle("Discover")
         .navigationBarTitleDisplayMode(.large)
@@ -51,78 +47,182 @@ struct DiscoverView: View {
 
     private var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
 
-    private var feedPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: CookedSpacing.xs) {
-                ForEach(PaperDiscoverFeed.allCases) { candidate in
-                    CookedChip(title: candidate.label, isSelected: candidate == feed) {
-                        feed = candidate
-                    }
+    private var feedScroll: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: CookedSpacing.lg) {
+                if isLoading {
+                    loadingSkeleton
+                } else if let errorMessage {
+                    EmptyStateView(symbol: "wifi.slash", title: "Couldn't load the market", detail: errorMessage)
+                        .frame(maxWidth: .infinity)
+                        .glassPanel()
+                        .padding(.horizontal, CookedSpacing.md)
+                } else {
+                    trendingSection
+                    feedSection
                 }
             }
-            .padding(.horizontal, CookedSpacing.md)
-            .padding(.vertical, CookedSpacing.sm)
+            .padding(.top, CookedSpacing.xs)
+            .padding(.bottom, CookedSpacing.xxxl)
         }
+        .scrollIndicators(.hidden)
+        .refreshable { await load() }
+    }
+
+    // MARK: - Trending carousel
+
+    private var trendingEntries: [PaperDiscoverEntry] {
+        Array((response?.entries(for: .biggestMovers) ?? []).prefix(6))
     }
 
     @ViewBuilder
-    private var feedList: some View {
-        if isLoading {
-            Spacer()
-            ProgressView().tint(CookedColor.Brand.fill)
-            Spacer()
-        } else if let errorMessage {
-            Spacer()
-            EmptyStateView(symbol: "wifi.slash", title: "Couldn't load the market", detail: errorMessage)
-            Spacer()
-        } else {
+    private var trendingSection: some View {
+        if !trendingEntries.isEmpty {
+            VStack(alignment: .leading, spacing: CookedSpacing.sm) {
+                SectionHeader(symbol: "flame.fill", title: "Trending now", tint: CookedColor.Prism.amber)
+                    .padding(.horizontal, CookedSpacing.md)
+
+                ScrollView(.horizontal) {
+                    HStack(spacing: CookedSpacing.sm) {
+                        ForEach(Array(trendingEntries.enumerated()), id: \.element.id) { index, entry in
+                            NavigationLink(value: entry.mint) {
+                                TrendingCard(entry: entry)
+                            }
+                            .buttonStyle(.plain)
+                            .scrollTransition(.interactive, axis: .horizontal) { content, phase in
+                                content
+                                    .scaleEffect(phase.isIdentity ? 1 : 0.94)
+                                    .opacity(phase.isIdentity ? 1 : 0.75)
+                            }
+                            .staggeredEntrance(index: index, id: "trend-" + entry.id, animatedIDs: $animatedRowIDs)
+                        }
+                    }
+                    .padding(.horizontal, CookedSpacing.md)
+                    .padding(.vertical, CookedSpacing.xs)
+                    .scrollTargetLayout()
+                }
+                .scrollIndicators(.hidden)
+                .scrollTargetBehavior(.viewAligned)
+            }
+        }
+    }
+
+    // MARK: - Feed
+
+    private var feedSection: some View {
+        VStack(alignment: .leading, spacing: CookedSpacing.sm) {
+            feedPicker
+
             let entries = response?.entries(for: feed) ?? []
             if entries.isEmpty {
-                Spacer()
                 EmptyStateView(symbol: "tray", title: "Nothing here yet", detail: "Check back in a bit — this feed refreshes about once a minute.")
-                Spacer()
+                    .frame(maxWidth: .infinity)
+                    .glassPanel()
+                    .padding(.horizontal, CookedSpacing.md)
             } else {
-                List {
+                LazyVStack(spacing: 0) {
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         NavigationLink(value: entry.mint) {
                             DiscoverRow(
+                                rank: index + 1,
                                 entry: entry,
                                 isWatched: watchedMints.contains(entry.mint),
                                 onToggleStar: { toggleWatch(mint: entry.mint) }
                             )
                         }
-                        .listRowBackground(CookedColor.Terminal.bgBase)
-                        .listRowSeparatorTint(CookedColor.Terminal.border)
-                        .staggeredEntrance(index: index, id: entry.id, animatedIDs: $animatedRowIDs)
-                    }
-                }
-                .listStyle(.plain)
-                .refreshable { await load() }
-            }
-        }
-    }
+                        .buttonStyle(RowPressStyle())
+                        .accessibilityIdentifier("discover.row.\(index)")
+                        .staggeredEntrance(index: index, id: feed.rawValue + entry.id, animatedIDs: $animatedRowIDs)
 
-    private var searchList: some View {
-        List {
-            ForEach(searchResults) { result in
-                NavigationLink(value: result.mint) {
-                    HStack(spacing: CookedSpacing.sm) {
-                        TokenLogo(mint: result.mint, size: 32)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(result.symbol ?? "?")
-                                .font(CookedFont.headline())
-                                .foregroundStyle(CookedColor.Terminal.textPrimary)
-                            Text(result.name ?? result.mint)
-                                .font(CookedFont.caption())
-                                .foregroundStyle(CookedColor.Terminal.textMuted)
-                                .lineLimit(1)
+                        if index < entries.count - 1 {
+                            Divider()
+                                .overlay(CookedColor.Terminal.border)
+                                .padding(.leading, 76)
                         }
                     }
                 }
-                .listRowBackground(CookedColor.Terminal.bgBase)
+                .padding(.vertical, CookedSpacing.xxs)
+                .glassPanel(cornerRadius: CookedRadius.lg)
+                .padding(.horizontal, CookedSpacing.md)
+                .id(feed)
+                .transition(.opacity)
             }
         }
-        .listStyle(.plain)
+        .animation(CookedMotion.calm, value: feed)
+    }
+
+    private var feedPicker: some View {
+        ScrollView(.horizontal) {
+            CookedGlassContainer(spacing: CookedSpacing.xs) {
+                HStack(spacing: CookedSpacing.xs) {
+                    ForEach(PaperDiscoverFeed.allCases) { candidate in
+                        CookedChip(title: candidate.label, isSelected: candidate == feed) {
+                            feed = candidate
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, CookedSpacing.md)
+            .padding(.vertical, CookedSpacing.xxs)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var loadingSkeleton: some View {
+        VStack(alignment: .leading, spacing: CookedSpacing.lg) {
+            HStack(spacing: CookedSpacing.sm) {
+                ForEach(0..<2, id: \.self) { _ in
+                    SkeletonView(cornerRadius: CookedRadius.lg).frame(width: 160, height: 180)
+                }
+            }
+            VStack(spacing: CookedSpacing.sm) {
+                ForEach(0..<6, id: \.self) { _ in SkeletonRow() }
+            }
+            .padding(CookedSpacing.md)
+            .glassPanel()
+        }
+        .padding(.horizontal, CookedSpacing.md)
+    }
+
+    private var searchList: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(searchResults) { result in
+                    NavigationLink(value: result.mint) {
+                        HStack(spacing: CookedSpacing.sm) {
+                            TokenLogo(mint: result.mint, symbol: result.symbol, size: 40)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text(result.symbol ?? "?")
+                                        .font(CookedFont.headline())
+                                        .foregroundStyle(CookedColor.Terminal.textPrimary)
+                                    if result.isVerified {
+                                        Image(systemName: "checkmark.seal.fill")
+                                            .font(.system(size: CookedIconSize.xs))
+                                            .foregroundStyle(CookedColor.Verification.mark)
+                                    }
+                                }
+                                Text(result.name ?? result.mint)
+                                    .font(CookedFont.caption(12))
+                                    .foregroundStyle(CookedColor.Terminal.textMuted)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: CookedIconSize.xs, weight: .bold))
+                                .foregroundStyle(CookedColor.Terminal.textMuted)
+                        }
+                        .padding(.horizontal, CookedSpacing.md)
+                        .padding(.vertical, CookedSpacing.sm)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(RowPressStyle())
+                }
+            }
+            .glassPanel()
+            .padding(CookedSpacing.md)
+        }
+        .scrollIndicators(.hidden)
     }
 
     private func load() async {
@@ -185,43 +285,146 @@ struct DiscoverView: View {
 }
 
 private struct DiscoverRow: View {
+    let rank: Int
     let entry: PaperDiscoverEntry
     let isWatched: Bool
     let onToggleStar: () -> Void
 
     var body: some View {
         HStack(spacing: CookedSpacing.sm) {
-            TokenLogo(mint: entry.mint, size: 36)
+            Text("\(rank)")
+                .font(CookedFont.priceSmall(11))
+                .foregroundStyle(CookedColor.Terminal.textMuted)
+                .frame(width: 16)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.symbol ?? "?")
-                    .font(CookedFont.headline())
-                    .foregroundStyle(CookedColor.Terminal.textPrimary)
-                Text(entry.name ?? entry.mint)
-                    .font(CookedFont.caption())
+            TokenLogo(mint: entry.mint, symbol: entry.symbol, size: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Text(entry.symbol ?? "?")
+                        .font(CookedFont.headline())
+                        .foregroundStyle(CookedColor.Terminal.textPrimary)
+                    if entry.isVerified {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: CookedIconSize.xs))
+                            .foregroundStyle(CookedColor.Verification.mark)
+                    }
+                }
+                Text(entry.metrics.volumeUsd.map { "Vol \($0.compactUSD())" } ?? (entry.name ?? ""))
+                    .font(CookedFont.caption(12))
                     .foregroundStyle(CookedColor.Terminal.textMuted)
                     .lineLimit(1)
             }
 
-            Spacer()
+            Spacer(minLength: CookedSpacing.xs)
 
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(entry.paperTradeable.priceUsd.usdString(fractionDigits: entry.paperTradeable.priceUsd < 1 ? 6 : 2))
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(entry.paperTradeable.priceUsd.priceString())
                     .font(CookedFont.priceMedium())
                     .foregroundStyle(CookedColor.Terminal.textPrimary)
-                PnLText(value: entry.metrics.priceChangePct, isPercent: true, font: CookedFont.caption())
+                ChangePill(value: entry.metrics.priceChangePct, font: CookedFont.priceSmall(11))
             }
 
             Button(action: onToggleStar) {
                 Image(systemName: isWatched ? "star.fill" : "star")
-                    .foregroundStyle(isWatched ? CookedColor.Brand.fill : CookedColor.Terminal.textMuted)
-                    .imageScale(.medium)
-                    .frame(width: 32, height: 32)
-                    .animation(CookedMotion.standard, value: isWatched)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(isWatched ? CookedColor.Prism.amber : CookedColor.Terminal.textMuted)
+                    .symbolEffect(.bounce, value: isWatched)
+                    .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, CookedSpacing.sm)
+        .padding(.vertical, CookedSpacing.sm)
+        .contentShape(Rectangle())
+    }
+}
+
+/// A big glass card in the "Trending now" carousel — avatar with a colored halo, the
+/// move front and center, and the two numbers that say whether it's real volume.
+private struct TrendingCard: View {
+    let entry: PaperDiscoverEntry
+
+    var body: some View {
+        let palette = TokenPalette(seed: entry.mint)
+        VStack(alignment: .leading, spacing: CookedSpacing.sm) {
+            HStack(alignment: .top) {
+                TokenLogo(mint: entry.mint, symbol: entry.symbol, size: 46)
+                    .glow(palette.primary, radius: 18, opacity: 0.5)
+                Spacer()
+                ChangePill(value: entry.metrics.priceChangePct)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.symbol ?? "?")
+                    .font(CookedFont.title(20))
+                    .foregroundStyle(CookedColor.Terminal.textPrimary)
+                Text(entry.name ?? "")
+                    .font(CookedFont.caption(12))
+                    .foregroundStyle(CookedColor.Terminal.textSecondary)
+                    .lineLimit(1)
+            }
+            Text(entry.paperTradeable.priceUsd.priceString())
+                .font(CookedFont.priceMedium(16))
+                .foregroundStyle(CookedColor.Terminal.textPrimary)
+            HStack(spacing: CookedSpacing.xs) {
+                MiniStat(title: "MCap", value: entry.metrics.marketCapUsd)
+                MiniStat(title: "Vol", value: entry.metrics.volumeUsd)
+            }
+        }
+        .padding(CookedSpacing.md)
+        .frame(width: 176, height: 204)
+        .background(
+            LinearGradient(colors: [palette.primary.opacity(0.28), .clear], startPoint: .top, endPoint: .bottom),
+            in: RoundedRectangle(cornerRadius: CookedRadius.lg, style: .continuous)
+        )
+        .glassPanel(cornerRadius: CookedRadius.lg, tint: palette.primary)
+    }
+}
+
+private struct MiniStat: View {
+    let title: String
+    let value: Decimal?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .font(CookedFont.caption(10))
+                .foregroundStyle(CookedColor.Terminal.textMuted)
+            Text(value?.compactUSD() ?? "—")
+                .font(CookedFont.priceSmall(11))
+                .foregroundStyle(CookedColor.Terminal.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A row-level press state: a soft highlight wash on touch-down instead of the
+/// default opacity dip, so tapping a row feels like pressing into glass.
+struct RowPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(Color.white.opacity(configuration.isPressed ? 0.06 : 0))
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(CookedMotion.press, value: configuration.isPressed)
+    }
+}
+
+/// A small icon + title header above a content group.
+struct SectionHeader: View {
+    let symbol: String
+    let title: String
+    var tint: Color = CookedColor.Brand.fill
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(tint)
+            Text(title)
+                .font(CookedFont.headline(17))
+                .foregroundStyle(CookedColor.Terminal.textPrimary)
+        }
     }
 }
 

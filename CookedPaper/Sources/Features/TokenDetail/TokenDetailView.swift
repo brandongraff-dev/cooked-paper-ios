@@ -17,10 +17,11 @@ struct TokenDetailView: View {
     @State private var chartAlertLevels: [ChartAlertLevel] = []
 
     private var reduceMotion: Bool { UIAccessibility.isReduceMotionEnabled }
+    private var palette: TokenPalette { TokenPalette(seed: mint) }
 
     var body: some View {
         ZStack {
-            CookedColor.Terminal.bgBase.ignoresSafeArea()
+            AmbientBackground(colors: [palette.primary, palette.secondary, CookedColor.Prism.indigo])
 
             if isLoading {
                 ProgressView().tint(CookedColor.Brand.fill)
@@ -29,7 +30,7 @@ struct TokenDetailView: View {
             } else {
                 VStack(spacing: 0) {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: CookedSpacing.md) {
+                        VStack(alignment: .leading, spacing: CookedSpacing.lg) {
                             header
                                 .entrance(isContentVisible, reduceMotion: reduceMotion)
                             chartSection
@@ -38,7 +39,11 @@ struct TokenDetailView: View {
                                 .entrance(isContentVisible, reduceMotion: reduceMotion, delay: 0.12)
                         }
                         .padding(CookedSpacing.md)
+                        .padding(.bottom, 96)
                     }
+                    .scrollIndicators(.hidden)
+                }
+                .overlay(alignment: .bottom) {
                     tradeBar
                 }
                 .onAppear { isContentVisible = true }
@@ -74,8 +79,9 @@ struct TokenDetailView: View {
     // MARK: - Sections
 
     private var header: some View {
-        HStack(alignment: .top, spacing: CookedSpacing.sm) {
-            TokenLogo(mint: mint, size: 44)
+        HStack(alignment: .center, spacing: CookedSpacing.md) {
+            TokenLogo(mint: mint, symbol: profile?.token.symbol, size: 60)
+                .glow(palette.primary, radius: 26, opacity: 0.55)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: CookedSpacing.xxs) {
                     Text(profile?.token.name ?? mint)
@@ -88,65 +94,93 @@ struct TokenDetailView: View {
                             .foregroundStyle(CookedColor.Verification.mark)
                     }
                 }
-                HStack(alignment: .firstTextBaseline, spacing: CookedSpacing.xs) {
-                    if let price = profile?.market.priceUsd.value {
-                        Text(price.usdString(fractionDigits: price < 1 ? 6 : 2))
-                            .font(CookedFont.priceDisplay(30))
-                            .foregroundStyle(CookedColor.Terminal.textPrimary)
-                    } else {
-                        Text("—").font(CookedFont.priceDisplay(30)).foregroundStyle(CookedColor.Terminal.textMuted)
-                    }
-                    PnLText(value: profile?.market.change24h.value, isPercent: true, font: CookedFont.priceMedium())
+                if let price = profile?.market.priceUsd.value {
+                    RollingNumber(
+                        value: NSDecimalNumber(decimal: price).doubleValue,
+                        format: { $0.formatted(.currency(code: "USD").precision(.fractionLength(price < 1 ? 6 : 2))) },
+                        font: CookedFont.priceDisplay(32)
+                    )
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                } else {
+                    Text("—").font(CookedFont.priceDisplay(32)).foregroundStyle(CookedColor.Terminal.textMuted)
+                }
+                HStack(spacing: CookedSpacing.xs) {
+                    ChangePill(value: profile?.market.change24h.value)
+                    Text("24h")
+                        .font(CookedFont.caption(12))
+                        .foregroundStyle(CookedColor.Terminal.textMuted)
                 }
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
     }
 
     private var chartSection: some View {
-        VStack(spacing: CookedSpacing.xs) {
+        VStack(alignment: .leading, spacing: CookedSpacing.sm) {
             CandleChartView(
                 candles: candles?.candles ?? [],
                 isRelayed: candles?.isRelayed ?? false,
                 interval: interval,
                 alertLevels: chartAlertLevels
             )
-            .frame(height: 280)
+            .frame(height: 260)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: CookedSpacing.xs) {
-                    ForEach(CandleInterval.allCases) { option in
-                        CookedChip(title: option.label, isSelected: option == interval) {
-                            interval = option
+            HStack(spacing: CookedSpacing.xs) {
+                CookedGlassContainer(spacing: 4) {
+                    HStack(spacing: 4) {
+                        ForEach(CandleInterval.allCases) { option in
+                            CookedChip(title: option.label, isSelected: option == interval) {
+                                interval = option
+                            }
                         }
                     }
                 }
             }
+            .frame(maxWidth: .infinity)
+
+            if candles?.isRelayed ?? false {
+                Label("Relayed data · GeckoTerminal", systemImage: "antenna.radiowaves.left.and.right")
+                    .font(CookedFont.caption(11))
+                    .foregroundStyle(CookedColor.Terminal.textMuted)
+                    .frame(maxWidth: .infinity)
+            }
         }
+        .padding(CookedSpacing.sm)
+        .glassPanel(cornerRadius: CookedRadius.lg)
     }
 
     private var statsGrid: some View {
-        CookedCard {
-            VStack(spacing: CookedSpacing.sm) {
-                statRow("Market cap", profile?.market.marketCapUsd.value)
-                Divider().overlay(CookedColor.Terminal.border)
-                statRow("Liquidity", profile?.market.liquidityUsd.value)
-                Divider().overlay(CookedColor.Terminal.border)
-                statRow("24h volume", profile?.market.volume24hUsd.value)
-            }
+        LazyVGrid(
+            columns: [GridItem(.flexible(), spacing: CookedSpacing.sm), GridItem(.flexible(), spacing: CookedSpacing.sm)],
+            spacing: CookedSpacing.sm
+        ) {
+            statTile("Market cap", symbol: "building.columns.fill", color: CookedColor.Prism.indigo, value: profile?.market.marketCapUsd.value)
+            statTile("Liquidity", symbol: "drop.fill", color: CookedColor.Prism.sky, value: profile?.market.liquidityUsd.value)
+            statTile("24h volume", symbol: "chart.bar.fill", color: CookedColor.Prism.teal, value: profile?.market.volume24hUsd.value)
+            statTile("Your position", symbol: "briefcase.fill", color: CookedColor.Prism.amber, value: heldValue)
         }
     }
 
-    private func statRow(_ title: String, _ value: Decimal?) -> some View {
-        HStack {
-            Text(title)
-                .font(CookedFont.body())
-                .foregroundStyle(CookedColor.Terminal.textSecondary)
-            Spacer()
-            Text(value?.usdString() ?? "—")
-                .font(CookedFont.priceMedium())
+    private var heldValue: Decimal? {
+        PortfolioStore.shared.snapshot?.positions.first { $0.tokenMint == mint }?.valueUsd
+    }
+
+    private func statTile(_ title: String, symbol: String, color: Color, value: Decimal?) -> some View {
+        VStack(alignment: .leading, spacing: CookedSpacing.xs) {
+            IconTile(symbol: symbol, color: color, size: 26)
+            Text(value?.compactUSD() ?? "—")
+                .font(CookedFont.priceLarge(19))
                 .foregroundStyle(CookedColor.Terminal.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(title)
+                .font(CookedFont.caption(11))
+                .foregroundStyle(CookedColor.Terminal.textMuted)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(CookedSpacing.sm)
+        .glassPanel(cornerRadius: CookedRadius.md, tint: color)
     }
 
     private var holdsPosition: Bool {
@@ -154,14 +188,14 @@ struct TokenDetailView: View {
     }
 
     private var tradeBar: some View {
-        CookedGlassContainer {
+        CookedGlassContainer(spacing: CookedSpacing.sm) {
             HStack(spacing: CookedSpacing.sm) {
                 if holdsPosition {
                     Button {
                         Haptics.tap()
                         tradeSide = .sell
                     } label: {
-                        Text("Sell")
+                        Label("Sell", systemImage: "arrow.down.right")
                     }
                     .buttonStyle(.cookedPrimary(destructive: true))
                 }
@@ -170,13 +204,15 @@ struct TokenDetailView: View {
                     Haptics.tap()
                     tradeSide = .buy
                 } label: {
-                    Text("Buy")
+                    Label("Buy", systemImage: "arrow.up.right")
                 }
                 .buttonStyle(.cookedPrimary)
+                .accessibilityIdentifier("tokenDetail.buy")
             }
-            .padding(CookedSpacing.md)
-            .cookedGlass(in: Rectangle())
-            .overlay(Rectangle().fill(CookedColor.Terminal.border).frame(height: 1), alignment: .top)
+            .padding(CookedSpacing.sm)
+            .glassPanel(cornerRadius: CookedRadius.xl)
+            .padding(.horizontal, CookedSpacing.md)
+            .padding(.bottom, CookedSpacing.xs)
         }
     }
 
