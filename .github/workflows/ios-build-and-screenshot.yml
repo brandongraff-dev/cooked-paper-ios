@@ -16,7 +16,13 @@ jobs:
     timeout-minutes: 45
     defaults:
       run:
-        working-directory: apps/ios/CookedPaper
+        # Relative to the repo root. This workflow was originally authored
+        # against a monorepo layout (apps/ios/CookedPaper) and then the app was
+        # extracted into its own standalone repo, where CookedPaper sits at the
+        # root instead — this path was the one thing that didn't get updated in
+        # that move, and the first real CI run failed immediately on it. If this
+        # workflow is ever copied back into a monorepo, restore the longer path.
+        working-directory: CookedPaper
         shell: bash
 
     steps:
@@ -72,7 +78,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: xcresult-bundle
-          path: apps/ios/CookedPaper/TestResults.xcresult
+          path: CookedPaper/TestResults.xcresult
           if-no-files-found: warn
 
       - name: Extract screenshots from xcresult
@@ -121,5 +127,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ui-screenshots
-          path: apps/ios/CookedPaper/screenshots/*.png
+          path: CookedPaper/screenshots/*.png
           if-no-files-found: warn

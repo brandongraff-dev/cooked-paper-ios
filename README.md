@@ -52,7 +52,9 @@ CookedPaper/
 
 ## First-time setup
 
-1. **Install XcodeGen** (`brew install xcodegen`), then from `apps/ios/CookedPaper`:
+1. **Install XcodeGen** (`brew install xcodegen`), then from `CookedPaper` (this
+   repo's own `apps/ios/CookedPaper` if you're reading this inside the monorepo it
+   was extracted from):
    ```
    xcodegen generate
    open CookedPaper.xcodeproj
@@ -176,8 +178,7 @@ the paper-trading-only, no-real-money scope.
 
 `Resources/Assets.xcassets/AppIcon.appiconset` now points at `icon-1024.png`, but
 that file doesn't exist until you render it — this was written on a machine with no
-Xcode, so there was nothing to rasterize it with. On a Mac, from
-`apps/ios/CookedPaper`, run:
+Xcode, so there was nothing to rasterize it with. On a Mac, from `CookedPaper`, run:
 
 ```
 swift Scripts/GenerateIcon.swift
