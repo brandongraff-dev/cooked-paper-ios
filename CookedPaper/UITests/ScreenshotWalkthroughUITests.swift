@@ -3,7 +3,14 @@ import XCTest
 /// UI tests run on XCTest, not Swift Testing — Apple has not shipped Swift Testing
 /// support for UI automation, so this is the one place in the app that correctly uses
 /// `XCTestCase` instead of `Testing`/`@Test`.
-final class ScreenshotWalkthroughUITests: XCTestCase {
+///
+/// `nonisolated` on the class itself, not just its methods: the project sets
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor` globally, which would otherwise make
+/// this class (and its inherited initializers) implicitly @MainActor — but
+/// `XCTestCase`'s required initializers are `nonisolated`, and a subclass cannot
+/// override a nonisolated declaration with an isolated one. Every method that
+/// actually touches the UI is still explicitly `@MainActor` below.
+nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
     @MainActor
     func testWalkthroughAndScreenshots() throws {
         let app = XCUIApplication()
