@@ -106,11 +106,6 @@ targets:
     platform: iOS
     sources:
       - path: UITests
-    resources:
-      # SKTestSession(configurationFileNamed:) resolves against the CALLING
-      # (test) bundle, not the app-under-test's — needs its own copy here even
-      # though CookedPaper already bundles the same file for its own use.
-      - path: StoreKit/Products.storekit
     dependencies:
       - target: CookedPaper
     settings:
