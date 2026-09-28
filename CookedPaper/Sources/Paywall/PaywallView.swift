@@ -2,118 +2,130 @@ import Foundation
 import StoreKit
 import SwiftUI
 
-/// The hard paywall — the only door into the app. No free trial is granted by the
-/// app itself, no skip button; see `SubscriptionStore` for why there's no
-/// server-side gate to match (paper trading is free/unlimited on apps/api by
-/// design, so the subscription is enforced entirely here).
+/// The hard paywall — the only door into the app. No skip button; see
+/// `SubscriptionStore` for why there's no server-side gate to match (paper trading
+/// is free/unlimited on apps/api by design, so the subscription is enforced entirely
+/// here). Every price, period and trial term shown is read from StoreKit.
 struct PaywallView: View {
     let store = SubscriptionStore.shared
-    @State private var selectedProductID = ProductID.annual
+    @State private var selectedProductID = ProductID.weekly
     @State private var isPurchasing = false
-    /// Product ids whose introductory offer this Apple ID can still redeem — so a
-    /// trial is only ever advertised to someone who will actually get it.
+    /// Product ids whose introductory offer this Apple ID can still redeem — a trial
+    /// is only ever advertised to someone who will actually get it.
     @State private var trialEligibleIDs: Set<String> = []
 
     private var selectedProduct: Product? {
         store.products.first { $0.id == selectedProductID }
     }
 
+    /// Yearly, Weekly, Monthly — the order the plans are presented in.
+    private var orderedPlans: [Product] {
+        [store.annualProduct, store.weeklyProduct, store.monthlyProduct].compactMap { $0 }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: Space.section) {
-                    brandCard
-                    headline
+                VStack(spacing: Space.s32) {
+                    hero
                     features
                     plans
                 }
-                .padding(.horizontal, Space.margin)
-                .padding(.top, Space.s24)
+                .padding(.horizontal, Space.s24)
+                .padding(.top, Space.s8)
                 .padding(.bottom, Space.s16)
             }
             .scrollIndicators(.hidden)
 
             footer
         }
+        .background(alignment: .top) { backdrop }
         .background(Color.appBackground)
+        .overlay(alignment: .topTrailing) {
+            Button("Restore") { Task { await store.restore() } }
+                .font(.body)
+                .foregroundStyle(Color.textSecondary)
+                .padding(.horizontal, Space.s24)
+                .padding(.top, Space.s8)
+        }
         .preferredColorScheme(.dark)
-        .task(id: store.products.map(\.id)) { await refreshTrialEligibility() }
+        .task(id: store.products.map(\.id)) {
+            await refreshTrialEligibility()
+            if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.weekly }) ?? orderedPlans.first {
+                selectedProductID = first.id
+            }
+        }
+    }
+
+    /// A faint blue light behind the logo — the one decorative touch on this screen.
+    private var backdrop: some View {
+        RadialGradient(
+            colors: [Color.accent.opacity(0.14), Color.accent.opacity(0)],
+            center: .top,
+            startRadius: 0,
+            endRadius: 360
+        )
+        .frame(height: 420)
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
     }
 
     // MARK: - Sections
 
-    private var brandCard: some View {
-        HStack(spacing: Space.s12) {
-            BrandWordmark(height: 26)
-            Text("Paper")
-                .font(.rowTitle)
-                .foregroundStyle(Color.textSecondary)
-            Spacer()
-            Text("PRO")
-                .font(.caption13.weight(.bold))
-                .tracking(0.5)
-                .foregroundStyle(Color.inverseText)
-                .padding(.horizontal, Space.s8)
-                .padding(.vertical, 2)
-                .background(Color.accent, in: Capsule())
-        }
-        .padding(Space.s20)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-    }
+    private var hero: some View {
+        VStack(spacing: Space.s20) {
+            BrandMark(height: 96)
+                .padding(.top, Space.s48)
 
-    private var headline: some View {
-        VStack(alignment: .leading, spacing: Space.s12) {
-            Text("Trade like it's real.\nBecause it isn't.")
-                .font(.appLargeTitle)
+            Text("Trade live prices\nwith paper money.")
+                .font(.system(size: 34, weight: .bold))
+                .tracking(-0.8)
+                .multilineTextAlignment(.center)
                 .foregroundStyle(Color.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Practice with $10,000 in virtual cash on live market prices. No real money, ever.")
+
+            Text("Every fill uses the real market price. Every loss stays on your record.")
                 .font(.body)
+                .multilineTextAlignment(.center)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var features: some View {
         VStack(alignment: .leading, spacing: Space.s16) {
-            FeatureLine(symbol: "chart.xyaxis.line", text: "Live charts on real market prices")
-            FeatureLine(symbol: "bolt", text: "Instant buys and sells, no setup")
-            FeatureLine(symbol: "trophy", text: "Monthly leaderboard against other traders")
-            FeatureLine(symbol: "checkmark.shield", text: "Simulated only — never real money")
+            FeatureCheck(text: "Unlimited paper trades on live tokens")
+            FeatureCheck(text: "Your full record: win rate, P&L, every trade")
+            FeatureCheck(text: "A monthly leaderboard to climb")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
     private var plans: some View {
-        VStack(spacing: Space.s12) {
+        VStack(spacing: Space.s16) {
             if store.isLoadingProducts {
-                PlanPlaceholder()
-                PlanPlaceholder()
-            } else if store.products.isEmpty {
+                ForEach(0..<3, id: \.self) { _ in
+                    SkeletonBlock(height: 84, cornerRadius: Radius.card)
+                }
+            } else if orderedPlans.isEmpty {
                 Text("Plans couldn't be loaded. Check your connection and try again.")
                     .font(.rowSubtitle)
                     .foregroundStyle(Color.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             } else {
-                if let annual = store.annualProduct {
+                ForEach(orderedPlans, id: \.id) { product in
                     PlanRow(
-                        title: "Yearly",
-                        price: "\(annual.displayPrice)/\(periodUnit(annual))",
-                        badge: savingsText(annual: annual),
-                        trial: trialText(annual),
-                        isSelected: selectedProductID == annual.id
-                    ) { select(annual) }
-                    .accessibilityIdentifier("paywall.planAnnual")
-                }
-                if let monthly = store.monthlyProduct {
-                    PlanRow(
-                        title: "Monthly",
-                        price: "\(monthly.displayPrice)/\(periodUnit(monthly))",
-                        badge: nil,
-                        trial: trialText(monthly),
-                        isSelected: selectedProductID == monthly.id
-                    ) { select(monthly) }
-                    .accessibilityIdentifier("paywall.planMonthly")
+                        title: planTitle(product),
+                        badge: product.id == ProductID.annual ? savingsText(annual: product) : nil,
+                        subtitle: planSubtitle(product),
+                        price: "\(product.displayPrice)/\(shortUnit(product))",
+                        detail: planDetail(product),
+                        isSelected: selectedProductID == product.id
+                    ) { select(product) }
+                    .accessibilityIdentifier("paywall.plan.\(product.id)")
                 }
             }
 
@@ -121,45 +133,40 @@ struct PaywallView: View {
                 Text(error)
                     .font(.caption13)
                     .foregroundStyle(Color.negative)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             }
         }
     }
 
     private var footer: some View {
-        VStack(spacing: Space.s12) {
+        VStack(spacing: Space.s16) {
             Button(action: primaryAction) {
                 if store.isLoadingProducts || isPurchasing {
-                    ProgressView().tint(Color.inverseText)
-                } else if store.products.isEmpty {
-                    Text("Try again")
-                } else if let selectedProduct, trialText(selectedProduct) != nil {
-                    Text("Start free trial")
+                    ProgressView().tint(Color.accentInk)
                 } else {
-                    Text("Continue")
+                    Text(ctaTitle)
                 }
             }
-            .buttonStyle(.primary)
+            .buttonStyle(.accent)
             .accessibilityIdentifier("paywall.subscribeButton")
 
-            HStack(spacing: Space.s16) {
-                Button("Restore") { Task { await store.restore() } }
+            Text(disclosure)
+                .font(.footnote)
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: Space.s32) {
                 Link("Terms", destination: LegalLinks.terms)
                 Link("Privacy", destination: LegalLinks.privacy)
             }
-            .font(.caption13)
-            .foregroundStyle(Color.textTertiary)
-
-            Text(disclosure)
-                .font(.caption2)
-                .foregroundStyle(Color.textTertiary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+            .font(.footnote)
+            .foregroundStyle(Color.textSecondary)
         }
-        .padding(.horizontal, Space.margin)
-        .padding(.top, Space.s12)
+        .padding(.horizontal, Space.s24)
+        .padding(.top, Space.s16)
         .padding(.bottom, Space.s8)
-        .background(Color.appBackground)
     }
 
     // MARK: - Actions
@@ -167,14 +174,14 @@ struct PaywallView: View {
     private func select(_ product: Product) {
         guard selectedProductID != product.id else { return }
         Haptics.selection()
-        selectedProductID = product.id
+        withAnimation(Motion.standard) { selectedProductID = product.id }
     }
 
     /// Never a dead button: while products load it shows a spinner and ignores taps;
     /// if they failed to load it retries; otherwise it purchases the selected plan.
     private func primaryAction() {
         guard !store.isLoadingProducts, !isPurchasing else { return }
-        guard let product = selectedProduct ?? store.products.first else {
+        guard let product = selectedProduct ?? orderedPlans.first else {
             Task { await store.loadProducts() }
             return
         }
@@ -200,126 +207,202 @@ struct PaywallView: View {
         trialEligibleIDs = eligible
     }
 
-    private func periodUnit(_ product: Product) -> String {
-        guard let period = product.subscription?.subscriptionPeriod else { return "period" }
-        let unit: String = switch period.unit {
+    private func trialOffer(_ product: Product) -> Product.SubscriptionOffer? {
+        guard trialEligibleIDs.contains(product.id) else { return nil }
+        return product.subscription?.introductoryOffer
+    }
+
+    /// "3 days" / "1 week" — a trial's length, spelled out.
+    private func trialLength(_ offer: Product.SubscriptionOffer) -> String {
+        let value = offer.period.value
+        let unit = unitName(offer.period.unit)
+        return "\(value) \(unit)\(value == 1 ? "" : "s")"
+    }
+
+    private var ctaTitle: String {
+        if orderedPlans.isEmpty { return "Try again" }
+        if let selectedProduct, let offer = trialOffer(selectedProduct) {
+            return "Start my \(offer.period.value)-\(unitName(offer.period.unit)) free trial"
+        }
+        return "Continue"
+    }
+
+    private func planTitle(_ product: Product) -> String {
+        switch periodUnit(product) {
+        case .year: "Yearly"
+        case .month: "Monthly"
+        case .week: "Weekly"
+        case .day: "Daily"
+        @unknown default: product.displayName
+        }
+    }
+
+    private func planSubtitle(_ product: Product) -> String {
+        if let offer = trialOffer(product) {
+            return "\(trialLength(offer)) free, then \(product.displayPrice)/\(unitName(periodUnit(product)))"
+        }
+        switch periodUnit(product) {
+        case .year: return "Billed once a year"
+        case .month: return "Billed every month"
+        case .week: return "Billed every week"
+        default: return "Billed every \(unitName(periodUnit(product)))"
+        }
+    }
+
+    /// The small line under the price: a weekly equivalent for longer plans, or
+    /// "after trial" when the plan starts with one.
+    private func planDetail(_ product: Product) -> String? {
+        if trialOffer(product) != nil { return "after trial" }
+        let weeks: Decimal
+        switch periodUnit(product) {
+        case .year: weeks = 52
+        case .month: weeks = Decimal(52) / 12
+        default: return nil
+        }
+        let perWeek = product.price / weeks
+        return "\(perWeek.formatted(product.priceFormatStyle))/week"
+    }
+
+    private func periodUnit(_ product: Product) -> Product.SubscriptionPeriod.Unit {
+        product.subscription?.subscriptionPeriod.unit ?? .month
+    }
+
+    private func shortUnit(_ product: Product) -> String {
+        switch periodUnit(product) {
+        case .year: "yr"
+        case .month: "mo"
+        case .week: "wk"
+        case .day: "day"
+        @unknown default: "period"
+        }
+    }
+
+    private func unitName(_ unit: Product.SubscriptionPeriod.Unit) -> String {
+        switch unit {
         case .day: "day"
         case .week: "week"
         case .month: "month"
         case .year: "year"
         @unknown default: "period"
         }
-        return period.value == 1 ? unit : "\(period.value) \(unit)s"
     }
 
-    /// "7-day free trial, then $29.99/year" — only for an eligible free-trial offer.
-    private func trialText(_ product: Product) -> String? {
-        guard trialEligibleIDs.contains(product.id),
-              let offer = product.subscription?.introductoryOffer else { return nil }
-        let length = offer.period.value
-        let unit: String = switch offer.period.unit {
-        case .day: "day"
-        case .week: "week"
-        case .month: "month"
-        case .year: "year"
-        @unknown default: "period"
-        }
-        return "\(length)-\(unit) free trial, then \(product.displayPrice)/\(periodUnit(product))"
-    }
-
-    /// "Save 69%" versus paying monthly for a year.
+    /// "SAVE 69%" — yearly versus a year of monthly.
     private func savingsText(annual: Product) -> String? {
         guard let monthly = store.monthlyProduct, monthly.price > 0 else { return nil }
         let yearOfMonthly = monthly.price * 12
         guard yearOfMonthly > annual.price else { return nil }
-        let saving = (1 - annual.price / yearOfMonthly) * 100
-        let rounded = NSDecimalNumber(decimal: saving).intValue
-        return rounded > 0 ? "Save \(rounded)%" : nil
+        let saving = NSDecimalNumber(decimal: (1 - annual.price / yearOfMonthly) * 100).doubleValue
+        let rounded = Int(saving.rounded())
+        return rounded > 0 ? "SAVE \(rounded)%" : nil
     }
 
     private var disclosure: String {
         guard let selectedProduct else {
-            return "Subscriptions auto-renew until canceled. Cancel anytime in Settings at least 24 hours before renewal."
+            return "Subscriptions renew automatically until you cancel. Cancel anytime in Settings."
         }
-        return "\(selectedProduct.displayPrice)/\(periodUnit(selectedProduct)), auto-renews until canceled. Cancel anytime in Settings at least 24 hours before renewal."
+        let unit = unitName(periodUnit(selectedProduct))
+        if let offer = trialOffer(selectedProduct) {
+            return "Free for \(trialLength(offer)), then \(selectedProduct.displayPrice) every \(unit) until you cancel. Cancel anytime in Settings."
+        }
+        return "\(selectedProduct.displayPrice) every \(unit) until you cancel. Cancel anytime in Settings."
     }
 }
 
-private struct FeatureLine: View {
-    let symbol: String
+private struct FeatureCheck: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: Space.s12) {
-            Image(systemName: symbol)
-                .font(.body)
-                .foregroundStyle(Color.textSecondary)
-                .frame(width: 24)
+        HStack(spacing: Space.s16) {
+            Image(systemName: "checkmark")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.accent)
+                .frame(width: 20)
                 .accessibilityHidden(true)
             Text(text)
                 .font(.body)
                 .foregroundStyle(Color.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
 
-/// One plan: title and price on the left, radio on the right. Selected gets a white
-/// hairline border; nothing is tinted.
+/// Radio | title (+ badge) over subtitle | price over detail. Selected gets the
+/// accent border, a faint accent wash, and a filled radio.
 private struct PlanRow: View {
     let title: String
-    let price: String
     let badge: String?
-    let trial: String?
+    let subtitle: String
+    let price: String
+    let detail: String?
     let isSelected: Bool
     let action: () -> Void
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
         Button(action: action) {
-            HStack(spacing: Space.s12) {
+            HStack(spacing: Space.s16) {
+                RadioMark(isSelected: isSelected)
+
                 VStack(alignment: .leading, spacing: Space.s4) {
                     HStack(spacing: Space.s8) {
                         Text(title)
-                            .font(.rowTitle)
+                            .font(.title3.weight(.semibold))
                             .foregroundStyle(Color.textPrimary)
                         if let badge {
                             Text(badge)
-                                .font(.caption13)
-                                .foregroundStyle(Color.textPrimary)
+                                .font(.footnote.weight(.bold))
+                                .foregroundStyle(Color.accent)
                                 .padding(.horizontal, Space.s8)
-                                .padding(.vertical, 2)
-                                .background(Color.appSurfaceElevated, in: Capsule())
+                                .padding(.vertical, Space.s4)
+                                .background(Color.accent.opacity(0.16), in: Capsule())
                         }
                     }
-                    Text(price)
-                        .font(.rowSubvalue)
+                    Text(subtitle)
+                        .font(.subheadline)
                         .foregroundStyle(Color.textSecondary)
-                    if let trial {
-                        Text(trial)
-                            .font(.caption13)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.9)
+                }
+
+                Spacer(minLength: Space.s8)
+
+                VStack(alignment: .trailing, spacing: Space.s4) {
+                    Text(price)
+                        .font(.title3.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(Color.textPrimary)
+                    if let detail {
+                        Text(detail)
+                            .font(.subheadline.monospacedDigit())
                             .foregroundStyle(Color.textSecondary)
                     }
                 }
-                Spacer()
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isSelected ? Color.textPrimary : Color.textTertiary)
-                    .accessibilityHidden(true)
             }
-            .padding(Space.s16)
-            .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                    .strokeBorder(isSelected ? Color.textPrimary : Color.clear, lineWidth: 1.5)
-            )
+            .padding(Space.s20)
+            .background(isSelected ? Color.accent.opacity(0.08) : Color.appSurface, in: shape)
+            .overlay(shape.strokeBorder(isSelected ? Color.accent : Color.appSeparator, lineWidth: isSelected ? 1.5 : 1))
         }
         .buttonStyle(.pressable)
+        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
-private struct PlanPlaceholder: View {
+private struct RadioMark: View {
+    let isSelected: Bool
+
     var body: some View {
-        SkeletonBlock(height: 76, cornerRadius: Radius.card)
+        ZStack {
+            Circle()
+                .strokeBorder(isSelected ? Color.accent : Color.textTertiary, lineWidth: 1.5)
+            if isSelected {
+                Circle().fill(Color.accent)
+                Circle().fill(Color.appBackground).frame(width: 9, height: 9)
+            }
+        }
+        .frame(width: 24, height: 24)
+        .animation(Motion.standard, value: isSelected)
+        .accessibilityHidden(true)
     }
 }
 

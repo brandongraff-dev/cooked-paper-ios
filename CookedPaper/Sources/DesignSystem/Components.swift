@@ -147,6 +147,26 @@ struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
+/// Accent capsule, dark-blue label, 56pt — reserved for the paywall's one CTA.
+struct AccentButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.buttonLabel)
+            .foregroundStyle(Color.accentInk)
+            .frame(maxWidth: .infinity)
+            .frame(height: Metrics.buttonHeight)
+            .background(Color.accent, in: Capsule())
+            .opacity(isEnabled ? 1 : 0.35)
+            .pressEffect(configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == AccentButtonStyle {
+    static var accent: AccentButtonStyle { AccentButtonStyle() }
+}
+
 /// A small white capsule for inline actions ("Save progress").
 struct CompactButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {

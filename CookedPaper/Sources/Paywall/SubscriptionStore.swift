@@ -5,7 +5,8 @@ import StoreKit
 enum ProductID {
     static let monthly = "app.cooked.paper.monthly"
     static let annual = "app.cooked.paper.annual"
-    static let all = [monthly, annual]
+    static let weekly = "app.cooked.paper.weekly"
+    static let all = [weekly, monthly, annual]
 }
 
 /// The entire paywall: two auto-renewing subscriptions in one group, StoreKit 2 only
@@ -46,6 +47,7 @@ final class SubscriptionStore {
 
     var monthlyProduct: Product? { products.first { $0.id == ProductID.monthly } }
     var annualProduct: Product? { products.first { $0.id == ProductID.annual } }
+    var weeklyProduct: Product? { products.first { $0.id == ProductID.weekly } }
 
     func loadProducts() async {
         isLoadingProducts = true

@@ -1,127 +1,154 @@
 {
-  "appPolicies" : {
-    "eula" : "",
-    "policies" : [
+  "appPolicies": {
+    "eula": "",
+    "policies": [
       {
-        "locale" : "en_US",
-        "policyText" : "",
-        "policyURL" : ""
+        "locale": "en_US",
+        "policyText": "",
+        "policyURL": ""
       }
     ]
   },
-  "identifier" : "5A6F1B10-0000-4000-8000-000000000001",
-  "nonRenewingSubscriptions" : [],
-  "products" : [],
-  "settings" : {
-    "_applicationInternalID" : "0",
-    "_developerTeamID" : "0000000000",
-    "_failTransactionsEnabled" : false,
-    "_lastSynchronizedDate" : 0,
-    "_locale" : "en_US",
-    "_storefront" : "USA",
-    "_storeKitErrors" : [
+  "identifier": "5A6F1B10-0000-4000-8000-000000000001",
+  "nonRenewingSubscriptions": [],
+  "products": [],
+  "settings": {
+    "_applicationInternalID": "0",
+    "_developerTeamID": "0000000000",
+    "_failTransactionsEnabled": false,
+    "_lastSynchronizedDate": 0,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": [
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Load Products"
+        "current": null,
+        "enabled": false,
+        "name": "Load Products"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Purchase"
+        "current": null,
+        "enabled": false,
+        "name": "Purchase"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Verification"
+        "current": null,
+        "enabled": false,
+        "name": "Verification"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "App Store Sync"
+        "current": null,
+        "enabled": false,
+        "name": "App Store Sync"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Subscription Status"
+        "current": null,
+        "enabled": false,
+        "name": "Subscription Status"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "App Transaction"
+        "current": null,
+        "enabled": false,
+        "name": "App Transaction"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Manage Subscriptions Sheet"
+        "current": null,
+        "enabled": false,
+        "name": "Manage Subscriptions Sheet"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Refund Request Sheet"
+        "current": null,
+        "enabled": false,
+        "name": "Refund Request Sheet"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Offer Code Redeem Sheet"
+        "current": null,
+        "enabled": false,
+        "name": "Offer Code Redeem Sheet"
       }
     ]
   },
-  "subscriptionGroups" : [
+  "subscriptionGroups": [
     {
-      "id" : "5A6F1B10-0000-4000-8000-000000000010",
-      "localizations" : [],
-      "name" : "Cooked Paper Pro",
-      "subscriptions" : [
+      "id": "5A6F1B10-0000-4000-8000-000000000010",
+      "localizations": [],
+      "name": "Cooked Paper Pro",
+      "subscriptions": [
         {
-          "adHocOffers" : [],
-          "codeOffers" : [],
-          "displayPrice" : "7.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "5A6F1B10-0000-4000-8000-000000000011",
-          "introductoryOffer" : null,
-          "localizations" : [
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "7.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "5A6F1B10-0000-4000-8000-000000000011",
+          "introductoryOffer": null,
+          "localizations": [
             {
-              "description" : "Full access to Cooked Paper, billed monthly.",
-              "displayName" : "Cooked Paper Monthly",
-              "locale" : "en_US"
+              "description": "Full access to Cooked Paper, billed monthly.",
+              "displayName": "Cooked Paper Monthly",
+              "locale": "en_US"
             }
           ],
-          "productID" : "app.cooked.paper.monthly",
-          "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Monthly",
-          "subscriptionGroupID" : "5A6F1B10-0000-4000-8000-000000000010",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : []
+          "productID": "app.cooked.paper.monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Monthly",
+          "subscriptionGroupID": "5A6F1B10-0000-4000-8000-000000000010",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
         },
         {
-          "adHocOffers" : [],
-          "codeOffers" : [],
-          "displayPrice" : "29.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "5A6F1B10-0000-4000-8000-000000000012",
-          "introductoryOffer" : null,
-          "localizations" : [
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "29.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "5A6F1B10-0000-4000-8000-000000000012",
+          "introductoryOffer": null,
+          "localizations": [
             {
-              "description" : "Full access to Cooked Paper, billed yearly. Best value.",
-              "displayName" : "Cooked Paper Annual",
-              "locale" : "en_US"
+              "description": "Full access to Cooked Paper, billed yearly. Best value.",
+              "displayName": "Cooked Paper Annual",
+              "locale": "en_US"
             }
           ],
-          "productID" : "app.cooked.paper.annual",
-          "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Annual",
-          "subscriptionGroupID" : "5A6F1B10-0000-4000-8000-000000000010",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : []
+          "productID": "app.cooked.paper.annual",
+          "recurringSubscriptionPeriod": "P1Y",
+          "referenceName": "Annual",
+          "subscriptionGroupID": "5A6F1B10-0000-4000-8000-000000000010",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
+        },
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "3.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "5A6F1B10-0000-4000-8000-000000000013",
+          "introductoryOffer": {
+            "internalID": "5A6F1B10-0000-4000-8000-000000000014",
+            "numberOfPeriods": 1,
+            "paymentMode": "free",
+            "subscriptionPeriod": "P3D"
+          },
+          "localizations": [
+            {
+              "description": "Full access to Cooked Paper, billed weekly after a 3-day free trial.",
+              "displayName": "Cooked Paper Weekly",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "app.cooked.paper.weekly",
+          "recurringSubscriptionPeriod": "P1W",
+          "referenceName": "Weekly",
+          "subscriptionGroupID": "5A6F1B10-0000-4000-8000-000000000010",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
         }
       ]
     }
   ],
-  "version" : {
-    "major" : 3,
-    "minor" : 0
+  "version": {
+    "major": 3,
+    "minor": 0
   }
 }

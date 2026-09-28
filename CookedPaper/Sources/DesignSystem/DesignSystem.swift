@@ -34,6 +34,8 @@ extension Color {
 
     /// Brand light blue. Used sparingly: the selected tab, the PRO badge, links.
     static let accent = Color(rgb: 0x5AA9FF)
+    /// Near-black-of-the-blue text on an accent fill (white on this blue fails AA).
+    static let accentInk = Color(rgb: 0x051426)
     /// The selected tab's circle — a quiet lift, not a color.
     static let selectedFill = Color.white.opacity(0.12)
 

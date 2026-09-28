@@ -1,4 +1,3 @@
-import Combine
 import SwiftUI
 import UIKit
 
@@ -23,14 +22,13 @@ struct AppShellView: View {
     }
 
     @State private var selection: AppTab = .discover
-    @State private var isKeyboardVisible = false
 
     var body: some View {
         // All four stacks stay alive (so each keeps its navigation and scroll
         // state); only the selected one is visible, hit-testable and in the
         // accessibility tree. This replaces the system tab bar entirely, so it can't
         // reappear on a pushed screen the way a hidden TabView bar can.
-        ZStack {
+        ZStack(alignment: .bottom) {
             ForEach(AppTab.allCases) { tab in
                 let isSelected = tab == selection
                 NavigationStack {
@@ -46,20 +44,14 @@ struct AppShellView: View {
                 .accessibilityHidden(!isSelected)
                 .zIndex(isSelected ? 1 : 0)
             }
-        }
-        .overlay(alignment: .bottom) {
-            // Steps aside while typing, like the system tab bar does.
+
+            // Its own layer, laid out ignoring the keyboard: while typing, the
+            // keyboard covers the bar (as it does the system tab bar) instead of
+            // pushing it up over the content.
             FloatingTabBar(selection: $selection)
                 .padding(.bottom, Space.s4)
-                .opacity(isKeyboardVisible ? 0 : 1)
-                .allowsHitTesting(!isKeyboardVisible)
-                .animation(Motion.standard, value: isKeyboardVisible)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            isKeyboardVisible = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            isKeyboardVisible = false
+                .ignoresSafeArea(.keyboard, edges: .bottom)
+                .zIndex(2)
         }
         .onChange(of: selection) { _, _ in
             // A search field focused in the tab being left must not keep its

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct DiscoverView: View {
     @State private var feed: PaperDiscoverFeed = .mostActive
@@ -33,6 +34,10 @@ struct DiscoverView: View {
             }
         }
         .searchable(text: $searchText, prompt: "Search tokens")
+        .onSubmit(of: .search) {
+            // Search is live as you type; the Search key just puts the keyboard away.
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
         .onChange(of: searchText) { _, newValue in
             searchTask?.cancel()
             searchTask = Task {
