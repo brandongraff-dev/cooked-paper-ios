@@ -38,9 +38,11 @@ final class SubscriptionStore {
         }
     }
 
-    deinit {
-        updatesTask?.cancel()
-    }
+    // No deinit: this is a `static let shared` singleton that lives for the entire
+    // process, so cancelling `updatesTask` on deallocation is code for a state that
+    // never occurs — and under Swift 6 strict concurrency, `deinit` runs nonisolated
+    // by default, so touching this @MainActor-isolated property from it doesn't even
+    // compile without one.
 
     var monthlyProduct: Product? { products.first { $0.id == ProductID.monthly } }
     var annualProduct: Product? { products.first { $0.id == ProductID.annual } }

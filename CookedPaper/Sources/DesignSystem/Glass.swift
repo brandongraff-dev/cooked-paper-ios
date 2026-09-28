@@ -18,7 +18,7 @@ extension View {
     func cookedGlass(
         tint: Color? = nil,
         interactive: Bool = false,
-        in shape: some Shape = Capsule()
+        in shape: some InsettableShape = Capsule()
     ) -> some View {
         if #available(iOS 26.0, *) {
             self.glassEffect(cookedGlassConfiguration(tint: tint, interactive: interactive), in: shape)
