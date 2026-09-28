@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 
@@ -22,6 +23,7 @@ struct AppShellView: View {
     }
 
     @State private var selection: AppTab = .discover
+    @State private var isKeyboardVisible = false
 
     var body: some View {
         // All four stacks stay alive (so each keeps its navigation and scroll
@@ -49,7 +51,17 @@ struct AppShellView: View {
             FloatingTabBar(selection: $selection)
                 .padding(.bottom, Space.s4)
                 .ignoresSafeArea(.keyboard, edges: .bottom)
+                // Steps aside while typing, as the system tab bar does.
+                .opacity(isKeyboardVisible ? 0 : 1)
+                .allowsHitTesting(!isKeyboardVisible)
+                .animation(Motion.standard, value: isKeyboardVisible)
                 .zIndex(2)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardVisible = false
         }
         .onChange(of: selection) { _, _ in
             // A search field focused in the tab being left must not keep its
