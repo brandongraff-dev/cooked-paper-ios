@@ -87,19 +87,17 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         // The DEBUG-only escape hatch in SubscriptionStore.refreshEntitlement() --
         // only this test process ever sets this, so it can't reach a Release build.
         app.launchEnvironment["UITEST_BYPASS_PAYWALL"] = "1"
+        // Serve every API call from the in-app demo fixtures (see MockAPI.swift):
+        // the production backend isn't reachable from CI, and without this every
+        // data-backed screen screenshots as an empty/error state.
+        app.launchEnvironment["UITEST_MOCK_API"] = "1"
         app.launch()
 
         var unreachedSteps: [String] = []
 
-        // With the bypass active, RootView goes straight to AppShellView on first
-        // render -- no onboarding, no paywall -- but the app still has to
-        // bootstrap a guest paper portfolio over the real network
-        // (PortfolioStore.bootstrapIfNeeded), which is slower and genuinely
-        // uncertain in a CI sandbox, hence the generous timeout and a loud,
-        // specific failure rather than silently falling through with no
-        // screenshot if it never shows up.
         let discoverTab = app.tabBars.buttons["Discover"]
         if discoverTab.waitForExistence(timeout: 20) {
+            _ = app.cells.firstMatch.waitForExistence(timeout: 10)
             attach(app, name: "04-discover")
         } else {
             XCTFail("Main tab bar never appeared within 20s of a bypassed launch.")
@@ -108,17 +106,97 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
 
         // From here on, a missing element is treated as a flaky wait rather than a
         // reason to abort: each step screenshots whatever is on screen and moves on
-        // to the next one, so one slow network call doesn't cost every screenshot
-        // after it. Failures are collected and reported together at the end
-        // instead, so the test's pass/fail status still reflects what happened.
+        // to the next one, so one slow call doesn't cost every screenshot after it.
+        // Failures are collected and reported together at the end instead, so the
+        // test's pass/fail status still reflects what happened.
+        let moversChip = app.buttons["Movers"]
+        if moversChip.waitForExistence(timeout: 5) {
+            moversChip.tap()
+            Thread.sleep(forTimeInterval: 0.8)
+            attach(app, name: "05-discover-movers")
+            app.buttons["Active"].firstMatch.tap()
+        } else {
+            unreachedSteps.append("Movers feed chip never appeared")
+        }
+
+        visitSearch(app, unreachedSteps: &unreachedSteps)
         visitFirstDiscoverRow(app, unreachedSteps: &unreachedSteps)
-        visitTab(app, label: "Portfolio", screenshotName: "06-portfolio", unreachedSteps: &unreachedSteps)
-        visitTab(app, label: "Leaderboard", screenshotName: "07-leaderboard", unreachedSteps: &unreachedSteps)
-        visitTab(app, label: "Settings", screenshotName: "08-settings", unreachedSteps: &unreachedSteps)
+        visitTab(app, label: "Portfolio", screenshotName: "09-portfolio", unreachedSteps: &unreachedSteps)
+        app.swipeUp()
+        Thread.sleep(forTimeInterval: 0.6)
+        attach(app, name: "10-portfolio-scrolled")
+        visitTab(app, label: "Leaderboard", screenshotName: "11-leaderboard", unreachedSteps: &unreachedSteps)
+        visitTab(app, label: "Settings", screenshotName: "12-settings", unreachedSteps: &unreachedSteps)
+
+        // Last on purpose: this sheet initializes the Privy SDK, which still has a
+        // placeholder app id in this repo. If that ever takes the app down, only this
+        // one screenshot is lost.
+        let saveProgress = app.buttons["Save Progress"].firstMatch
+        if saveProgress.waitForExistence(timeout: 5) {
+            saveProgress.tap()
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "13-save-progress-sheet")
+        } else {
+            unreachedSteps.append("Save Progress button never appeared in Settings")
+        }
 
         if !unreachedSteps.isEmpty {
             XCTFail("Main-app walkthrough didn't fully complete: \(unreachedSteps.joined(separator: "; "))")
         }
+    }
+
+    /// Same demo data, but starting as a signed-in account — the only way to reach
+    /// the bearer-only screens (Price Alerts and its create sheet).
+    @MainActor
+    func testSignedInScreenshots() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["UITEST_BYPASS_PAYWALL"] = "1"
+        app.launchEnvironment["UITEST_MOCK_API"] = "1"
+        app.launchEnvironment["UITEST_MOCK_SIGNED_IN"] = "1"
+        app.launch()
+
+        var unreachedSteps: [String] = []
+
+        visitTab(app, label: "Settings", screenshotName: "14-settings-signed-in", unreachedSteps: &unreachedSteps)
+
+        let alertsLink = app.buttons["Price Alerts"].firstMatch
+        if alertsLink.waitForExistence(timeout: 5) {
+            alertsLink.tap()
+            _ = app.cells.firstMatch.waitForExistence(timeout: 5)
+            Thread.sleep(forTimeInterval: 0.8)
+            attach(app, name: "15-price-alerts")
+
+            let addButton = app.navigationBars.buttons["Add"]
+            if addButton.waitForExistence(timeout: 3) {
+                addButton.tap()
+                Thread.sleep(forTimeInterval: 1)
+                attach(app, name: "16-create-alert")
+            } else {
+                unreachedSteps.append("no Add button on Price Alerts")
+            }
+        } else {
+            unreachedSteps.append("Price Alerts link never appeared in Settings")
+        }
+
+        if !unreachedSteps.isEmpty {
+            XCTFail("Signed-in walkthrough didn't fully complete: \(unreachedSteps.joined(separator: "; "))")
+        }
+    }
+
+    @MainActor
+    private func visitSearch(_ app: XCUIApplication, unreachedSteps: inout [String]) {
+        let searchField = app.searchFields.firstMatch
+        guard searchField.waitForExistence(timeout: 3) else {
+            unreachedSteps.append("no search field on Discover")
+            return
+        }
+        searchField.tap()
+        searchField.typeText("o")
+        Thread.sleep(forTimeInterval: 1.2)
+        attach(app, name: "06-discover-search")
+        let cancel = app.buttons["Cancel"].firstMatch
+        if cancel.exists { cancel.tap() }
+        Thread.sleep(forTimeInterval: 0.5)
     }
 
     @MainActor
@@ -137,7 +215,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         let firstRow = app.cells.firstMatch
         guard firstRow.waitForExistence(timeout: 10) else {
             unreachedSteps.append("no row in the Discover list to open")
-            attach(app, name: "05-token-detail")
+            attach(app, name: "07-token-detail")
             return
         }
         firstRow.tap()
@@ -146,9 +224,25 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         // a beat past its appearance rather than screenshotting a bare spinner.
         _ = app.navigationBars.firstMatch.waitForExistence(timeout: 8)
         Thread.sleep(forTimeInterval: 1.5)
-        attach(app, name: "05-token-detail")
+        attach(app, name: "07-token-detail")
 
-        let backButton = app.navigationBars.buttons.firstMatch
+        let buyButton = app.buttons["Buy"].firstMatch
+        if buyButton.waitForExistence(timeout: 5) {
+            buyButton.tap()
+            Thread.sleep(forTimeInterval: 1.2)
+            attach(app, name: "08-trade-sheet")
+            let cancel = app.buttons["Cancel"].firstMatch
+            if cancel.waitForExistence(timeout: 3) {
+                cancel.tap()
+            } else {
+                app.swipeDown()
+            }
+            Thread.sleep(forTimeInterval: 0.8)
+        } else {
+            unreachedSteps.append("no Buy button on the token detail screen")
+        }
+
+        let backButton = app.navigationBars.buttons.element(boundBy: 0)
         if backButton.waitForExistence(timeout: 3) {
             backButton.tap()
         } else {

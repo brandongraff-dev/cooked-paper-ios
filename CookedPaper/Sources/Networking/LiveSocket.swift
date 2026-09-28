@@ -35,6 +35,10 @@ final class LiveSocket {
     private init() {}
 
     func connectAndSubscribe(portfolioId: String) {
+        #if DEBUG
+        // Demo data has no live feed behind it; the REST snapshot is the whole picture.
+        if MockAPI.isEnabled { return }
+        #endif
         guard let token = SessionStore.shared.token else { return }
 
         if subscribedPortfolioId == portfolioId, isConnected {

@@ -41,6 +41,12 @@ final class APIClient {
         // JavaScript — native networking reads and resends it like any other cookie.
         config.httpCookieStorage = HTTPCookieStorage.shared
         config.httpShouldSetCookies = true
+        #if DEBUG
+        // UI screenshot runs only — see `MockAPI`.
+        if MockAPI.isEnabled {
+            config.protocolClasses = [MockURLProtocol.self as AnyClass] + (config.protocolClasses ?? [])
+        }
+        #endif
         session = URLSession(configuration: config)
         decoder = JSONDecoder()
         encoder = JSONEncoder()

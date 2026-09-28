@@ -2,6 +2,12 @@ import SwiftUI
 
 @main
 struct CookedPaperApp: App {
+    init() {
+        #if DEBUG
+        MockAPI.prepareSessionIfNeeded()
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

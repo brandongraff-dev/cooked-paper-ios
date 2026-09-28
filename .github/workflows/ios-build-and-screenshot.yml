@@ -153,6 +153,12 @@ jobs:
           fi
 
           echo "Collected $n screenshot PNG(s) into screenshots/"
+          {
+            echo "### $n screenshot(s) captured"
+            echo "Download the **ui-screenshots** artifact below to view them."
+            echo
+            for f in screenshots/*.png; do [ -e "$f" ] && echo "- $(basename "$f")"; done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload screenshots
         if: always()
