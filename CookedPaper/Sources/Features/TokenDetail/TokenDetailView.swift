@@ -37,6 +37,7 @@ struct TokenDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.appBackground)
+        .reservesTabBarSpace()
         .navigationTitle(profile?.token.symbol ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

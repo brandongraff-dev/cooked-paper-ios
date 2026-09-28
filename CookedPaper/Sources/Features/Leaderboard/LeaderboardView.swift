@@ -45,6 +45,7 @@ struct LeaderboardView: View {
                 myRankBar
             }
         }
+        .reservesTabBarSpace()
         .navigationTitle("Leaderboard")
         .navigationBarTitleDisplayMode(.large)
         .task { await load() }

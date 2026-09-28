@@ -18,6 +18,7 @@ struct PortfolioView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.appBackground)
+        .reservesTabBarSpace()
         .navigationTitle("Portfolio")
         .navigationBarTitleDisplayMode(.large)
         .navigationDestination(for: String.self) { mint in

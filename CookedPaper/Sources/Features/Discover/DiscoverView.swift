@@ -33,7 +33,10 @@ struct DiscoverView: View {
                 BrandMark(height: 22)
             }
         }
-        .searchable(text: $searchText, prompt: "Search tokens")
+        .reservesTabBarSpace()
+        // Pinned under the title: with no system tab bar, iOS 26 would otherwise
+        // move the field to the bottom edge, where the floating bar lives.
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search tokens")
         .onSubmit(of: .search) {
             // Search is live as you type; the Search key just puts the keyboard away.
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)

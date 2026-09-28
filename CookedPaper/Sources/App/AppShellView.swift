@@ -34,11 +34,9 @@ struct AppShellView: View {
                 NavigationStack {
                     root(for: tab)
                 }
-                // Keeps every screen's content (and pinned bars like the Buy button)
-                // clear of the floating tab bar drawn below.
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    Color.clear.frame(height: FloatingTabBar.height + Space.s8)
-                }
+                // Every screen in the stack (pushed ones too) reads this and keeps
+                // its content and pinned bars clear of the floating tab bar.
+                .environment(\.tabBarInset, FloatingTabBar.height + Space.s8)
                 .opacity(isSelected ? 1 : 0)
                 .allowsHitTesting(isSelected)
                 .accessibilityHidden(!isSelected)

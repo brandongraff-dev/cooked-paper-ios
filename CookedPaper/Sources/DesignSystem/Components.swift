@@ -454,3 +454,29 @@ struct SkeletonRow: View {
         .frame(height: Metrics.rowHeight)
     }
 }
+
+// MARK: - Floating tab bar clearance
+
+extension EnvironmentValues {
+    /// Height the app shell's floating tab bar occupies at the bottom edge. Set on
+    /// each tab's NavigationStack, so it also reaches every pushed screen.
+    @Entry var tabBarInset: CGFloat = 0
+}
+
+private struct ReservesTabBarSpace: ViewModifier {
+    @Environment(\.tabBarInset) private var inset
+
+    func body(content: Content) -> some View {
+        content.safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: inset)
+        }
+    }
+}
+
+extension View {
+    /// Keeps a screen's content and pinned bars clear of the floating tab bar.
+    /// Apply outermost, after the screen's own bottom insets.
+    func reservesTabBarSpace() -> some View {
+        modifier(ReservesTabBarSpace())
+    }
+}

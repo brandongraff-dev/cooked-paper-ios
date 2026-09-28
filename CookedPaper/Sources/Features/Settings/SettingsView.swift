@@ -84,6 +84,7 @@ struct SettingsView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(Color.appBackground)
+        .reservesTabBarSpace()
         .tint(Color.textPrimary)
         .navigationTitle("Settings")
         .sheet(isPresented: $showLinkAccount) { LinkAccountSheet() }
