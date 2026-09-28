@@ -37,15 +37,6 @@ packages:
   SocketIO:
     url: https://github.com/socketio/socket.io-client-swift
     from: 16.1.0
-  # Auth: email OTP / Sign in with Apple / Google, backed by a Privy embedded Solana
-  # wallet used only to sign the SIWS-style challenge apps/api's /auth/embedded/verify
-  # expects. Zero transitive SPM deps (it's a binaryTarget XCFramework) — in
-  # particular it does NOT need GoogleSignIn-iOS, Google auth goes through Privy's own
-  # OAuth-redirect flow via the app's URL scheme. Confirmed against the live
-  # Package.swift on 2026-09-27; re-check before bumping the version.
-  PrivySDK:
-    url: https://github.com/privy-io/privy-ios
-    from: 2.0.0
 
 targets:
   CookedPaper:
@@ -67,16 +58,12 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSUserTrackingUsageDescription: ""
         CFBundleURLTypes:
-          # Privy's OAuth redirect (both Apple and Google go through this one scheme)
-          # lands back in the app here — must also be registered as an allowed
-          # redirect in the Privy Dashboard for this app.
+          # cookedpaper://token/<mint> deep links (see DeepLinkRouter).
           - CFBundleURLSchemes:
               - cookedpaper
     entitlements:
       path: Resources/CookedPaper.entitlements
-      properties:
-        com.apple.developer.applesignin:
-          - Default
+      properties: {}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.cooked.paper
@@ -87,8 +74,6 @@ targets:
     dependencies:
       - package: SocketIO
         product: SocketIO
-      - package: PrivySDK
-        product: Privy
 
   CookedPaperTests:
     type: bundle.unit-test

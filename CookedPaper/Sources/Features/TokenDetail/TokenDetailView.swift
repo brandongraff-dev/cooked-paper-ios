@@ -12,9 +12,6 @@ struct TokenDetailView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var tradeSide: TradeSide?
-    @State private var isWatched = false
-    @State private var showGuestWatchAlert = false
-    @State private var chartAlertLevels: [ChartAlertLevel] = []
 
     private var position: PaperPosition? {
         PortfolioStore.shared.snapshot?.positions.first { $0.tokenMint == mint }
@@ -40,16 +37,6 @@ struct TokenDetailView: View {
         .reservesTabBarSpace()
         .navigationTitle(profile?.token.symbol ?? "")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(action: toggleWatch) {
-                    Image(systemName: isWatched ? "star.fill" : "star")
-                        .foregroundStyle(Color.textPrimary)
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .accessibilityLabel(isWatched ? "Remove from watchlist" : "Add to watchlist")
-            }
-        }
         .sheet(item: $tradeSide) { side in
             TradeSheetView(
                 mint: mint,
@@ -57,11 +44,6 @@ struct TokenDetailView: View {
                 tokenSymbol: profile?.token.symbol ?? "token",
                 priceUsd: profile?.market.priceUsd.value
             )
-        }
-        .alert("Sign in to save a watchlist", isPresented: $showGuestWatchAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Sign in from Settings to save tokens.")
         }
         .task { await load() }
         .onChange(of: range) { _, _ in
@@ -187,8 +169,7 @@ struct TokenDetailView: View {
                 CandleChartView(
                     candles: candles?.candles ?? [],
                     isRelayed: candles?.isRelayed ?? false,
-                    interval: range.interval,
-                    alertLevels: chartAlertLevels
+                    interval: range.interval
                 )
             } else if closes.count > 1 {
                 PriceLineChart(values: closes, selectedIndex: $scrubIndex)
@@ -306,12 +287,8 @@ struct TokenDetailView: View {
         do {
             async let profileFetch = TokenAPI.profile(mint: mint)
             async let candlesFetch = TokenAPI.candles(mint: mint, interval: range.interval, limit: range.limit)
-            async let watchFetch = loadIsWatched()
-            async let alertsFetch = loadAlertLevels()
             profile = try await profileFetch
             candles = try await candlesFetch
-            isWatched = await watchFetch
-            chartAlertLevels = await alertsFetch
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -329,59 +306,8 @@ struct TokenDetailView: View {
         isoFormatter.date(from: raw) ?? isoFormatterFractional.date(from: raw)
     }
 
-    /// The caller's own active `price_crossed` alerts on this mint, drawn as levels on
-    /// the chart. `/social/alerts` has no per-mint filter, so this fetches the whole
-    /// list and filters client-side — the same "never for a guest, never fails the
-    /// screen" shape as `loadIsWatched`, since a chart is still useful with no alerts
-    /// drawn on it.
-    private func loadAlertLevels() async -> [ChartAlertLevel] {
-        guard !SessionStore.shared.isGuest else { return [] }
-        guard let alerts = try? await AlertsAPI.list() else { return [] }
-        return alerts.compactMap { alert in
-            guard case .priceCrossed(let alertMint, let direction, let priceUsd) = alert.rule, alertMint == mint else {
-                return nil
-            }
-            return ChartAlertLevel(id: alert.id, price: priceUsd, direction: direction)
-        }
-    }
-
-    /// Hydrates the star from the server so a token already on the caller's watchlist
-    /// doesn't render unstarred on arrival. Never called for a guest (`/watchlist` is
-    /// `auth: 'bearer'`) and never fails the screen — see `DiscoverView`'s twin of
-    /// this.
-    private func loadIsWatched() async -> Bool {
-        guard !SessionStore.shared.isGuest else { return false }
-        guard let list = try? await WatchlistAPI.list() else { return false }
-        return list.items.contains { $0.mint == mint }
-    }
-
     private func loadCandles() async {
         candles = try? await TokenAPI.candles(mint: mint, interval: range.interval, limit: range.limit)
-    }
-
-    /// `/watchlist/*` is `auth: 'bearer'` — a guest token is rejected server-side, so
-    /// a guest never reaches the API here; they see the sign-in prompt instead.
-    private func toggleWatch() {
-        guard !SessionStore.shared.isGuest else {
-            showGuestWatchAlert = true
-            return
-        }
-
-        Haptics.tap()
-        let wasWatching = isWatched
-        isWatched.toggle()
-
-        Task {
-            do {
-                if wasWatching {
-                    _ = try await WatchlistAPI.remove(mint: mint)
-                } else {
-                    _ = try await WatchlistAPI.add(mint: mint)
-                }
-            } catch {
-                isWatched = wasWatching
-            }
-        }
     }
 }
 

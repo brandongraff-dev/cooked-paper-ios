@@ -37,11 +37,9 @@ CookedPaper/
                             client (with the real resume/gap/heartbeat protocol)
     Models/                 Codable models, incl. the DecimalString wrappers every
                             money field on this API needs (see Models/DecimalCodable.swift)
-    Auth/                   Privy embedded-wallet login (email OTP / Apple / Google),
-                            plus a vendored Base58 codec
     Paywall/                StoreKit 2 subscription store + the paywall screen
-    Features/               Onboarding, Discover (+ watchlist stars), TokenDetail
-                            (chart + trade), Trade, Portfolio, Leaderboard, Alerts,
+    Features/               Onboarding, Discover, TokenDetail
+                            (chart + trade), Trade, Portfolio, Leaderboard,
                             Settings
   Resources/                Info.plist, entitlements, Assets.xcassets
   Scripts/                  GenerateIcon.swift — renders the real app icon PNG
@@ -63,18 +61,8 @@ CookedPaper/
    - Set `DEVELOPMENT_TEAM` in `project.yml`'s `settings.base` to your Team ID, or set it in
      Xcode's Signing & Capabilities tab.
    - Bundle id is `app.cooked.paper`, matching the `app.cooked.mobile` convention the
-     Expo app already uses. Register it in your Apple Developer account with the
-     **Sign In with Apple** capability enabled (the entitlement is already in
-     `Resources/CookedPaper.entitlements`).
-3. **Privy** (`Sources/Auth/PrivyClient.swift`) — create an app at
-   [dashboard.privy.io](https://dashboard.privy.io), enable Email, Apple, and Google
-   login methods, then fill in:
-   - `PrivyConfiguration.appId` / `.appClientId`
-   - Register `cookedpaper://` as an allowed redirect URI in the dashboard (it's
-     already declared as a URL scheme in `project.yml`).
-   - No GoogleSignIn-iOS SDK is needed — Google goes through Privy's own OAuth
-     redirect using that same URL scheme.
-4. **App Store Connect — subscriptions**
+     Expo app already uses. No extra capabilities are needed (there is no sign-in).
+3. **App Store Connect — subscriptions**
    - Create a subscription group ("Cooked Paper Pro") with two auto-renewable
      subscriptions: `app.cooked.paper.monthly` ($7.99/mo) and
      `app.cooked.paper.annual` ($29.99/yr). These product IDs must match
@@ -83,17 +71,17 @@ CookedPaper/
      Options → StoreKit Configuration) without needing App Store Connect at all
      during development. Xcode will offer to repair its internal IDs the first time
      you open it — let it.
-5. **API base URL** — `Sources/Networking/APIClient.swift`'s `APIConfig.baseURL`
+4. **API base URL** — `Sources/Networking/APIClient.swift`'s `APIConfig.baseURL`
    points at the same production Railway API `apps/mobile` falls back to. Point it at
    a local worktree API for development the same way you would for any other client.
 
 ## Product decisions this was built against
 
-- **Guest trading first, real accounts optional.** `POST /paper/portfolios/starter`
-  works with no login at all (a 7-day, self-expiring guest token) — that's what
-  fires immediately after a successful purchase, so "pay → trade" is one screen.
-  Settings offers "Save Progress" (email OTP / Apple / Google via Privy), which
-  silently claims the guest portfolio onto the new account.
+- **Guest sessions only, no sign-in.** `POST /paper/portfolios/starter` works with no
+  login at all (a self-expiring guest token), and onboarding trades in that
+  portfolio. There is no real trading on this platform, so there is no wallet or
+  account login (Privy was removed). Account-only backend features (`/watchlist/*`,
+  `/social/alerts/*`, both `auth: 'bearer'`) are therefore not surfaced in the app.
 - **No dark patterns**, on purpose, matching `apps/api/src/paper/onboarding.ts`'s own
   stated design: no streaks, no countdowns, no fake urgency, no score. The backend
   structurally can't produce that data; the client doesn't invent it either.
@@ -104,18 +92,6 @@ CookedPaper/
 - **Null means "unmeasured," never zero** — `PnLText` and the position/round-trip
   rows render `nil` as "—", matching the API's own convention. Don't "fix" a `nil`
   by coalescing it to `0`.
-- **Watchlist and price alerts are account-only.** `/watchlist/*` and `/social/alerts/*`
-  are `auth: 'bearer'` and reject a guest token (unlike every `/paper/*` route) — both
-  features check `SessionStore.shared.isGuest` client-side and prompt "Save Progress"
-  instead of letting a guest request 401 against the backend.
-- **Price alerts only build one rule kind.** The backend's `AlertRule` is a five-kind
-  union (wallet-based rules need a real wallet address this paper-only app doesn't
-  have); `Sources/Models/AlertModels.swift` only constructs and edits `price_crossed`,
-  decoding every other kind to `.unsupported` so an alert made elsewhere (e.g. the web
-  app) doesn't break the list. Channel is always `in_app` — there's no APNs
-  entitlement or push-token registration wired up, so an alert firing has nothing to
-  display yet (no notification-center screen exists); that's the next piece to build
-  if push delivery matters.
 - **The live socket implements the server's real resume protocol**, not a
   simplification — it tracks the last seen `seq` per portfolio, resumes with
   `sinceSeq` on reconnect, and treats a `counterReset`/`truncated` gap as a fresh
@@ -123,9 +99,6 @@ CookedPaper/
   reconnects the socket if `heartbeatIntervalMs` elapses with no tick.
 - **`cookedpaper://token/<mint>` opens a token's detail screen** from anywhere in the
   app via `DeepLinkRouter`, presented as a sheet over whichever tab is active.
-- **Active price alerts are drawn on the chart itself** as horizontal lines — a
-  pattern that converged independently across FOMO, Photon, and BullX in the UX
-  research behind this pass, so it's treated as a genre expectation, not a nice-to-have.
 - **The chart's crosshair requires a brief press before it engages** (`LongPressGesture`
   sequenced before the drag, in `CandleChartView.crosshairGesture`), not a bare drag.
   The chart lives inside a `ScrollView`; a bare `DragGesture` there would capture every
@@ -142,11 +115,6 @@ CookedPaper/
   font files (see `Sources/DesignSystem/Typography.swift`). Swap in the real TTFs
   under a new `Resources/Fonts` if exact brand parity matters more than the
   dependency.
-- **`Sources/Auth/PrivyClient.swift` is written from Privy's current documented iOS
-  API, not compiled against it.** In particular `EmbeddedSolanaWallet.provider
-  .signMessage(message:)`'s exact return type (`String` vs. a small result struct)
-  wasn't confirmed at the type-signature level — check Xcode's Quick Help on first
-  build and adjust `PrivyClient.sign(_:with:)` if it doesn't match.
 - **The Terms of Use this app links to are marked "Draft: not reviewed by counsel
   and not in force"** as of this writing
   (`apps/web/app/legal/terms/page.tsx`). Apple Guideline 3.1.2 requires a functional
@@ -167,10 +135,9 @@ CookedPaper/
 ## What was deliberately left out of v1
 
 No social/community feed, no multiple-portfolio management UI (the app always trades
-the caller's one "starter" portfolio), no push-notification delivery (alerts can be
-created but nothing displays one firing yet — see the Alerts note above), no
-non-`price_crossed` alert kinds. Leaderboard, Watchlist, price Alerts, onboarding, and
-deep linking all shipped despite the original "don't need a ton of features" framing —
+the caller's one "starter" portfolio), no sign-in, watchlist or price alerts (all
+three need a real account). Leaderboard, onboarding, and deep linking all shipped
+despite the original "don't need a ton of features" framing —
 each was cheap given how much the backend already provides, and none of them touch
 the paper-trading-only, no-real-money scope.
 

@@ -175,59 +175,8 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         visitTab(app, label: "Leaderboard", screenshotName: "11-leaderboard", unreachedSteps: &unreachedSteps)
         visitTab(app, label: "Settings", screenshotName: "12-settings", unreachedSteps: &unreachedSteps)
 
-        // Last on purpose: this sheet initializes the Privy SDK, which still has a
-        // placeholder app id in this repo. If that ever takes the app down, only this
-        // one screenshot is lost.
-        let saveProgress = app.buttons["settings.saveProgress"].firstMatch
-        if saveProgress.waitForExistence(timeout: 5) {
-            saveProgress.tap()
-            Thread.sleep(forTimeInterval: 1)
-            attach(app, name: "13-save-progress-sheet")
-        } else {
-            unreachedSteps.append("Save Progress button never appeared in Settings")
-        }
-
         if !unreachedSteps.isEmpty {
             XCTFail("Main-app walkthrough didn't fully complete: \(unreachedSteps.joined(separator: "; "))")
-        }
-    }
-
-    /// Same demo data, but starting as a signed-in account — the only way to reach
-    /// the bearer-only screens (Price Alerts and its create sheet).
-    @MainActor
-    func testSignedInScreenshots() throws {
-        let app = XCUIApplication()
-        app.launchEnvironment["UITEST_BYPASS_PAYWALL"] = "1"
-        app.launchEnvironment["UITEST_MOCK_API"] = "1"
-        app.launchEnvironment["UITEST_MOCK_SIGNED_IN"] = "1"
-        app.launchEnvironment["UITEST_STILL_FRAMES"] = "1"
-        app.launch()
-
-        var unreachedSteps: [String] = []
-
-        visitTab(app, label: "Settings", screenshotName: "14-settings-signed-in", unreachedSteps: &unreachedSteps)
-
-        let alertsLink = app.buttons["settings.priceAlerts"].firstMatch
-        if alertsLink.waitForExistence(timeout: 5) {
-            alertsLink.tap()
-            _ = app.cells.firstMatch.waitForExistence(timeout: 5)
-            Thread.sleep(forTimeInterval: 0.8)
-            attach(app, name: "15-price-alerts")
-
-            let addButton = app.navigationBars.buttons["Add"]
-            if addButton.waitForExistence(timeout: 3) {
-                addButton.tap()
-                Thread.sleep(forTimeInterval: 1)
-                attach(app, name: "16-create-alert")
-            } else {
-                unreachedSteps.append("no Add button on Price Alerts")
-            }
-        } else {
-            unreachedSteps.append("Price Alerts link never appeared in Settings")
-        }
-
-        if !unreachedSteps.isEmpty {
-            XCTFail("Signed-in walkthrough didn't fully complete: \(unreachedSteps.joined(separator: "; "))")
         }
     }
 

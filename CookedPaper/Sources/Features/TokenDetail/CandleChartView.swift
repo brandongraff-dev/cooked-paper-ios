@@ -7,7 +7,9 @@ import SwiftUI
 struct ChartAlertLevel: Identifiable {
     let id: String
     let price: Decimal
-    let direction: AlertRule.Direction
+    let direction: Direction
+
+    enum Direction { case above, below }
 }
 
 /// A hand-rolled candlestick renderer rather than Swift Charts: a financial candle

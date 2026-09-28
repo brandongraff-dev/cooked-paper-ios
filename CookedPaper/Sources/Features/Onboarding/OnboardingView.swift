@@ -322,7 +322,7 @@ private struct BalanceStep: View {
 
                 StepHeadline(
                     title: "Trade the real market\nwith paper money.",
-                    detail: "Every price is live and every fill is real. None of it is real money, so none of it can hurt you."
+                    detail: "Your trades fill at live market prices. None of it is real money, so none of it can hurt you."
                 )
             }
             .padding(.horizontal, Space.margin)
