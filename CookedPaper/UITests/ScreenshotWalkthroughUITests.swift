@@ -63,6 +63,22 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             unreachedSteps.append("onboarding balance step never appeared")
         }
 
+        // Practice round: a sped-up replay of real WIF history. Buy, let it run
+        // into the rally, then sell.
+        if app.buttons["onboarding.practice.buy"].waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.6)
+            attach(app, name: "02-onboarding-practice-ready")
+            _ = tapIfPresent("onboarding.practice.buy")
+            Thread.sleep(forTimeInterval: 8)
+            attach(app, name: "02-onboarding-practice-running")
+            _ = tapIfPresent("onboarding.practice.sell", timeout: 3)
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "02-onboarding-practice-result")
+            _ = tapIfPresent("onboarding.practice.continue")
+        } else {
+            unreachedSteps.append("practice round never appeared")
+        }
+
         if app.buttons["onboarding.answer.little"].waitForExistence(timeout: 5) {
             Thread.sleep(forTimeInterval: 0.6)
             attach(app, name: "02-onboarding-experience")

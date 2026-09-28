@@ -23,7 +23,9 @@ struct OnboardingView: View {
             ZStack {
                 switch step {
                 case .balance:
-                    BalanceStep { go(to: .experience) }
+                    BalanceStep { go(to: .practice) }
+                case .practice:
+                    PracticeRoundStep { go(to: .experience) }
                 case .experience:
                     ExperienceStep { answer in
                         model.experience = answer
@@ -103,7 +105,7 @@ struct OnboardingView: View {
 }
 
 enum OnboardingStep: Int, CaseIterable {
-    case balance, experience, pick, portfolio
+    case balance, practice, experience, pick, portfolio
 }
 
 // MARK: - Model
@@ -327,7 +329,7 @@ private struct BalanceStep: View {
         }
         .scrollIndicators(.hidden)
         .safeAreaInset(edge: .bottom) {
-            Button("Pick your coins", action: onContinue)
+            Button("Try a practice round", action: onContinue)
                 .buttonStyle(.accent)
                 .accessibilityIdentifier("onboarding.balance.continue")
                 .padding(.horizontal, Space.margin)
