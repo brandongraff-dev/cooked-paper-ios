@@ -1,0 +1,125 @@
+name: iOS Build and Screenshot Walkthrough
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-and-screenshot:
+    # macos-15 is the runner label known to exist and to carry Xcode 26.x (Xcode 26
+    # only requires macOS Sequoia 15.6+, not a Tahoe/macOS-26 image). GitHub may since
+    # have added a "macos-26" label tracking Apple's OS renumbering, but that isn't
+    # confirmed here and an unknown label fails the job before a single log line
+    # prints, so macos-15 is the safer default. If the diagnostic step below shows no
+    # Xcode 26.x preinstalled, that's the first thing to try changing.
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/ios/CookedPaper
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Diagnose available Xcode versions
+        run: |
+          xcodebuild -version
+          ls /Applications | grep -i xcode
+
+      - name: Select Xcode 26.x
+        run: |
+          set -euo pipefail
+          XCODE_APP=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$XCODE_APP" ]; then
+            echo "Selecting $XCODE_APP"
+            sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          else
+            echo "No version-numbered Xcode 26.x install found under /Applications; keeping $(xcode-select -p)"
+          fi
+          xcode-select -p
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: List available simulators
+        run: xcrun simctl list devices available | tee simctl-devices.txt
+
+      - name: Select simulator UDID
+        run: |
+          set -euo pipefail
+          DEVICE_LINE=$(grep -m 1 "iPhone" simctl-devices.txt)
+          DEVICE_UDID=$(echo "$DEVICE_LINE" | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}')
+          echo "Using simulator: $DEVICE_LINE"
+          echo "DEVICE_UDID=$DEVICE_UDID" >> "$GITHUB_ENV"
+
+      - name: Build and test (unit tests + UI screenshot walkthrough)
+        run: |
+          xcodebuild test \
+            -project CookedPaper.xcodeproj \
+            -scheme CookedPaper \
+            -destination "platform=iOS Simulator,id=$DEVICE_UDID" \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload xcresult bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-bundle
+          path: apps/ios/CookedPaper/TestResults.xcresult
+          if-no-files-found: warn
+
+      - name: Extract screenshots from xcresult
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p screenshots
+          if [ ! -e TestResults.xcresult ]; then
+            echo "TestResults.xcresult not found; the build/test step didn't get far enough to produce one."
+            exit 0
+          fi
+
+          n=0
+
+          # xcresulttool's CLI was rewritten in Xcode 16 and its exact export flags
+          # have kept moving across point releases, so this is a best-effort primary
+          # path — the raw `find` below is the safety net, not an afterthought.
+          if xcrun xcresulttool export attachments --path TestResults.xcresult --output-path exported-attachments > xcresulttool-export.log 2>&1; then
+            echo "xcresulttool export attachments succeeded"
+          else
+            echo "xcresulttool export attachments failed on this Xcode version (see xcresulttool-export.log); relying on the find fallback below"
+          fi
+
+          if [ -d exported-attachments ]; then
+            while IFS= read -r -d '' f; do
+              n=$((n + 1))
+              cp "$f" "screenshots/$(printf '%03d' "$n")-$(basename "$f")"
+            done < <(find exported-attachments -name '*.png' -print0)
+          fi
+
+          # Only fall back to raw extraction if the structured export above found
+          # nothing — otherwise every screenshot would be copied twice under two
+          # different names, since both paths reach the same underlying PNGs.
+          if [ "$n" -eq 0 ]; then
+            echo "No PNGs from xcresulttool export; falling back to a raw scan of the bundle"
+            while IFS= read -r -d '' f; do
+              n=$((n + 1))
+              cp "$f" "screenshots/$(printf '%03d' "$n")-$(basename "$f")"
+            done < <(find TestResults.xcresult -name '*.png' -print0)
+          fi
+
+          echo "Collected $n screenshot PNG(s) into screenshots/"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: apps/ios/CookedPaper/screenshots/*.png
+          if-no-files-found: warn

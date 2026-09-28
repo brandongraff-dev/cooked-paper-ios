@@ -1,0 +1,136 @@
+name: CookedPaper
+
+# Generated with XcodeGen (https://github.com/yonaskolb/XcodeGen) because this project
+# was scaffolded from a machine with no Xcode. Install XcodeGen (`brew install
+# xcodegen`) and run `xcodegen generate` in this directory to produce
+# CookedPaper.xcodeproj — do not hand-edit a checked-in .xcodeproj instead, this file
+# is the source of truth and the .xcodeproj is gitignored.
+
+options:
+  bundleIdPrefix: app.cooked
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: false
+  # XcodeGen only writes a scheme's StoreKit Configuration into LaunchAction, never
+  # TestAction (see the `test:` scheme block below) — so the UI test, which runs
+  # under `xcodebuild test`, would otherwise see an empty product catalog and never
+  # get past the paywall. This clones whatever XcodeGen already generated correctly
+  # for LaunchAction into TestAction after every `xcodegen generate`, rather than
+  # hand-writing the StoreKitConfigurationFileReference XML (its `identifier` path
+  # format is easy to get subtly wrong without a real Xcode to check against).
+  postGenCommand: python3 Scripts/attach-storekit-to-test-action.py
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEVELOPMENT_TEAM: "" # fill in your Apple Developer Team ID
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+packages:
+  # Real-time paper-portfolio prices + PnL: apps/api's /paper Socket.IO namespace.
+  SocketIO:
+    url: https://github.com/socketio/socket.io-client-swift
+    from: 16.1.0
+  # Auth: email OTP / Sign in with Apple / Google, backed by a Privy embedded Solana
+  # wallet used only to sign the SIWS-style challenge apps/api's /auth/embedded/verify
+  # expects. Zero transitive SPM deps (it's a binaryTarget XCFramework) — in
+  # particular it does NOT need GoogleSignIn-iOS, Google auth goes through Privy's own
+  # OAuth-redirect flow via the app's URL scheme. Confirmed against the live
+  # Package.swift on 2026-09-27; re-check before bumping the version.
+  PrivySDK:
+    url: https://github.com/privy-io/privy-ios
+    from: 2.0.0
+
+targets:
+  CookedPaper:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+    resources:
+      - path: StoreKit/Products.storekit
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Cooked Paper
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIUserInterfaceStyle: Dark
+        ITSAppUsesNonExemptEncryption: false
+        NSUserTrackingUsageDescription: ""
+        CFBundleURLTypes:
+          # Privy's OAuth redirect (both Apple and Google go through this one scheme)
+          # lands back in the app here — must also be registered as an allowed
+          # redirect in the Privy Dashboard for this app.
+          - CFBundleURLSchemes:
+              - cookedpaper
+    entitlements:
+      path: Resources/CookedPaper.entitlements
+      properties:
+        com.apple.developer.applesignin:
+          - Default
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.cooked.paper
+        PRODUCT_NAME: CookedPaper
+        TARGETED_DEVICE_FAMILY: "1" # iPhone only, matching the RN app's supportsTablet: false
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    dependencies:
+      - package: SocketIO
+        product: SocketIO
+      - package: PrivySDK
+        product: Privy
+
+  CookedPaperTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: CookedPaper
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
+  CookedPaperUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: CookedPaper
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  CookedPaper:
+    build:
+      targets:
+        CookedPaper: all
+        CookedPaperTests: [test]
+    run:
+      config: Debug
+      storeKitConfiguration: StoreKit/Products.storekit
+    test:
+      config: Debug
+      # No storeKitConfiguration key here: XcodeGen's Scheme.Test model has no such
+      # field (only Scheme.Run does, confirmed against the XcodeGen master source on
+      # 2026-09-27) — the key would parse but be silently dropped. The
+      # `postGenCommand` above patches this back in after generation; if the UI
+      # test's paywall step ever sees an empty product catalog, check that script
+      # and this comment first.
+      targets:
+        - CookedPaperTests
+        - CookedPaperUITests
+    archive:
+      config: Release
