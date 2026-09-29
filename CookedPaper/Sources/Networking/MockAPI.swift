@@ -3,11 +3,9 @@ import Foundation
 
 /// A DEBUG-only, in-process stand-in for `apps/api`, switched on by the
 /// `UITEST_MOCK_API=1` launch environment variable (set only by the UI screenshot
-/// walkthrough). CI has no reachable backend — the production Railway deployment in
-/// `APIConfig.baseURL` currently answers every request with Railway's own
-/// "Application not found" 404 — so without this, every data-backed screen
-/// (Discover, Token Detail, Portfolio, Leaderboard, Alerts) screenshots as an empty
-/// or error state. Every fixture below is shaped to decode through the exact same
+/// walkthrough). CI has no backend to talk to (and screenshots shouldn't depend on
+/// live markets), so without this every data-backed screen (Discover, Token Detail,
+/// Portfolio, Leaderboard) would screenshot as an empty or error state. Every fixture below is shaped to decode through the exact same
 /// `Decodable` models the real API feeds, so this exercises the real parsing and
 /// rendering paths; only the transport is swapped.
 nonisolated enum MockAPI {

@@ -98,9 +98,9 @@ jobs:
         continue-on-error: true
         run: |
           echo "--- DNS resolution ---"
-          host totem-api-production-0323.up.railway.app || nslookup totem-api-production-0323.up.railway.app || true
+          host api.cooked.trade || nslookup api.cooked.trade || true
           echo "--- curl -v to /health ---"
-          curl -v --max-time 15 https://totem-api-production-0323.up.railway.app/health || true
+          curl -v --max-time 15 https://api.cooked.trade/health || true
 
       - name: Build and test (unit tests + UI screenshot walkthrough)
         run: |
