@@ -163,7 +163,8 @@ private struct LeverageClosedView: View {
                 Text(PriceFormat.signedUSD(pnl))
                     .heroPriceStyle()
                     .foregroundStyle(Color.direction(pnl))
-                Text("Closed \(result.position.label) \(result.position.symbol)")
+                // A close that lands past the liquidation price settles as a liquidation.
+                Text("\(result.fill.kind == "liquidation" ? "Liquidated" : "Closed") \(result.position.label) \(result.position.symbol)")
                     .font(.rowSubtitle)
                     .foregroundStyle(Color.textSecondary)
             }
