@@ -61,3 +61,24 @@ enum DiscoverAPI {
         )
     }
 }
+
+/// The live-market contract's REST half (`auth: public`). The socket
+/// (`MarketSocket`) is preferred when connected; this is the fallback poll and the
+/// gap filler.
+enum MarketAPI {
+    /// The server's cap on trades per response; a full page means there may be more.
+    static let pageLimit = 500
+
+    /// Without `sinceSeq`: the last 120 s of trades plus 1 s candles. With it: only
+    /// trades newer than that seq (or a full snapshot with `reset: true`).
+    static func live(mint: String, sinceSeq: Int? = nil) async throws -> LiveMarketSnapshot {
+        try await APIClient.shared.send(
+            Endpoint(
+                path: "/market/tokens/\(mint)/live",
+                query: ["sinceSeq": sinceSeq.map { String($0) }],
+                attachToken: false
+            ),
+            as: LiveMarketSnapshot.self
+        )
+    }
+}
