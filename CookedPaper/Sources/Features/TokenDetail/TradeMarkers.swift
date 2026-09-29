@@ -1,9 +1,11 @@
 import Foundation
 import SwiftUI
 
-/// One of the signed-in person's own trades on a token, placed on its chart: a small
-/// circle with "+" where they got in and "−" where they got out. Only their trades —
-/// the market's tape stays a clean line.
+/// One of the signed-in person's own trades on a token, placed on its chart: a solid
+/// disc with a white "+" where they got in and "−" where they got out. Only their
+/// trades; the market's tape stays a clean line. The marker sits ON the line at the
+/// moment of the trade — the fill price (which includes slippage) is on the fill
+/// screen, and pinning the marker to it would float it off a tightly-scaled chart.
 struct ChartTradeMarker: Identifiable, Equatable {
     enum Kind: Equatable {
         /// Bought, or opened a long / closed a short.
@@ -90,25 +92,26 @@ enum ChartTradeMarkers {
 
     // MARK: - Drawing
 
-    static let radius: CGFloat = 8
+    static let radius: CGFloat = 9
 
-    /// Draws one marker into a `Canvas`: a background-filled circle with a colored
-    /// ring and a "+" or "−" in the same color, so it reads on top of the line.
+    /// Draws one marker into a `Canvas`: a solid green or red disc with a white "+"
+    /// or "−", separated from the line by a thin ring in the background color.
     static func draw(_ kind: ChartTradeMarker.Kind, at center: CGPoint, in graphics: inout GraphicsContext, opacity: Double = 1) {
         let color: Color = kind == .plus ? .positive : .negative
         let r = radius
-        let circle = Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
-        graphics.fill(circle, with: .color(Color.appBackground.opacity(opacity)))
-        graphics.stroke(circle, with: .color(color.opacity(opacity)), lineWidth: 1.5)
+        let ring = Path(ellipseIn: CGRect(x: center.x - r - 2, y: center.y - r - 2, width: (r + 2) * 2, height: (r + 2) * 2))
+        graphics.fill(ring, with: .color(Color.appBackground.opacity(opacity)))
+        let disc = Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+        graphics.fill(disc, with: .color(color.opacity(opacity)))
         var glyph = Path()
-        let arm: CGFloat = 3.5
+        let arm: CGFloat = 4
         glyph.move(to: CGPoint(x: center.x - arm, y: center.y))
         glyph.addLine(to: CGPoint(x: center.x + arm, y: center.y))
         if kind == .plus {
             glyph.move(to: CGPoint(x: center.x, y: center.y - arm))
             glyph.addLine(to: CGPoint(x: center.x, y: center.y + arm))
         }
-        graphics.stroke(glyph, with: .color(color.opacity(opacity)), style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
+        graphics.stroke(glyph, with: .color(Color.white.opacity(opacity)), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
     }
 }
 
@@ -120,7 +123,7 @@ struct TradeMarkerSymbol: View {
         Canvas { graphics, size in
             ChartTradeMarkers.draw(kind, at: CGPoint(x: size.width / 2, y: size.height / 2), in: &graphics)
         }
-        .frame(width: ChartTradeMarkers.radius * 2 + 2, height: ChartTradeMarkers.radius * 2 + 2)
+        .frame(width: ChartTradeMarkers.radius * 2 + 6, height: ChartTradeMarkers.radius * 2 + 6)
         .accessibilityHidden(true)
     }
 }

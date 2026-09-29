@@ -143,11 +143,6 @@ final class LiveChartRenderer {
             }
         }
 
-        for marker in frame.markers where marker.t >= start && marker.t <= frame.playhead {
-            low = min(low, marker.price)
-            high = max(high, marker.price)
-        }
-
         // Y-range: fit what's visible, with a floor so a flat price isn't magnified
         // into noise, then glide there rather than snap.
         let minSpan = max(head * 0.004, 1e-12)
@@ -187,12 +182,14 @@ final class LiveChartRenderer {
             drawCandles(in: &graphics, candles: candles, x: x, y: y, plotWidth: plotWidth, windowMs: windowMs)
         }
 
-        // The person's own trades, once the playhead has reached them.
+        // The person's own trades, once the playhead has reached them, pinned to the
+        // line at that moment (the newest one rides the eased head).
         for marker in frame.markers where marker.t <= frame.playhead {
             let px = x(marker.t)
-            guard px >= 0, px <= plotWidth else { continue }
-            let py = min(max(y(marker.price), top), size.height - bottom)
-            ChartTradeMarkers.draw(marker.kind, at: CGPoint(x: px, y: py), in: &graphics)
+            guard px >= 0, px <= plotWidth,
+                  let index = MarketPlayback.playheadIndex(tape, at: marker.t) else { continue }
+            let py = index == playIndex ? headY : y(tape[index].price)
+            ChartTradeMarkers.draw(marker.kind, at: CGPoint(x: px, y: min(max(py, top), size.height - bottom)), in: &graphics)
         }
 
         // Dashed guide at the current price, across the plot to the tag.
