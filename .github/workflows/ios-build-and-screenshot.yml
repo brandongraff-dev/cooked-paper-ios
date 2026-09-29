@@ -108,8 +108,50 @@ jobs:
             -project CookedPaper.xcodeproj \
             -scheme CookedPaper \
             -destination "platform=iOS Simulator,id=$DEVICE_UDID" \
+            -derivedDataPath build/DerivedData \
             -resultBundlePath TestResults.xcresult \
+            -skip-testing:CookedPaperUITests/LiveChartRecordingUITests \
             CODE_SIGNING_ALLOWED=NO
+
+      # A screen recording of the LIVE chart moving: the recording test runs on its
+      # own (reusing the build above) while simctl records the simulator.
+      - name: Record live chart video
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          mkdir -p recordings
+          xcrun simctl io "$DEVICE_UDID" recordVideo --codec=h264 --force recordings/live-chart-raw.mp4 &
+          REC=$!
+          sleep 2
+          xcodebuild test-without-building \
+            -project CookedPaper.xcodeproj \
+            -scheme CookedPaper \
+            -destination "platform=iOS Simulator,id=$DEVICE_UDID" \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath RecordingResults.xcresult \
+            -only-testing:CookedPaperUITests/LiveChartRecordingUITests \
+            CODE_SIGNING_ALLOWED=NO || echo "recording test failed"
+          kill -INT "$REC" || true
+          wait "$REC" || true
+          ls -la recordings
+          # Keep the last 16 s (the chart itself) as a smaller, shareable clip.
+          if command -v ffmpeg >/dev/null || brew install ffmpeg >/dev/null 2>&1; then
+            DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 recordings/live-chart-raw.mp4 | cut -d. -f1)
+            START=$(( DUR > 17 ? DUR - 17 : 0 ))
+            ffmpeg -y -ss "$START" -i recordings/live-chart-raw.mp4 -t 16 \
+              -vf "scale=590:-2" -c:v libx264 -pix_fmt yuv420p -movflags +faststart -an recordings/live-chart.mp4 || true
+            ffmpeg -y -ss "$START" -i recordings/live-chart-raw.mp4 -t 8 \
+              -vf "fps=30,scale=360:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" recordings/live-chart.gif || true
+          fi
+          ls -la recordings
+
+      - name: Upload live chart recording
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-chart-recording
+          path: CookedPaper/recordings/*
+          if-no-files-found: warn
 
       - name: Upload xcresult bundle
         if: always()

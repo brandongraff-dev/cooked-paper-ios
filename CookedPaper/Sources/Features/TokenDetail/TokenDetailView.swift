@@ -6,13 +6,19 @@ struct TokenDetailView: View {
 
     @State private var profile: TokenProfileResponse?
     @State private var candles: TokenCandlesResponse?
-    @State private var range: ChartRange = .day
+    @State private var range: ChartRange = .live
+    @State private var feed: LivePriceFeed
     @State private var showsCandles = false
     @State private var scrubIndex: Int?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var tradeSide: TradeSide?
     @State private var showsLeverage = false
+
+    init(mint: String) {
+        self.mint = mint
+        _feed = State(initialValue: LivePriceFeed(mint: mint))
+    }
 
     private var position: PaperPosition? {
         PortfolioStore.shared.snapshot?.positions.first { $0.tokenMint == mint }
@@ -50,10 +56,15 @@ struct TokenDetailView: View {
             LeverageSheetView(mint: mint, tokenSymbol: profile?.token.symbol ?? "token")
         }
         .task { await load() }
-        .onChange(of: range) { _, _ in
+        .onChange(of: range) { _, newRange in
             scrubIndex = nil
-            Task { await loadCandles() }
+            if newRange == .live { showsCandles = false }
+            Task {
+                await loadCandles()
+                syncFeed()
+            }
         }
+        .onDisappear { feed.stop() }
     }
 
     private var content: some View {
@@ -105,9 +116,10 @@ struct TokenDetailView: View {
             )
         }
 
-        let price = profile?.market.priceUsd.value
+        let livePrice = range == .live ? feed.latest.map { Decimal($0) } : nil
+        let price = livePrice ?? profile?.market.priceUsd.value
         let percent: Decimal?
-        if range == .day {
+        if range == .day || range == .live {
             percent = profile?.market.change24h.value
         } else if let first = series.first, let last = series.last, first > 0 {
             percent = Decimal((last - first) / first * 100)
@@ -169,7 +181,9 @@ struct TokenDetailView: View {
     @ViewBuilder
     private var chart: some View {
         Group {
-            if showsCandles {
+            if range == .live {
+                LiveChartView(feed: feed)
+            } else if showsCandles {
                 CandleChartView(
                     candles: candles?.candles ?? [],
                     isRelayed: candles?.isRelayed ?? false,
@@ -194,6 +208,7 @@ struct TokenDetailView: View {
             }
             Button {
                 Haptics.selection()
+                if range == .live { range = .hour }
                 withAnimation(Motion.standard) { showsCandles.toggle() }
             } label: {
                 Image(systemName: showsCandles ? "chart.xyaxis.line" : "chart.bar.xaxis")
@@ -306,6 +321,21 @@ struct TokenDetailView: View {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+        syncFeed()
+    }
+
+    /// Runs the live feed only while the LIVE range is showing, seeded with the
+    /// latest 1-minute closes so the line isn't empty for the first seconds.
+    private func syncFeed() {
+        guard range == .live else {
+            feed.stop()
+            return
+        }
+        let seed = (candles?.candles ?? []).compactMap { $0 }.compactMap { candle -> LivePoint? in
+            guard let date = Self.parseDate(candle.bucketStart) else { return nil }
+            return LivePoint(time: min(date.addingTimeInterval(60), Date()), price: NSDecimalNumber(decimal: candle.close).doubleValue)
+        }
+        feed.start(seed: seed)
     }
 
     private static let isoFormatter = ISO8601DateFormatter()

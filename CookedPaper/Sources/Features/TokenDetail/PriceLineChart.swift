@@ -4,6 +4,8 @@ import SwiftUI
 /// The time windows the detail screen offers. Each maps onto the existing candles
 /// endpoint's interval + limit — a presentation choice, not a new query.
 enum ChartRange: String, CaseIterable, Identifiable {
+    /// A few minutes of real prices scrolling with the clock (`LiveChartView`).
+    case live = "LIVE"
     case hour = "1H"
     case day = "1D"
     case week = "1W"
@@ -14,7 +16,7 @@ enum ChartRange: String, CaseIterable, Identifiable {
 
     var interval: CandleInterval {
         switch self {
-        case .hour: .oneMinute
+        case .live, .hour: .oneMinute
         case .day: .fifteenMinute
         case .week: .oneHour
         case .month: .fourHour
@@ -24,6 +26,7 @@ enum ChartRange: String, CaseIterable, Identifiable {
 
     var limit: Int {
         switch self {
+        case .live: 5
         case .hour: 60
         case .day: 96
         case .week: 168
@@ -35,8 +38,8 @@ enum ChartRange: String, CaseIterable, Identifiable {
     /// Trailing label on the header's change line.
     var changeCaption: String {
         switch self {
+        case .live, .day: "Today"
         case .hour: "Past hour"
-        case .day: "Today"
         case .week: "Past week"
         case .month: "Past month"
         case .all: "All time"

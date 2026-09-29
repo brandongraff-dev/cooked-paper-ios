@@ -106,7 +106,7 @@ nonisolated enum MockAPI {
         }
         if let c = match("GET", "paper/tokens/:/priceable") {
             let t = token(for: c[0])
-            return (200, ["tokenMint": c[0], "priceable": true, "reason": NSNull(), "priceUsd": t.price] as [String: Any])
+            return (200, ["tokenMint": c[0], "priceable": true, "reason": NSNull(), "priceUsd": livePrice(t)] as [String: Any])
         }
         if match("GET", "tokens/search") != nil {
             let q = (query["q"] ?? "").lowercased()
@@ -174,6 +174,16 @@ nonisolated enum MockAPI {
 
     static func logoURL(mint: String) -> URL? {
         logos[mint].flatMap(URL.init(string:))
+    }
+
+    /// DEBUG stand-in for a streaming feed: the demo price wandering around its
+    /// base, so the live chart has something to draw in screenshot runs.
+    static func livePrice(_ t: DemoToken) -> String {
+        let base = Double(t.price) ?? 1
+        let seed = Double(t.symbol.unicodeScalars.reduce(0) { $0 + Int($1.value) })
+        let x = Date().timeIntervalSince1970
+        let wobble = 0.006 * sin(x / 4.3 + seed) + 0.004 * sin(x / 1.7 + seed * 2) + 0.0025 * sin(x * 1.9 + seed)
+        return dec(base * (1 + wobble))
     }
 
     static func token(for mint: String) -> DemoToken {
