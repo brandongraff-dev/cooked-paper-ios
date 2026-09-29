@@ -108,6 +108,9 @@ nonisolated enum MockAPI {
             let t = token(for: c[0])
             return (200, ["tokenMint": c[0], "priceable": true, "reason": NSNull(), "priceUsd": livePrice(t)] as [String: Any])
         }
+        if let c = match("GET", "market/tokens/:/live") {
+            return (200, MockMarket.live(mint: c[0], sinceSeq: query["sinceSeq"].flatMap { Int($0) }))
+        }
         if match("GET", "tokens/search") != nil {
             let q = (query["q"] ?? "").lowercased()
             let hits = tokens.filter { q.isEmpty || $0.symbol.lowercased().contains(q) || $0.name.lowercased().contains(q) }
