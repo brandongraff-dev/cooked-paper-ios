@@ -87,8 +87,14 @@ nonisolated enum MockLeverage {
         let long = (q["direction"] as? String) == "long"
         let margin = Double(q["marginUsd"] as? String ?? "0") ?? 0
         let entry = Double(q["estEntryPriceUsd"] as? String ?? "1") ?? 1
+        let leverage = q["leverage"] as? Int ?? 5
+        let tokenIndex = MockAPI.tokens.firstIndex { $0.mint == t.mint } ?? 0
+        lock.lock()
+        let id = "lev-new-\(opened.count + 1)"
+        opened.append(Seed(id: id, token: tokenIndex, long: long, leverage: leverage, entry: entry, margin: margin, daysAgo: 0))
+        lock.unlock()
         let position = position(
-            id: "lev-new", t, long: long, leverage: q["leverage"] as? Int ?? 5,
+            id: id, t, long: long, leverage: leverage,
             entry: entry, margin: margin, daysAgo: 0
         )
         return [
@@ -101,7 +107,12 @@ nonisolated enum MockLeverage {
 
     private static func close(_ id: String, _ body: [String: Any]) -> [String: Any] {
         let percent = Double(body["closePercent"] as? Int ?? 100) / 100
-        let seed = seeds.first { $0.id == id } ?? seeds[0]
+        let seed = live.first { $0.id == id } ?? seeds[0]
+        if percent >= 1 {
+            lock.lock()
+            closedIds.insert(seed.id)
+            lock.unlock()
+        }
         let t = MockAPI.tokens[seed.token]
         let mid = Double(t.price) ?? seed.entry
         let qty = seed.margin * Double(seed.leverage) / seed.entry * percent
@@ -134,13 +145,25 @@ nonisolated enum MockLeverage {
     }
 
     /// Open positions on the demo portfolio: a 5x WIF long in profit, a 10x BONK short under water.
+    /// Positions opened and closed during this run, so the portfolio reflects what
+    /// the walkthrough just did.
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var opened: [Seed] = []
+    nonisolated(unsafe) private static var closedIds: Set<String> = []
+
+    /// Seeds still open plus anything opened this run.
+    static var live: [Seed] {
+        lock.lock(); defer { lock.unlock() }
+        return (opened.reversed() + seeds).filter { !closedIds.contains($0.id) }
+    }
+
     static let seeds: [Seed] = [
         Seed(id: "lev-1", token: 1, long: true, leverage: 5, entry: 1.7450, margin: 500, daysAgo: 0.3),
         Seed(id: "lev-2", token: 0, long: false, leverage: 10, entry: 0.00002250, margin: 300, daysAgo: 0.1),
     ]
 
     static var openPositions: [[String: Any]] {
-        seeds.map { s in
+        live.map { s in
             position(id: s.id, MockAPI.tokens[s.token], long: s.long, leverage: s.leverage, entry: s.entry, margin: s.margin, daysAgo: s.daysAgo)
         }
     }
@@ -167,7 +190,7 @@ nonisolated enum MockLeverage {
     /// Leveraged value (floored margin + unrealized) and locked margin over `seeds`.
     static var totals: (value: Double, margin: Double, unrealized: Double) {
         var value = 0.0, margin = 0.0, unrealized = 0.0
-        for s in seeds {
+        for s in live {
             let mark = Double(MockAPI.tokens[s.token].price) ?? s.entry
             let qty = s.margin * Double(s.leverage) / s.entry
             let pnl = (s.long ? 1.0 : -1.0) * qty * (mark - s.entry)
