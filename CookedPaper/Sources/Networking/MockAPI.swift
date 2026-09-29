@@ -178,12 +178,16 @@ nonisolated enum MockAPI {
 
     /// DEBUG stand-in for a streaming feed: the demo price wandering around its
     /// base, so the live chart has something to draw in screenshot runs.
-    static func livePrice(_ t: DemoToken) -> String {
+    static func livePrice(_ t: DemoToken, at date: Date = Date()) -> String {
+        dec(livePriceValue(t, at: date))
+    }
+
+    static func livePriceValue(_ t: DemoToken, at date: Date) -> Double {
         let base = Double(t.price) ?? 1
         let seed = Double(t.symbol.unicodeScalars.reduce(0) { $0 + Int($1.value) })
-        let x = Date().timeIntervalSince1970
+        let x = date.timeIntervalSince1970
         let wobble = 0.006 * sin(x / 4.3 + seed) + 0.004 * sin(x / 1.7 + seed * 2) + 0.0025 * sin(x * 1.9 + seed)
-        return dec(base * (1 + wobble))
+        return base * (1 + wobble)
     }
 
     static func token(for mint: String) -> DemoToken {
@@ -225,6 +229,19 @@ nonisolated enum MockAPI {
         var rows: [[String: Any]] = []
         // A deterministic wavy random-walk that ends exactly at the token's price.
         for i in 0..<count {
+            if interval == "1m" {
+                // The 1-minute series follows the same path as the live price, so the
+                // LIVE chart's seed joins the live points without a jump.
+                let start = Date(timeIntervalSince1970: now - Double(count - 1 - i) * step)
+                let close = livePriceValue(t, at: start.addingTimeInterval(step))
+                let open = livePriceValue(t, at: start)
+                rows.append([
+                    "bucketStart": isoFormatter.string(from: start),
+                    "open": dec(open), "high": dec(max(open, close) * 1.001), "low": dec(min(open, close) * 0.999),
+                    "close": dec(close), "volume": dec(50_000),
+                ])
+                continue
+            }
             let x = Double(i) + seed
             let drift = 1 + 0.18 * (Double(i) - Double(count)) / Double(count)
             let wave = 1 + 0.05 * sin(x / 5) + 0.025 * sin(x / 1.7)

@@ -182,7 +182,7 @@ struct TokenDetailView: View {
     private var chart: some View {
         Group {
             if range == .live {
-                LiveChartView(feed: feed)
+                LiveChartView(feed: feed, color: (profile?.market.change24h.value ?? 0) < 0 ? .negative : .positive)
             } else if showsCandles {
                 CandleChartView(
                     candles: candles?.candles ?? [],

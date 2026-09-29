@@ -17,7 +17,7 @@ nonisolated final class LiveChartRecordingUITests: XCTestCase {
         row.tap()
 
         // Let the chart fill in and keep moving for the recording.
-        Thread.sleep(forTimeInterval: 18)
+        Thread.sleep(forTimeInterval: 35)
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = "live-chart"
         shot.lifetime = .keepAlways

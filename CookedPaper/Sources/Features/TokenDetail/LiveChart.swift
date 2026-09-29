@@ -65,6 +65,9 @@ struct LiveChartView: View {
     let feed: LivePriceFeed
     /// Seconds of history across the width.
     var window: TimeInterval = 90
+    /// Line color. Callers pass the day's direction so the chart agrees with the
+    /// header's change; nil colors by the visible window's own direction.
+    var color: Color? = nil
 
     @State private var renderer = LiveChartRenderer()
 
@@ -74,7 +77,7 @@ struct LiveChartView: View {
         TimelineView(.animation(minimumInterval: nil, paused: Self.stillFrames)) { context in
             let now = Self.stillFrames ? Date() : context.date
             Canvas { graphics, size in
-                renderer.draw(in: &graphics, size: size, points: feed.points, now: now, window: window, animated: !Self.stillFrames)
+                renderer.draw(in: &graphics, size: size, points: feed.points, now: now, window: window, color: color, animated: !Self.stillFrames)
             }
         }
         .accessibilityElement()
@@ -104,6 +107,7 @@ final class LiveChartRenderer {
         points: [LivePoint],
         now: Date,
         window: TimeInterval,
+        color fixedColor: Color?,
         animated: Bool
     ) {
         guard let newest = points.last else { return }
@@ -161,7 +165,7 @@ final class LiveChartRenderer {
         let line = Self.smoothPath(through: coords)
 
         let isUp = head >= (visible.first?.price ?? head)
-        let color: Color = isUp ? .positive : .negative
+        let color: Color = fixedColor ?? (isUp ? .positive : .negative)
 
         var fill = line
         fill.addLine(to: CGPoint(x: plotWidth, y: size.height))
