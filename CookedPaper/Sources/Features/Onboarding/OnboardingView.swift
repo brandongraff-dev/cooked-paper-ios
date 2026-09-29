@@ -2,8 +2,8 @@ import Foundation
 import SwiftUI
 
 /// First run, before the paywall: a new user sees their $10,000 paper balance,
-/// answers one question, picks up to three coins, and buys them for real (paper
-/// trades filled at the live price on the server). Then they watch those positions
+/// plays a practice round, signs in, answers one question, picks up to three coins,
+/// and buys them for real (paper trades filled at the live price on the server). Then they watch those positions
 /// move. The paywall that follows is about keeping that portfolio.
 ///
 /// `RootView` owns the `hasSeenOnboarding` flag; this view only reports completion.
@@ -25,7 +25,17 @@ struct OnboardingView: View {
                 case .balance:
                     BalanceStep { go(to: .practice) }
                 case .practice:
-                    PracticeRoundStep { go(to: .experience) }
+                    PracticeRoundStep {
+                        go(to: SessionStore.shared.isSignedIn ? .experience : .signIn)
+                    }
+                case .signIn:
+                    SignInView(
+                        title: "Save your progress",
+                        subtitle: "Sign in to get your $10,000 paper portfolio. It's saved to your account, on any device."
+                    ) {
+                        go(to: .experience)
+                        Task { await PortfolioStore.shared.resetAndRebootstrap() }
+                    }
                 case .experience:
                     ExperienceStep { answer in
                         model.experience = answer
@@ -52,9 +62,12 @@ struct OnboardingView: View {
         .background(Color.appBackground)
         .preferredColorScheme(.dark)
         .task {
-            // The guest paper portfolio this flow trades in — the same one the app
-            // keeps after the paywall.
-            await PortfolioStore.shared.bootstrapIfNeeded()
+            // The account's paper portfolio this flow trades in — the same one the
+            // app keeps after the paywall. Signed-out people get it after the
+            // sign-in step instead.
+            if SessionStore.shared.isSignedIn {
+                await PortfolioStore.shared.bootstrapIfNeeded()
+            }
             await model.loadTokens()
         }
     }
@@ -105,7 +118,7 @@ struct OnboardingView: View {
 }
 
 enum OnboardingStep: Int, CaseIterable {
-    case balance, practice, experience, pick, portfolio
+    case balance, practice, signIn, experience, pick, portfolio
 }
 
 // MARK: - Model

@@ -37,6 +37,10 @@ packages:
   SocketIO:
     url: https://github.com/socketio/socket.io-client-swift
     from: 16.1.0
+  # Sign in with Google (ID token with a server-issued nonce; the API verifies it).
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: 8.0.0
 
 targets:
   CookedPaper:
@@ -61,9 +65,16 @@ targets:
           # cookedpaper://token/<mint> deep links (see DeepLinkRouter).
           - CFBundleURLSchemes:
               - cookedpaper
+          # Google sign-in's callback: the iOS client id, reversed.
+          - CFBundleURLSchemes:
+              - $(GOOGLE_REVERSED_CLIENT_ID)
+        # The iOS OAuth client id from Google Cloud Console (see build settings below).
+        GIDClientID: $(GOOGLE_IOS_CLIENT_ID)
     entitlements:
       path: Resources/CookedPaper.entitlements
-      properties: {}
+      properties:
+        com.apple.developer.applesignin:
+          - Default
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.cooked.paper
@@ -71,9 +82,15 @@ targets:
         TARGETED_DEVICE_FAMILY: "1" # iPhone only, matching the RN app's supportsTablet: false
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # Fill in from Google Cloud Console → Credentials → iOS client (bundle id
+        # app.cooked.paper). Until then the Google button says it isn't configured.
+        GOOGLE_IOS_CLIENT_ID: "REPLACE_ME.apps.googleusercontent.com"
+        GOOGLE_REVERSED_CLIENT_ID: "com.googleusercontent.apps.REPLACE_ME"
     dependencies:
       - package: SocketIO
         product: SocketIO
+      - package: GoogleSignIn
+        product: GoogleSignIn
 
   CookedPaperTests:
     type: bundle.unit-test

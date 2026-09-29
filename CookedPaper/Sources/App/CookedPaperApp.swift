@@ -1,3 +1,4 @@
+import GoogleSignIn
 import SwiftUI
 
 @main
@@ -13,6 +14,8 @@ struct CookedPaperApp: App {
             RootView()
                 .preferredColorScheme(.dark)
                 .onOpenURL { url in
+                    // Google's sign-in callback comes back as a URL too.
+                    if GIDSignIn.sharedInstance.handle(url) { return }
                     DeepLinkRouter.shared.handle(url)
                 }
         }
@@ -25,21 +28,28 @@ struct CookedPaperApp: App {
 /// either of the other two would flash the paywall at every paying user on launch.
 struct RootView: View {
     let store = SubscriptionStore.shared
+    let session = SessionStore.shared
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     var body: some View {
         Group {
             if store.isLoadingProducts && !store.isSubscribed {
                 LaunchScreen()
+            } else if !hasSeenOnboarding && !store.isSubscribed {
+                OnboardingView(onFinished: { hasSeenOnboarding = true })
+            } else if !session.isSignedIn {
+                // Everyone trades as a signed-in account; there are no guests.
+                SignInView {
+                    Task { await PortfolioStore.shared.resetAndRebootstrap() }
+                }
             } else if store.isSubscribed {
                 AppShellView()
-            } else if !hasSeenOnboarding {
-                OnboardingView(onFinished: { hasSeenOnboarding = true })
             } else {
                 PaywallView()
             }
         }
         .animation(Motion.standard, value: store.isSubscribed)
+        .animation(Motion.standard, value: session.isSignedIn)
     }
 }
 

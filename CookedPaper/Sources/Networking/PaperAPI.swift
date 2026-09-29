@@ -1,16 +1,12 @@
 import Foundation
 
-/// Every call here is `auth: 'paper'` server-side — a real access token or a guest
-/// token both work identically, and `APIClient` always attaches whatever token
-/// `SessionStore` currently holds. Nothing in this file cares which kind it is.
+/// Every call here is `auth: 'paper'` server-side and runs as the signed-in account.
 enum PaperAPI {
-    /// Idempotent bootstrap: the caller's oldest active portfolio, or a fresh
-    /// starter one. Call this on cold launch (with whatever token — or none — is
-    /// currently stored) to get a tradeable portfolio id with no separate "log in
-    /// first" step, then persist `guestToken` via `SessionStore` when present.
+    /// Idempotent bootstrap: the account's oldest active portfolio, or a fresh
+    /// starter one ($10,000) the first time.
     static func starter() async throws -> StarterPaperPortfolioResponse {
         try await APIClient.shared.send(
-            Endpoint(path: "/paper/portfolios/starter", method: "POST", attachToken: SessionStore.shared.token != nil),
+            Endpoint(path: "/paper/portfolios/starter", method: "POST"),
             as: StarterPaperPortfolioResponse.self
         )
     }

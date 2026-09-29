@@ -61,7 +61,7 @@ CookedPaper/
    - Set `DEVELOPMENT_TEAM` in `project.yml`'s `settings.base` to your Team ID, or set it in
      Xcode's Signing & Capabilities tab.
    - Bundle id is `app.cooked.paper`, matching the `app.cooked.mobile` convention the
-     Expo app already uses. No extra capabilities are needed (there is no sign-in).
+     Expo app already uses. Enable **Sign in with Apple** on the App ID.
 3. **App Store Connect — subscriptions**
    - Create a subscription group ("Cooked Paper Pro") with two auto-renewable
      subscriptions: `app.cooked.paper.monthly` ($7.99/mo) and
@@ -77,11 +77,19 @@ CookedPaper/
 
 ## Product decisions this was built against
 
-- **Guest sessions only, no sign-in.** `POST /paper/portfolios/starter` works with no
-  login at all (a self-expiring guest token), and onboarding trades in that
-  portfolio. There is no real trading on this platform, so there is no wallet or
-  account login (Privy was removed). Account-only backend features (`/watchlist/*`,
-  `/social/alerts/*`, both `auth: 'bearer'`) are therefore not surfaced in the app.
+- **Everyone signs in: Apple, Google or phone number.** No guest sessions. Sign-in
+  happens in onboarding right after the practice round; each provider proves
+  identity to `apps/api`, which mints the session (access token + a refresh token
+  returned in the body because the app sends `X-Cooked-Client: ios`, stored in the
+  Keychain). The portfolio belongs to the account, so it follows the person to any
+  device. Settings has Sign out and Delete account (App Store 5.1.1(v)). There is
+  no wallet login (Privy was removed; there is no real trading).
+  - **Google** needs the iOS OAuth client id: set `GOOGLE_IOS_CLIENT_ID` and
+    `GOOGLE_REVERSED_CLIENT_ID` in `project.yml`, and add that client id to the
+    API's Google audiences.
+  - **Apple** needs the Sign in with Apple capability on the App ID
+    (`app.cooked.paper`); the entitlement is already in `project.yml`.
+  - **Phone** codes are sent by the API (Twilio Verify); nothing to configure here.
 - **No dark patterns**, on purpose, matching `apps/api/src/paper/onboarding.ts`'s own
   stated design: no streaks, no countdowns, no fake urgency, no score. The backend
   structurally can't produce that data; the client doesn't invent it either.
@@ -135,8 +143,7 @@ CookedPaper/
 ## What was deliberately left out of v1
 
 No social/community feed, no multiple-portfolio management UI (the app always trades
-the caller's one "starter" portfolio), no sign-in, watchlist or price alerts (all
-three need a real account). Leaderboard, onboarding, and deep linking all shipped
+the caller's one "starter" portfolio), no watchlist or price alerts. Leaderboard, onboarding, and deep linking all shipped
 despite the original "don't need a ton of features" framing —
 each was cheap given how much the backend already provides, and none of them touch
 the paper-trading-only, no-real-money scope.

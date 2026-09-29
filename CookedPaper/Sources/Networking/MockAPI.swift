@@ -10,23 +10,35 @@ import Foundation
 /// or error state. Every fixture below is shaped to decode through the exact same
 /// `Decodable` models the real API feeds, so this exercises the real parsing and
 /// rendering paths; only the transport is swapped.
-///
-/// `UITEST_MOCK_SIGNED_IN=1` additionally starts the app as a signed-in (non-guest)
-/// account, which is the only way to reach the bearer-only screens (Price Alerts).
 nonisolated enum MockAPI {
     static var isEnabled: Bool {
         ProcessInfo.processInfo.environment["UITEST_MOCK_API"] == "1"
     }
 
-    /// Call once at launch, before any view reads `SessionStore`.
+    /// Call once at launch, before any view reads `SessionStore`. The onboarding
+    /// walkthrough (`UITEST_MOCK_FRESH`) starts signed out and signs in with the
+    /// phone flow; every other run starts signed in to the demo account.
     @MainActor
     static func prepareSessionIfNeeded() {
         guard isEnabled else { return }
-        if ProcessInfo.processInfo.environment["UITEST_MOCK_SIGNED_IN"] == "1" {
-            SessionStore.shared.adoptRealAccount(accessToken: "demo-access-token", userId: "demo-user", username: "paperhands")
-        } else {
-            SessionStore.shared.clear()
+        SessionStore.shared.clear()
+        if !FreshAccount.isEnabled {
+            SessionStore.shared.signIn(demoSession(), method: "apple")
         }
+    }
+
+    @MainActor
+    private static func demoSession() -> SessionResponse {
+        let data = (try? JSONSerialization.data(withJSONObject: session)) ?? Data()
+        // Force-unwrap is fine: this is a fixed DEBUG fixture shaped like the real one.
+        return try! JSONDecoder().decode(SessionResponse.self, from: data)
+    }
+
+    nonisolated static var session: [String: Any] {
+        [
+            "accessToken": "demo-access-token", "expiresIn": 900, "user": user,
+            "refreshToken": "demo-refresh-token", "refreshExpiresAt": iso(daysFromNow: 30),
+        ] as [String: Any]
     }
 
     // MARK: - Routing
@@ -60,6 +72,22 @@ nonisolated enum MockAPI {
             if match("GET", "paper/portfolios/:/trades") != nil { return (200, ["trades": [] as [Any]] as [String: Any]) }
             if match("POST", "paper/portfolios/:/trades") != nil { return FreshAccount.execute(body) }
         }
+
+        // Sign-in: any Apple/Google token, any phone number, code 123456.
+        if match("POST", "auth/google/nonce") != nil || match("POST", "auth/apple/nonce") != nil {
+            return (200, ["nonce": "demo-nonce-\(Int(Date().timeIntervalSince1970))", "expiresAt": iso(daysFromNow: 0.01)])
+        }
+        if match("POST", "auth/google") != nil || match("POST", "auth/apple") != nil { return (200, session) }
+        if match("POST", "auth/phone/start") != nil { return (200, ["expiresInSeconds": 600]) }
+        if match("POST", "auth/phone/verify") != nil {
+            let json = body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+            guard json["code"] as? String == "123456" else {
+                return (401, ["error": "code_invalid", "message": "That code isn't right. Check the text and try again."])
+            }
+            return (200, session)
+        }
+        if match("POST", "auth/refresh") != nil { return (200, session) }
+        if match("DELETE", "auth/account") != nil { return (204, [:] as [String: Any]) }
 
         if let leverage = MockLeverage.route(method: method, parts: parts, body: body) { return leverage }
 
@@ -110,9 +138,6 @@ nonisolated enum MockAPI {
         if match("POST", "social/alerts") != nil { return (200, ["alert": alerts[0]]) }
         if match("DELETE", "social/alerts/:") != nil { return (200, ["alert": alerts[0]]) }
         if match("GET", "auth/me") != nil { return (200, ["user": user]) }
-        if match("POST", "auth/refresh") != nil {
-            return (200, ["accessToken": "demo-access-token", "expiresIn": 3600, "user": user] as [String: Any])
-        }
         if match("POST", "auth/logout") != nil { return (200, [:] as [String: Any]) }
         return (404, ["error": "not_found", "message": "No demo fixture for \(method) \(path)."])
     }
@@ -249,7 +274,7 @@ nonisolated enum MockAPI {
         [
             "id": portfolioId, "name": "Paper Portfolio", "startingBalanceUsd": "10000",
             "cashUsd": "5612.37", "createdAt": iso(daysFromNow: -12), "resetAt": NSNull(),
-            "resetCount": 0, "archivedAt": NSNull(), "isGuest": true,
+            "resetCount": 0, "archivedAt": NSNull(), "isGuest": false,
         ]
     }
 
@@ -387,7 +412,7 @@ nonisolated enum MockAPI {
     }
 
     private static var user: [String: Any] {
-        ["id": "demo-user", "username": "paperhands", "displayName": "Paper Hands", "walletAddress": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU", "foundingMember": true]
+        ["id": "demo-user", "username": "paperhands", "displayName": "Paper Hands", "walletAddress": NSNull(), "foundingMember": true] as [String: Any]
     }
 
     // MARK: - Helpers
@@ -486,7 +511,7 @@ nonisolated enum FreshAccount {
         [
             "id": MockAPI.portfolioId, "name": "Paper Portfolio", "startingBalanceUsd": "10000",
             "cashUsd": dec(cash), "createdAt": MockISO.string(Date()), "resetAt": NSNull(),
-            "resetCount": 0, "archivedAt": NSNull(), "isGuest": true,
+            "resetCount": 0, "archivedAt": NSNull(), "isGuest": false,
         ]
     }
 

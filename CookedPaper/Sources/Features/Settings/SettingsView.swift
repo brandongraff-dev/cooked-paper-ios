@@ -9,6 +9,10 @@ struct SettingsView: View {
     @State private var showManageSubscriptions = false
     @State private var showResetConfirm = false
     @State private var isResetting = false
+    @State private var showSignOutConfirm = false
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
+    @State private var deleteError: String?
 
     var body: some View {
         List {
@@ -40,6 +44,29 @@ struct SettingsView: View {
                 Text("Cooked Paper is a simulated trading experience. Nothing here involves real money or executes on-chain.")
                     .font(.caption13)
                     .foregroundStyle(Color.textTertiary)
+            }
+            .listRowBackground(Color.appSurface)
+
+            Section("Account") {
+                Button { showSignOutConfirm = true } label: {
+                    SettingsRow(symbol: "rectangle.portrait.and.arrow.right", title: "Sign out")
+                }
+                .accessibilityIdentifier("settings.signOut")
+                Button(role: .destructive) { showDeleteConfirm = true } label: {
+                    HStack {
+                        Text("Delete account")
+                            .font(.body)
+                            .foregroundStyle(Color.negative)
+                        Spacer()
+                        if isDeleting { ProgressView() }
+                    }
+                }
+                .disabled(isDeleting)
+                if let deleteError {
+                    Text(deleteError)
+                        .font(.caption13)
+                        .foregroundStyle(Color.negative)
+                }
             }
             .listRowBackground(Color.appSurface)
 
@@ -83,6 +110,18 @@ struct SettingsView: View {
         } message: {
             Text("This deletes every trade in this portfolio and restores your starting balance. It can't be undone.")
         }
+        .confirmationDialog("Sign out?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) { Task { await signOut() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your portfolio stays saved to your account.")
+        }
+        .confirmationDialog("Delete your account?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete account", role: .destructive) { Task { await deleteAccount() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes your account, portfolio and trade history. It can't be undone. An App Store subscription is cancelled separately, in Manage subscription.")
+        }
     }
 
     private var appVersion: String {
@@ -95,9 +134,14 @@ struct SettingsView: View {
                 .frame(width: 48, height: 48)
                 .background(Color.appSurfaceElevated, in: Circle())
             VStack(alignment: .leading, spacing: Space.s4) {
-                Text("Paper account")
+                Text(session.username ?? "Paper account")
                     .font(.rowTitle)
                     .foregroundStyle(Color.textPrimary)
+                if let method = signInMethodLabel {
+                    Text(method)
+                        .font(.rowSubvalue)
+                        .foregroundStyle(Color.textTertiary)
+                }
                 if let snapshot = portfolioStore.snapshot {
                     Text("\(PriceFormat.usd(snapshot.equityUsd)) · started with \(PriceFormat.compact(snapshot.portfolio.startingBalanceUsd))")
                         .font(.rowSubvalue)
@@ -109,6 +153,37 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, Space.s8)
+    }
+
+    private var signInMethodLabel: String? {
+        switch session.method {
+        case "apple": "Signed in with Apple"
+        case "google": "Signed in with Google"
+        case "phone": "Signed in with phone"
+        default: nil
+        }
+    }
+
+    private func signOut() async {
+        await AuthAPI.logout(refreshToken: session.refreshToken)
+        session.clear()
+        portfolioStore.signedOut()
+        Haptics.success()
+    }
+
+    private func deleteAccount() async {
+        isDeleting = true
+        deleteError = nil
+        do {
+            try await AuthAPI.deleteAccount()
+            session.clear()
+            portfolioStore.signedOut()
+            Haptics.success()
+        } catch {
+            Haptics.error()
+            deleteError = (error as? APIError)?.errorDescription ?? "Couldn't delete your account. Try again."
+        }
+        isDeleting = false
     }
 
     private func resetPortfolio() async {

@@ -79,7 +79,35 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             unreachedSteps.append("practice round never appeared")
         }
 
-        if app.buttons["onboarding.answer.little"].waitForExistence(timeout: 5) {
+        // Sign-in: everyone signs in before trading. The mock accepts any phone
+        // number and the code 123456.
+        if app.buttons["signin.phone"].waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.8)
+            attach(app, name: "02-onboarding-signin")
+            app.buttons["signin.phone"].tap()
+            let numberField = app.textFields["signin.phone.number"]
+            if numberField.waitForExistence(timeout: 5) {
+                numberField.tap()
+                numberField.typeText("4155550123")
+                Thread.sleep(forTimeInterval: 0.4)
+                attach(app, name: "02-onboarding-signin-phone")
+                app.buttons["signin.phone.submit"].tap()
+                let codeField = app.textFields["signin.phone.code"]
+                if codeField.waitForExistence(timeout: 5) {
+                    Thread.sleep(forTimeInterval: 0.6)
+                    attach(app, name: "02-onboarding-signin-code")
+                    codeField.typeText("123456")
+                } else {
+                    unreachedSteps.append("phone code field never appeared")
+                }
+            } else {
+                unreachedSteps.append("phone number field never appeared")
+            }
+        } else {
+            unreachedSteps.append("sign-in step never appeared")
+        }
+
+        if app.buttons["onboarding.answer.little"].waitForExistence(timeout: 10) {
             Thread.sleep(forTimeInterval: 0.6)
             attach(app, name: "02-onboarding-experience")
             _ = tapIfPresent("onboarding.answer.little")
