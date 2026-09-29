@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 /// One of the signed-in person's own trades on a token, placed on its chart: a solid
-/// disc with a white "+" where they got in and "−" where they got out. Only their
+/// disc with a black "+" where they got in and "−" where they got out. Only their
 /// trades; the market's tape stays a clean line. The marker sits ON the line at the
 /// moment of the trade — the fill price (which includes slippage) is on the fill
 /// screen, and pinning the marker to it would float it off a tightly-scaled chart.
@@ -94,7 +94,7 @@ enum ChartTradeMarkers {
 
     static let radius: CGFloat = 9
 
-    /// Draws one marker into a `Canvas`: a solid green or red disc with a white "+"
+    /// Draws one marker into a `Canvas`: a solid green or red disc with a black "+"
     /// or "−", separated from the line by a thin ring in the background color.
     static func draw(_ kind: ChartTradeMarker.Kind, at center: CGPoint, in graphics: inout GraphicsContext, opacity: Double = 1) {
         let color: Color = kind == .plus ? .positive : .negative
@@ -111,7 +111,7 @@ enum ChartTradeMarkers {
             glyph.move(to: CGPoint(x: center.x, y: center.y - arm))
             glyph.addLine(to: CGPoint(x: center.x, y: center.y + arm))
         }
-        graphics.stroke(glyph, with: .color(Color.white.opacity(opacity)), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+        graphics.stroke(glyph, with: .color(Color.black.opacity(opacity)), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
     }
 }
 
