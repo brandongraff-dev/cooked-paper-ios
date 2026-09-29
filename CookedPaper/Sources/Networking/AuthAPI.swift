@@ -1,6 +1,6 @@
 import Foundation
 
-/// Sign-in with Apple, Google or a phone number, all ending in the same session
+/// Sign-in with Apple or Google, both ending in the same session
 /// shape. Each provider proves identity to the server; the server mints the session.
 enum AuthAPI {
     static func googleNonce() async throws -> AuthNonceResponse {
@@ -28,22 +28,6 @@ enum AuthAPI {
     static func apple(_ body: AppleSignInBody) async throws -> SessionResponse {
         try await APIClient.shared.send(
             Endpoint(path: "/auth/apple", method: "POST", body: APIClient.shared.encode(body), attachToken: false),
-            as: SessionResponse.self,
-            retryingOnAuthFailure: false
-        )
-    }
-
-    static func phoneStart(phone: String) async throws -> PhoneStartResponse {
-        try await APIClient.shared.send(
-            Endpoint(path: "/auth/phone/start", method: "POST", body: APIClient.shared.encode(PhoneStartBody(phone: phone)), attachToken: false),
-            as: PhoneStartResponse.self,
-            retryingOnAuthFailure: false
-        )
-    }
-
-    static func phoneVerify(phone: String, code: String) async throws -> SessionResponse {
-        try await APIClient.shared.send(
-            Endpoint(path: "/auth/phone/verify", method: "POST", body: APIClient.shared.encode(PhoneVerifyBody(phone: phone, code: code)), attachToken: false),
             as: SessionResponse.self,
             retryingOnAuthFailure: false
         )

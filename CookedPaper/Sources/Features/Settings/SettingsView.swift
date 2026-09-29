@@ -159,7 +159,6 @@ struct SettingsView: View {
         switch session.method {
         case "apple": "Signed in with Apple"
         case "google": "Signed in with Google"
-        case "phone": "Signed in with phone"
         default: nil
         }
     }

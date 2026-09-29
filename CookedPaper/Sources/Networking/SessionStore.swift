@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// The signed-in account. Everyone signs in (Apple, Google or phone) before trading;
+/// The signed-in account. Everyone signs in (Apple or Google) before trading;
 /// there are no guest sessions. The access token is short-lived; the refresh token
 /// (returned in the body because every request carries `X-Cooked-Client: ios`) lives
 /// in the Keychain and is traded for a new access token on a 401 by `APIClient`.
@@ -23,7 +23,7 @@ final class SessionStore {
     private(set) var activePortfolioId: String?
     private(set) var username: String?
     private(set) var userId: String?
-    /// How the person signed in ("apple", "google", "phone"), for Settings.
+    /// How the person signed in ("apple" or "google"), for Settings.
     private(set) var method: String?
 
     static let shared = SessionStore()

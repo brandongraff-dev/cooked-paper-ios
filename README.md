@@ -77,7 +77,7 @@ CookedPaper/
 
 ## Product decisions this was built against
 
-- **Everyone signs in: Apple, Google or phone number.** No guest sessions. Sign-in
+- **Everyone signs in: Apple or Google.** No guest sessions. Sign-in
   happens in onboarding right after the practice round; each provider proves
   identity to `apps/api`, which mints the session (access token + a refresh token
   returned in the body because the app sends `X-Cooked-Client: ios`, stored in the
@@ -89,7 +89,6 @@ CookedPaper/
     API's Google audiences.
   - **Apple** needs the Sign in with Apple capability on the App ID
     (`app.cooked.paper`); the entitlement is already in `project.yml`.
-  - **Phone** codes are sent by the API (Twilio Verify); nothing to configure here.
 - **No dark patterns**, on purpose, matching `apps/api/src/paper/onboarding.ts`'s own
   stated design: no streaks, no countdowns, no fake urgency, no score. The backend
   structurally can't produce that data; the client doesn't invent it either.

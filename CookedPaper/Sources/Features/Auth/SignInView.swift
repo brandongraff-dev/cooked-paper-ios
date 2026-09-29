@@ -4,7 +4,7 @@ import Foundation
 import GoogleSignIn
 import SwiftUI
 
-/// Everyone signs in before trading: Apple, Google or a phone number. Each path
+/// Everyone signs in before trading, with Apple or Google. Each path
 /// proves identity to the server, which mints the session and owns the portfolio,
 /// so progress follows the account to any device.
 struct SignInView: View {
@@ -15,7 +15,6 @@ struct SignInView: View {
     var onSignedIn: () -> Void
 
     @State private var auth = SignInModel()
-    @State private var showsPhone = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -66,19 +65,6 @@ struct SignInView: View {
                 .disabled(auth.isWorking)
                 .accessibilityIdentifier("signin.google")
 
-                Button {
-                    Haptics.tap()
-                    showsPhone = true
-                } label: {
-                    HStack(spacing: Space.s12) {
-                        Image(systemName: "phone.fill")
-                        Text("Continue with phone")
-                    }
-                }
-                .buttonStyle(.secondary)
-                .disabled(auth.isWorking)
-                .accessibilityIdentifier("signin.phone")
-
                 if auth.isWorking {
                     ProgressView().tint(Color.textSecondary)
                         .padding(.top, Space.s4)
@@ -100,12 +86,6 @@ struct SignInView: View {
         .background(Color.appBackground)
         .preferredColorScheme(.dark)
         .task { await auth.loadAppleNonce() }
-        .sheet(isPresented: $showsPhone) {
-            PhoneSignInView { session in
-                showsPhone = false
-                auth.complete(session, method: "phone", onSignedIn: onSignedIn)
-            }
-        }
     }
 
     private var legal: some View {
@@ -183,6 +163,18 @@ final class SignInModel {
 
     func signInWithGoogle(onSignedIn: @escaping () -> Void) async {
         errorMessage = nil
+        #if DEBUG
+        // UI screenshot runs: Google's own sheet can't be driven from a test, so
+        // the mock server's session stands in for it.
+        if MockAPI.isEnabled {
+            isWorking = true
+            defer { isWorking = false }
+            if let session = try? await AuthAPI.google(idToken: "demo-google-id-token") {
+                complete(session, method: "google", onSignedIn: onSignedIn)
+            }
+            return
+        }
+        #endif
         guard let clientID = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String,
               !clientID.isEmpty, !clientID.contains("REPLACE") else {
             errorMessage = "Google sign-in isn't configured in this build."

@@ -40,7 +40,7 @@ packages:
   # Sign in with Google (ID token with a server-issued nonce; the API verifies it).
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
-    from: 8.0.0
+    from: 9.0.0 # first release with sign-in `nonce:`
 
 targets:
   CookedPaper:

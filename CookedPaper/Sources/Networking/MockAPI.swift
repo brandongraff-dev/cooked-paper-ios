@@ -17,7 +17,8 @@ nonisolated enum MockAPI {
 
     /// Call once at launch, before any view reads `SessionStore`. The onboarding
     /// walkthrough (`UITEST_MOCK_FRESH`) starts signed out and signs in with the
-    /// phone flow; every other run starts signed in to the demo account.
+    /// Google button (which skips Google's own sheet under the mock); every other
+    /// run starts signed in to the demo account.
     @MainActor
     static func prepareSessionIfNeeded() {
         guard isEnabled else { return }
@@ -73,19 +74,11 @@ nonisolated enum MockAPI {
             if match("POST", "paper/portfolios/:/trades") != nil { return FreshAccount.execute(body) }
         }
 
-        // Sign-in: any Apple/Google token, any phone number, code 123456.
+        // Sign-in: any Apple or Google token is accepted.
         if match("POST", "auth/google/nonce") != nil || match("POST", "auth/apple/nonce") != nil {
             return (200, ["nonce": "demo-nonce-\(Int(Date().timeIntervalSince1970))", "expiresAt": iso(daysFromNow: 0.01)])
         }
         if match("POST", "auth/google") != nil || match("POST", "auth/apple") != nil { return (200, session) }
-        if match("POST", "auth/phone/start") != nil { return (200, ["expiresInSeconds": 600]) }
-        if match("POST", "auth/phone/verify") != nil {
-            let json = body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
-            guard json["code"] as? String == "123456" else {
-                return (401, ["error": "code_invalid", "message": "That code isn't right. Check the text and try again."])
-            }
-            return (200, session)
-        }
         if match("POST", "auth/refresh") != nil { return (200, session) }
         if match("DELETE", "auth/account") != nil { return (204, [:] as [String: Any]) }
 
