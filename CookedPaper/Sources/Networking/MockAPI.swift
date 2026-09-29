@@ -97,8 +97,8 @@ nonisolated enum MockAPI {
         }
         if match("GET", "paper/portfolios/:") != nil { return (200, snapshot) }
         if match("GET", "paper/portfolios/:/trades") != nil { return (200, ["trades": trades]) }
-        if match("POST", "paper/portfolios/:/quote") != nil { return (200, quote) }
-        if match("POST", "paper/portfolios/:/trades") != nil { return (200, executeResponse) }
+        if match("POST", "paper/portfolios/:/quote") != nil { return (200, quote(body)) }
+        if match("POST", "paper/portfolios/:/trades") != nil { return (200, executeResponse(body)) }
         if match("POST", "paper/portfolios/:/reset") != nil { return (200, [:] as [String: Any]) }
         if match("GET", "paper/discover") != nil { return (200, discover) }
         if match("GET", "paper/leaderboard") != nil {
@@ -373,27 +373,41 @@ nonisolated enum MockAPI {
         ]
     }
 
-    private static var quote: [String: Any] {
-        let t = tokens[0]
+    /// Buys at the demo token's live price for the requested dollars; sells use the
+    /// demo position. Enough for walkthroughs to show the right coin and amounts.
+    private static func order(_ body: Data?) -> (t: DemoToken, side: String, price: Double, qty: Double, value: Double) {
+        let json = body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+        let t = token(for: json["tokenMint"] as? String ?? tokens[0].mint)
+        let side = json["side"] as? String ?? "buy"
+        let mid = livePriceValue(t, at: Date())
+        let price = side == "buy" ? mid * 1.0042 : mid * 0.9958 // 30 bps slippage + a little impact
+        let notional = Double(json["notionalUsd"] as? String ?? "") ?? 250
+        let value = side == "buy" ? notional : 1504.04 * Double(json["sellPercent"] as? Int ?? 100) / 100
+        return (t, side, price, value / price, value)
+    }
+
+    private static func quote(_ body: Data?) -> [String: Any] {
+        let o = order(body)
         return [
-            "tokenMint": t.mint, "side": "buy", "inAmount": "250", "outAmount": "10803802",
-            "minimumOut": "10749783", "priceImpactPct": "0.11", "priceUsd": t.price,
+            "tokenMint": o.t.mint, "side": o.side, "inAmount": dec(o.value), "outAmount": dec(o.qty),
+            "minimumOut": dec(o.qty * 0.99), "priceImpactPct": "0.12", "priceUsd": dec(o.price),
             "guidance": [
                 "isFirstTradeInPortfolio": false, "tradeCountInPortfolio": 9,
-                "suggestedNotionalUsd": "641.24", "suggestedPctOfCash": 10, "warnings": [] as [Any],
+                "suggestedNotionalUsd": "561.24", "suggestedPctOfCash": 10, "warnings": [] as [Any],
             ] as [String: Any],
         ]
     }
 
-    private static var executeResponse: [String: Any] {
-        let t = tokens[0]
+    private static func executeResponse(_ body: Data?) -> [String: Any] {
+        let o = order(body)
+        let cashAfter = o.side == "buy" ? 5612.37 - o.value : 5612.37 + o.value
         return [
-            "trade": trade(id: "t-new", t, side: "buy", qty: "10803802", price: t.price, value: "250.00", daysAgo: 0),
-            "cashUsd": "5362.37",
-            "fill": ["fillPriceUsd": t.price, "marketPriceUsd": t.price],
+            "trade": trade(id: "t-new", o.t, side: o.side, qty: dec(o.qty), price: dec(o.price), value: String(format: "%.2f", o.value), daysAgo: 0),
+            "cashUsd": String(format: "%.2f", cashAfter),
+            "fill": ["fillPriceUsd": dec(o.price), "marketPriceUsd": dec(o.price / 1.0042)],
             "summary": [
-                "side": "buy", "slippageCostUsd": "1.05", "cashAfterUsd": "5362.37",
-                "vsQuote": ["expectedPriceUsd": t.price, "fillPriceUsd": t.price, "deltaBps": 0, "direction": "flat"] as [String: Any],
+                "side": o.side, "slippageCostUsd": String(format: "%.2f", o.value * 0.0042), "cashAfterUsd": String(format: "%.2f", cashAfter),
+                "vsQuote": ["expectedPriceUsd": dec(o.price), "fillPriceUsd": dec(o.price), "deltaBps": 0, "direction": "flat"] as [String: Any],
             ] as [String: Any],
         ]
     }
