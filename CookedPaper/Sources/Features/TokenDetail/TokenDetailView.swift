@@ -7,18 +7,23 @@ struct TokenDetailView: View {
     @State private var profile: TokenProfileResponse?
     @State private var candles: TokenCandlesResponse?
     @State private var range: ChartRange = .live
-    @State private var feed: LivePriceFeed
+    @State private var feed: MarketFeed
     @State private var showsCandles = false
     @State private var scrubIndex: Int?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var tradeSide: TradeSide?
     @State private var showsLeverage = false
+    @Environment(\.scenePhase) private var scenePhase
 
     init(mint: String) {
         self.mint = mint
-        _feed = State(initialValue: LivePriceFeed(mint: mint))
+        // Shared with Discover's prefetch, so a token opened from a row it already
+        // fetched draws its chart on the first frame.
+        _feed = State(initialValue: MarketFeedStore.shared.feed(for: mint))
     }
+
+    private static let stillFrames = ProcessInfo.processInfo.environment["UITEST_STILL_FRAMES"] == "1"
 
     private var position: PaperPosition? {
         PortfolioStore.shared.snapshot?.positions.first { $0.tokenMint == mint }
@@ -55,15 +60,17 @@ struct TokenDetailView: View {
         .sheet(isPresented: $showsLeverage) {
             LeverageSheetView(mint: mint, tokenSymbol: profile?.token.symbol ?? "token")
         }
-        .task { await load() }
-        .onChange(of: range) { _, newRange in
-            scrubIndex = nil
-            if newRange == .live { showsCandles = false }
-            Task {
-                await loadCandles()
-                syncFeed()
-            }
+        .task {
+            // The live tape starts alongside the profile, not after it.
+            syncFeed()
+            await load()
         }
+        .onChange(of: range) { _, _ in
+            scrubIndex = nil
+            syncFeed()
+            Task { await loadCandles() }
+        }
+        .onChange(of: scenePhase) { _, _ in syncFeed() }
         .onDisappear { feed.stop() }
     }
 
@@ -103,8 +110,9 @@ struct TokenDetailView: View {
     // MARK: - Header
 
     /// Price and change for what's on screen: the scrubbed point while dragging,
-    /// otherwise the live price with the period's change.
-    private var displayed: (price: Decimal?, change: Decimal?, percent: Decimal?, caption: String) {
+    /// otherwise the live price with the period's change. On LIVE that's the price at
+    /// the chart's playhead, so the header never runs ahead of the line.
+    private func displayed(livePrice: Decimal?) -> (price: Decimal?, change: Decimal?, percent: Decimal?, caption: String) {
         let series = closes
         if let scrubIndex, series.indices.contains(scrubIndex), let first = series.first, first > 0 {
             let value = series[scrubIndex]
@@ -116,8 +124,7 @@ struct TokenDetailView: View {
             )
         }
 
-        let livePrice = range == .live ? feed.latest.map { Decimal($0) } : nil
-        let price = livePrice ?? profile?.market.priceUsd.value
+        let price = (range == .live ? livePrice : nil) ?? profile?.market.priceUsd.value
         let percent: Decimal?
         if range == .day || range == .live {
             percent = profile?.market.change24h.value
@@ -145,17 +152,34 @@ struct TokenDetailView: View {
     }
 
     private var header: some View {
-        let shown = displayed
-        return VStack(alignment: .leading, spacing: Space.s8) {
+        VStack(alignment: .leading, spacing: Space.s8) {
             HStack(spacing: Space.s12) {
                 TokenAvatar(mint: mint, symbol: profile?.token.symbol, logoURL: profile?.token.logoUri.flatMap(URL.init(string:)), size: 48)
                 Text(profile?.token.name ?? profile?.token.symbol ?? "")
                     .font(.rowTitle)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
+                Spacer(minLength: Space.s8)
+                if range == .live {
+                    // Once a second is plenty to notice the feed going quiet.
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        LiveStatusBadge(state: feed.effectiveState(at: context.date))
+                    }
+                }
             }
             .padding(.bottom, Space.s4)
 
+            // Re-reads the playhead price ten times a second on LIVE (each trade
+            // lands at its own moment, not when its batch arrived); idle otherwise.
+            TimelineView(.animation(minimumInterval: 0.1, paused: range != .live || Self.stillFrames)) { context in
+                priceLines(livePrice: feed.displayPrice(at: Self.stillFrames ? Date() : context.date))
+            }
+        }
+    }
+
+    private func priceLines(livePrice: Decimal?) -> some View {
+        let shown = displayed(livePrice: livePrice)
+        return VStack(alignment: .leading, spacing: Space.s8) {
             PriceText(value: shown.price, font: .heroPrice)
                 .tracking(-0.5)
                 .lineLimit(1)
@@ -182,7 +206,11 @@ struct TokenDetailView: View {
     private var chart: some View {
         Group {
             if range == .live {
-                LiveChartView(feed: feed, color: (profile?.market.change24h.value ?? 0) < 0 ? .negative : .positive)
+                LiveChartView(
+                    feed: feed,
+                    color: (profile?.market.change24h.value ?? 0) < 0 ? .negative : .positive,
+                    style: showsCandles ? .candles : .line
+                )
             } else if showsCandles {
                 CandleChartView(
                     candles: candles?.candles ?? [],
@@ -208,7 +236,6 @@ struct TokenDetailView: View {
             }
             Button {
                 Haptics.selection()
-                if range == .live { range = .hour }
                 withAnimation(Motion.standard) { showsCandles.toggle() }
             } label: {
                 Image(systemName: showsCandles ? "chart.xyaxis.line" : "chart.bar.xaxis")
@@ -324,18 +351,14 @@ struct TokenDetailView: View {
         syncFeed()
     }
 
-    /// Runs the live feed only while the LIVE range is showing, seeded with the
-    /// latest 1-minute closes so the line isn't empty for the first seconds.
+    /// Runs the live feed only while the LIVE range is showing and the app is in
+    /// the foreground; it resumes from the last seq it saw when either comes back.
     private func syncFeed() {
-        guard range == .live else {
+        if range == .live && scenePhase != .background {
+            feed.start()
+        } else {
             feed.stop()
-            return
         }
-        let seed = (candles?.candles ?? []).compactMap { $0 }.compactMap { candle -> LivePoint? in
-            guard let date = Self.parseDate(candle.bucketStart) else { return nil }
-            return LivePoint(time: min(date.addingTimeInterval(60), Date()), price: NSDecimalNumber(decimal: candle.close).doubleValue)
-        }
-        feed.start(seed: seed)
     }
 
     private static let isoFormatter = ISO8601DateFormatter()

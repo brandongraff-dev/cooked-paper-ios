@@ -94,6 +94,7 @@ struct DiscoverView: View {
                                 TrendingCard(entry: entry)
                             }
                             .buttonStyle(.pressable)
+                            .prefetchesLiveMarket(entry.mint)
                         }
                     }
                     .padding(.horizontal, Space.margin)
@@ -136,6 +137,7 @@ struct DiscoverView: View {
                         }
                         .buttonStyle(.pressable)
                         .accessibilityIdentifier("discover.row.\(index)")
+                        .prefetchesLiveMarket(entry.mint)
 
                         if index < entries.count - 1 {
                             RowSeparator()
@@ -222,5 +224,14 @@ private struct TrendingCard: View {
         .padding(Space.s16)
         .frame(width: 136, alignment: .leading)
         .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+    }
+}
+
+private extension View {
+    /// Warms this token's live chart while its row is on screen, so opening it
+    /// shows a drawn chart rather than an empty one (see `MarketFeedStore`).
+    func prefetchesLiveMarket(_ mint: String) -> some View {
+        onAppear { MarketFeedStore.shared.prefetch(mint) }
+            .onDisappear { MarketFeedStore.shared.cancelPrefetch(mint) }
     }
 }
