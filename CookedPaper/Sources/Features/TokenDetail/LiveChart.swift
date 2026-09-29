@@ -4,8 +4,9 @@ import SwiftUI
 /// A chart that plays the market back trade by trade: the playhead runs a moment
 /// behind the server clock (`MarketFeed.playheadMs`), each trade appears when the
 /// playhead reaches its own timestamp, the newest price eases in over a quarter
-/// second instead of jumping, the y-range glides to fit, and buys and sells show as
-/// green and red dots sized by dollars. Drawn with one `Canvas` in a
+/// second instead of jumping, and the y-range glides to fit. The market's own trades
+/// stay a clean line; only the person's buys and sells are marked (a "+" or "−" in a
+/// circle). Drawn with one `Canvas` in a
 /// `TimelineView(.animation)`, so it redraws at the display's refresh rate (up to
 /// 120 Hz on ProMotion).
 struct LiveChartView: View {
@@ -22,6 +23,8 @@ struct LiveChartView: View {
     /// header's change; nil colors by the visible window's own direction.
     var color: Color? = nil
     var style: Style = .line
+    /// The person's own buys and sells on this token.
+    var markers: [ChartTradeMarker] = []
 
     @State private var renderer = LiveChartRenderer()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -39,6 +42,7 @@ struct LiveChartView: View {
                 windowMs: Int64(window * 1000),
                 color: color,
                 style: style,
+                markers: markers,
                 animated: !Self.stillFrames,
                 pulses: !Self.stillFrames && !reduceMotion
             )
@@ -63,6 +67,7 @@ struct LiveChartFrame {
     let windowMs: Int64
     let color: Color?
     let style: LiveChartView.Style
+    let markers: [ChartTradeMarker]
     let animated: Bool
     /// The breathing ring on the head; off under Reduce Motion.
     let pulses: Bool
@@ -98,12 +103,6 @@ final class LiveChartRenderer {
     /// Beyond this many points in view, the line samples every nth one — more than
     /// the screen has pixels for.
     private static let maxLinePoints = 1200
-    /// Newest-first cap on trade dots per frame.
-    private static let maxDots = 200
-    /// How long a new trade's dot takes to fade and grow in (playhead time).
-    private static let dotFadeInMs: Double = 250
-    /// Dots fade out across this fraction of the plot's left edge.
-    private static let dotFadeOutFraction: CGFloat = 0.18
 
     func draw(in graphics: inout GraphicsContext, size: CGSize, frame: LiveChartFrame) {
         let tape = frame.tape
@@ -144,6 +143,11 @@ final class LiveChartRenderer {
             }
         }
 
+        for marker in frame.markers where marker.t >= start && marker.t <= frame.playhead {
+            low = min(low, marker.price)
+            high = max(high, marker.price)
+        }
+
         // Y-range: fit what's visible, with a floor so a flat price isn't magnified
         // into noise, then glide there rather than snap.
         let minSpan = max(head * 0.004, 1e-12)
@@ -179,9 +183,16 @@ final class LiveChartRenderer {
         switch frame.style {
         case .line:
             drawLine(in: &graphics, size: size, tape: tape, range: range, head: head, x: x, y: y, plotWidth: plotWidth, top: top, color: color)
-            drawDots(in: &graphics, tape: tape, range: range, playIndex: playIndex, playhead: frame.playhead, headY: headY, x: x, y: y, plotWidth: plotWidth)
         case .candles:
             drawCandles(in: &graphics, candles: candles, x: x, y: y, plotWidth: plotWidth, windowMs: windowMs)
+        }
+
+        // The person's own trades, once the playhead has reached them.
+        for marker in frame.markers where marker.t <= frame.playhead {
+            let px = x(marker.t)
+            guard px >= 0, px <= plotWidth else { continue }
+            let py = min(max(y(marker.price), top), size.height - bottom)
+            ChartTradeMarkers.draw(marker.kind, at: CGPoint(x: px, y: py), in: &graphics)
         }
 
         // Dashed guide at the current price, across the plot to the tag.
@@ -265,59 +276,6 @@ final class LiveChartRenderer {
             )
         )
         graphics.stroke(line, with: .color(color), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-    }
-
-    // MARK: - Trade dots
-
-    /// A dot per swap — green buys, red sells, area by dollars. New dots fade and
-    /// grow in as the playhead reaches them; old ones fade across the left edge.
-    /// Fully opaque dots are batched into one path per side (two draws for most of
-    /// the tape); only the few mid-fade ones draw individually.
-    private func drawDots(
-        in graphics: inout GraphicsContext,
-        tape: [TapePoint],
-        range: ClosedRange<Int>,
-        playIndex: Int,
-        playhead: Int64,
-        headY: CGFloat,
-        x: (Int64) -> CGFloat,
-        y: (Double) -> CGFloat,
-        plotWidth: CGFloat
-    ) {
-        var buys = Path()
-        var sells = Path()
-        let outline = Color.appBackground
-        let fadeWidth = max(plotWidth * Self.dotFadeOutFraction, 1)
-        var drawn = 0
-        var index = range.upperBound
-        while index >= range.lowerBound, drawn < Self.maxDots {
-            let point = tape[index]
-            index -= 1
-            guard point.isSwap else { continue }
-            let px = x(point.t)
-            // Everything older is further left still.
-            if px < 0 { break }
-            let appear = min(max(Double(playhead - point.t) / Self.dotFadeInMs, 0), 1)
-            let alpha = appear * Double(min(max(px / fadeWidth, 0), 1))
-            guard alpha > 0.01 else { continue }
-            let radius = CGFloat(MarketPlayback.dotRadius(amountUsd: point.amountUsd) * (0.5 + 0.5 * appear))
-            let py = index + 1 == playIndex ? headY : y(point.price)
-            let rect = CGRect(x: px - radius, y: py - radius, width: radius * 2, height: radius * 2)
-            let fill: Color = point.kind == .buy ? .positive : .negative
-            if alpha >= 0.999 {
-                if point.kind == .buy { buys.addEllipse(in: rect) } else { sells.addEllipse(in: rect) }
-            } else {
-                let dot = Path(ellipseIn: rect)
-                graphics.stroke(dot, with: .color(outline.opacity(alpha)), lineWidth: 1.5)
-                graphics.fill(dot, with: .color(fill.opacity(alpha)))
-            }
-            drawn += 1
-        }
-        // A thin ring in the background color separates each dot from the line.
-        for (path, fill) in [(buys, Color.positive), (sells, Color.negative)] where !path.isEmpty {
-            graphics.stroke(path, with: .color(outline), lineWidth: 1.5)
-            graphics.fill(path, with: .color(fill))
-        }
     }
 
     // MARK: - Candles

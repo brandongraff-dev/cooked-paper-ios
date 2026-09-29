@@ -39,7 +39,7 @@ nonisolated final class TradeRecordingUITests: XCTestCase {
         tap(app.buttons["Review"], "Review button")
         pause(3) // fill confirmation
         tap(app.buttons["Done"], "Done after buy")
-        pause(1.5)
+        pause(4) // the "+" marker appears where the buy filled
 
         // Leverage: 5x long, $500 margin.
         tap(app.buttons["tokenDetail.leverage"], "Leverage button")
@@ -51,7 +51,7 @@ nonisolated final class TradeRecordingUITests: XCTestCase {
         tap(app.buttons["leverage.open"], "Open position")
         pause(3) // opened confirmation
         tap(app.buttons["leverage.done"], "Done after open")
-        pause(1.5)
+        pause(4) // a second "+" for the long
 
         // Portfolio → the new leveraged position → close it.
         tap(app.buttons["tab.portfolio"], "Portfolio tab")

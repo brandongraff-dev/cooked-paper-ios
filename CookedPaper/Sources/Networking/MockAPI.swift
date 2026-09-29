@@ -96,7 +96,7 @@ nonisolated enum MockAPI {
             return (200, ["claimed": [portfolio], "skipped": [] as [Any]] as [String: Any])
         }
         if match("GET", "paper/portfolios/:") != nil { return (200, snapshot) }
-        if match("GET", "paper/portfolios/:/trades") != nil { return (200, ["trades": trades]) }
+        if match("GET", "paper/portfolios/:/trades") != nil { return (200, ["trades": sessionTrades + trades]) }
         if match("POST", "paper/portfolios/:/quote") != nil { return (200, quote(body)) }
         if match("POST", "paper/portfolios/:/trades") != nil { return (200, executeResponse(body)) }
         if match("POST", "paper/portfolios/:/reset") != nil { return (200, [:] as [String: Any]) }
@@ -401,11 +401,23 @@ nonisolated enum MockAPI {
         ]
     }
 
+    /// Fills made during this run, newest first, so the chart can mark them.
+    private static let sessionLock = NSLock()
+    nonisolated(unsafe) private static var sessionFills: [[String: Any]] = []
+    private static var sessionTrades: [[String: Any]] {
+        sessionLock.lock(); defer { sessionLock.unlock() }
+        return sessionFills
+    }
+
     private static func executeResponse(_ body: Data?) -> [String: Any] {
         let o = order(body)
         let cashAfter = o.side == "buy" ? 5612.37 - o.value : 5612.37 + o.value
+        let filled = trade(id: "t-new-\(Int(Date().timeIntervalSince1970 * 1000))", o.t, side: o.side, qty: dec(o.qty), price: dec(o.price), value: String(format: "%.2f", o.value), daysAgo: 0)
+        sessionLock.lock()
+        sessionFills.insert(filled, at: 0)
+        sessionLock.unlock()
         return [
-            "trade": trade(id: "t-new", o.t, side: o.side, qty: dec(o.qty), price: dec(o.price), value: String(format: "%.2f", o.value), daysAgo: 0),
+            "trade": filled,
             "cashUsd": String(format: "%.2f", cashAfter),
             "fill": ["fillPriceUsd": dec(o.price), "marketPriceUsd": dec(o.price / 1.0042)],
             "summary": [

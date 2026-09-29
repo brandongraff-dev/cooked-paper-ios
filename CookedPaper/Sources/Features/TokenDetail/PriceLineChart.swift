@@ -54,13 +54,16 @@ enum ChartRange: String, CaseIterable, Identifiable {
 struct PriceLineChart: View {
     let values: [Double]
     @Binding var selectedIndex: Int?
+    /// The person's own trades, placed at the index of the bucket they fell in.
+    var markers: [(index: Int, marker: ChartTradeMarker)] = []
 
     private var isUp: Bool { (values.last ?? 0) >= (values.first ?? 0) }
     private var lineColor: Color { isUp ? .positive : .negative }
 
     var body: some View {
-        let low = values.min() ?? 0
-        let high = values.max() ?? 1
+        let markerPrices = markers.map(\.marker.price)
+        let low = (values + markerPrices).min() ?? 0
+        let high = (values + markerPrices).max() ?? 1
         let pad = high > low ? (high - low) * 0.08 : max(high * 0.01, 0.000_000_1)
 
         Chart {
@@ -80,6 +83,11 @@ struct PriceLineChart: View {
                 LineMark(x: .value("Time", index), y: .value("Price", value))
                     .foregroundStyle(lineColor)
                     .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            }
+
+            ForEach(markers, id: \.marker.id) { item in
+                PointMark(x: .value("Time", item.index), y: .value("Price", item.marker.price))
+                    .symbol { TradeMarkerSymbol(kind: item.marker.kind) }
             }
 
             if let selectedIndex, values.indices.contains(selectedIndex) {

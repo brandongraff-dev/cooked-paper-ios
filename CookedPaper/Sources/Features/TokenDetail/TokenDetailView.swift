@@ -14,6 +14,8 @@ struct TokenDetailView: View {
     @State private var errorMessage: String?
     @State private var tradeSide: TradeSide?
     @State private var showsLeverage = false
+    /// The person's own buys and sells on this token, drawn on the chart.
+    @State private var myTrades: [ChartTradeMarker] = []
     @Environment(\.scenePhase) private var scenePhase
 
     init(mint: String) {
@@ -30,6 +32,26 @@ struct TokenDetailView: View {
     }
 
     /// Closes in order, gaps dropped — the line chart's series.
+    /// Changes whenever a trade lands, so the markers reload.
+    private var tradesKey: String {
+        let snapshot = PortfolioStore.shared.snapshot
+        return "\(snapshot?.stats.tradeCount ?? 0)-\(snapshot?.leveragedPositions?.count ?? 0)-\(snapshot?.leveragedRoundTrips?.count ?? 0)"
+    }
+
+    /// Each of the person's trades placed on the candle bucket it fell in; trades
+    /// outside the shown range are left off.
+    private var indexedMarkers: [(index: Int, marker: ChartTradeMarker)] {
+        let starts = (candles?.candles ?? []).compactMap { $0 }.compactMap { Self.parseDate($0.bucketStart) }
+        guard let first = starts.first, let last = starts.last else { return [] }
+        let startMs = starts.map { Int64($0.timeIntervalSince1970 * 1000) }
+        let firstMs = Int64(first.timeIntervalSince1970 * 1000)
+        let endMs = Int64(last.timeIntervalSince1970 * 1000) + range.interval.milliseconds
+        return myTrades.compactMap { marker -> (index: Int, marker: ChartTradeMarker)? in
+            guard marker.t >= firstMs, marker.t < endMs else { return nil }
+            return (index: startMs.lastIndex { $0 <= marker.t } ?? 0, marker: marker)
+        }
+    }
+
     private var closes: [Double] {
         (candles?.candles ?? []).compactMap { $0.map { NSDecimalNumber(decimal: $0.close).doubleValue } }
     }
@@ -72,6 +94,7 @@ struct TokenDetailView: View {
         }
         .onChange(of: scenePhase) { _, _ in syncFeed() }
         .onDisappear { feed.stop() }
+        .task(id: tradesKey) { myTrades = await ChartTradeMarkers.load(mint: mint) }
     }
 
     private var content: some View {
@@ -209,7 +232,8 @@ struct TokenDetailView: View {
                 LiveChartView(
                     feed: feed,
                     color: (profile?.market.change24h.value ?? 0) < 0 ? .negative : .positive,
-                    style: showsCandles ? .candles : .line
+                    style: showsCandles ? .candles : .line,
+                    markers: myTrades
                 )
             } else if showsCandles {
                 CandleChartView(
@@ -218,7 +242,7 @@ struct TokenDetailView: View {
                     interval: range.interval
                 )
             } else if closes.count > 1 {
-                PriceLineChart(values: closes, selectedIndex: $scrubIndex)
+                PriceLineChart(values: closes, selectedIndex: $scrubIndex, markers: indexedMarkers)
             } else {
                 EmptyStateView(symbol: "chart.xyaxis.line", title: "No chart yet", detail: "There's no trading history for this window.")
             }
