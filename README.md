@@ -72,8 +72,8 @@ CookedPaper/
      during development. Xcode will offer to repair its internal IDs the first time
      you open it — let it.
 4. **API base URL** — `Sources/Networking/APIClient.swift`'s `APIConfig.baseURL`
-   points at `https://api.cooked.trade`: the backend on the DigitalOcean droplet
-   behind Cloudflare (see `docs/deploy-digitalocean.md` in the backend repo). Point it
+   points at `https://api.cooked.trade`: the backend on an Oracle Cloud server
+   behind Cloudflare (see `docs/deploy-oracle.md` in the backend repo). Point it
    at a local API for development.
 
 ## Product decisions this was built against

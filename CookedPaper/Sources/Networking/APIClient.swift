@@ -1,8 +1,8 @@
 import Foundation
 
 enum APIConfig {
-    /// The API behind Cloudflare on the DigitalOcean droplet (see
-    /// `docs/deploy-digitalocean.md` in the backend repo). Change this one constant
+    /// The API behind Cloudflare on the Oracle Cloud server (see
+    /// `docs/deploy-oracle.md` in the backend repo). Change this one constant
     /// if the domain differs, or to point at a local API during development.
     static let baseURL = URL(string: "https://api.cooked.trade")!
 }
