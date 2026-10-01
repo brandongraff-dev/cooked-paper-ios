@@ -6,75 +6,110 @@ struct LeaderboardView: View {
     @State private var response: PaperLeaderboardResponse?
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var animatedRowIDs: Set<String> = []
+
+    private var entries: [PaperLeaderboardEntry] { response?.entries ?? [] }
+
+    private var myEntry: PaperLeaderboardEntry? {
+        guard let username = SessionStore.shared.username else { return nil }
+        return entries.first { $0.username == username }
+    }
 
     var body: some View {
-        ZStack {
-            CookedColor.Terminal.bgBase.ignoresSafeArea()
+        ScrollView {
+            VStack(alignment: .leading, spacing: Space.headerGap) {
+                SimulatedCaption()
+                    .padding(.horizontal, Space.margin)
 
-            VStack(spacing: 0) {
-                windowPicker
-                content
+                ScrollView(.horizontal) {
+                    HStack(spacing: Space.s8) {
+                        ForEach(LeaderboardWindow.allCases) { candidate in
+                            Chip(title: candidate.label, isSelected: candidate == window) {
+                                window = candidate
+                            }
+                        }
+                    }
+                    .padding(.horizontal, Space.margin)
+                }
+                .scrollIndicators(.hidden)
+
+                list
+                    .padding(.horizontal, Space.margin)
+            }
+            .padding(.bottom, Space.s24)
+        }
+        .scrollIndicators(.hidden)
+        .background(Color.appBackground)
+        .refreshable { await load() }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !isLoading && errorMessage == nil && !entries.isEmpty {
+                myRankBar
             }
         }
+        .reservesTabBarSpace()
         .navigationTitle("Leaderboard")
         .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { SimulatedBadge() }
-        }
         .task { await load() }
         .onChange(of: window) { _, _ in
             Task { await load() }
         }
     }
 
-    private var windowPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: CookedSpacing.xs) {
-                ForEach(LeaderboardWindow.allCases) { candidate in
-                    CookedChip(title: candidate.label, isSelected: candidate == window) {
-                        window = candidate
+    @ViewBuilder
+    private var list: some View {
+        if isLoading {
+            VStack(spacing: 0) {
+                ForEach(0..<8, id: \.self) { _ in SkeletonRow() }
+            }
+        } else if let errorMessage {
+            EmptyStateView(symbol: "wifi.slash", title: "Couldn't load the leaderboard", detail: errorMessage)
+        } else if entries.isEmpty {
+            EmptyStateView(
+                symbol: "trophy",
+                title: "No ranked traders yet",
+                detail: "Check back once more portfolios have a qualifying track record."
+            )
+        } else {
+            LazyVStack(spacing: 0) {
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    LeaderboardRow(entry: entry)
+                    if index < entries.count - 1 {
+                        RowSeparator(leadingInset: LeaderboardRow.textInset)
                     }
                 }
             }
-            .padding(.horizontal, CookedSpacing.md)
-            .padding(.vertical, CookedSpacing.sm)
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
-        if isLoading {
-            Spacer()
-            ProgressView().tint(CookedColor.Brand.fill)
-            Spacer()
-        } else if let errorMessage {
-            Spacer()
-            EmptyStateView(symbol: "wifi.slash", title: "Couldn't load the leaderboard", detail: errorMessage)
-            Spacer()
-        } else {
-            let entries = response?.entries ?? []
-            if entries.isEmpty {
-                Spacer()
-                EmptyStateView(
-                    symbol: "trophy",
-                    title: "No ranked traders yet",
-                    detail: "Check back once more portfolios have a qualifying track record."
-                )
-                Spacer()
-            } else {
-                List {
-                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                        LeaderboardRow(entry: entry)
-                            .listRowBackground(CookedColor.Terminal.bgBase)
-                            .listRowSeparatorTint(CookedColor.Terminal.border)
-                            .staggeredEntrance(index: index, id: entry.id, animatedIDs: $animatedRowIDs)
+    /// Pinned above the tab bar: where the current user stands.
+    private var myRankBar: some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(Color.appSeparator).frame(height: 1)
+            Group {
+                if let myEntry {
+                    LeaderboardRow(entry: myEntry, titleOverride: "You")
+                } else {
+                    HStack(spacing: Space.s12) {
+                        Text("—")
+                            .font(.rowSubvalue)
+                            .foregroundStyle(Color.textTertiary)
+                            .frame(width: LeaderboardRow.rankWidth, alignment: .leading)
+                        MonogramAvatar(text: SessionStore.shared.username ?? "You")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("You")
+                                .font(.rowTitle)
+                                .foregroundStyle(Color.textPrimary)
+                            Text("Close a trade to get ranked")
+                                .font(.rowSubtitle)
+                                .foregroundStyle(Color.textSecondary)
+                        }
+                        Spacer()
                     }
+                    .frame(height: Metrics.rowHeight)
                 }
-                .listStyle(.plain)
-                .refreshable { await load() }
             }
+            .padding(.horizontal, Space.margin)
         }
+        .background(Color.appSurface)
     }
 
     private func load() async {
@@ -89,8 +124,13 @@ struct LeaderboardView: View {
     }
 }
 
+/// rank | avatar | username over round trips | return %.
 private struct LeaderboardRow: View {
     let entry: PaperLeaderboardEntry
+    var titleOverride: String? = nil
+
+    static let rankWidth: CGFloat = 24
+    static let textInset: CGFloat = rankWidth + Space.s12 + Metrics.avatar + Metrics.avatarGap
 
     /// A stated `unavailable` reason means this trader has no qualifying sample yet —
     /// forcing the value to nil here (rather than trusting `pct` to already be null)
@@ -99,26 +139,34 @@ private struct LeaderboardRow: View {
         entry.returnPct.unavailable == nil ? entry.returnPct.pct : nil
     }
 
+    private var isTopThree: Bool { entry.rank <= 3 }
+
     var body: some View {
-        HStack(spacing: CookedSpacing.sm) {
+        HStack(spacing: Space.s12) {
             Text("\(entry.rank)")
-                .font(CookedFont.priceMedium())
-                .foregroundStyle(CookedColor.Terminal.textMuted)
-                .frame(width: 28, alignment: .leading)
+                .font(.rowSubvalue)
+                .foregroundStyle(isTopThree ? Color.textPrimary : Color.textTertiary)
+                .frame(width: Self.rankWidth, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.username)
-                    .font(CookedFont.headline())
-                    .foregroundStyle(CookedColor.Terminal.textPrimary)
-                Text("\(entry.roundTripCount) round trips")
-                    .font(CookedFont.caption())
-                    .foregroundStyle(CookedColor.Terminal.textMuted)
+            ListRow(
+                title: titleOverride ?? entry.username,
+                subtitle: "\(entry.roundTripCount) round trips"
+            ) {
+                MonogramAvatar(text: entry.username)
+                    .overlay(alignment: .bottomTrailing) {
+                        if isTopThree {
+                            Image(systemName: "medal.fill")
+                                .font(.caption2)
+                                .foregroundStyle(Color.textSecondary)
+                                .padding(Space.s4)
+                                .background(Color.appBackground, in: Circle())
+                                .offset(x: Space.s4, y: Space.s4)
+                        }
+                    }
+            } trailing: {
+                ChangeText(percent: displayedReturnPct, font: .rowValue)
             }
-
-            Spacer()
-
-            PnLText(value: displayedReturnPct, isPercent: true)
         }
-        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 }

@@ -1,183 +1,361 @@
 import Foundation
 import SwiftUI
-import UIKit
 
 struct TokenDetailView: View {
     let mint: String
 
     @State private var profile: TokenProfileResponse?
     @State private var candles: TokenCandlesResponse?
-    @State private var interval: CandleInterval = .oneHour
+    @State private var range: ChartRange = .live
+    @State private var feed: MarketFeed
+    @State private var showsCandles = false
+    @State private var scrubIndex: Int?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var tradeSide: TradeSide?
-    @State private var isWatched = false
-    @State private var showGuestWatchAlert = false
-    @State private var isContentVisible = false
-    @State private var chartAlertLevels: [ChartAlertLevel] = []
+    @State private var showsLeverage = false
+    /// The person's own buys and sells on this token, drawn on the chart.
+    @State private var myTrades: [ChartTradeMarker] = []
+    @Environment(\.scenePhase) private var scenePhase
 
-    private var reduceMotion: Bool { UIAccessibility.isReduceMotionEnabled }
+    init(mint: String) {
+        self.mint = mint
+        // Shared with Discover's prefetch, so a token opened from a row it already
+        // fetched draws its chart on the first frame.
+        _feed = State(initialValue: MarketFeedStore.shared.feed(for: mint))
+    }
+
+    private static let stillFrames = ProcessInfo.processInfo.environment["UITEST_STILL_FRAMES"] == "1"
+
+    private var position: PaperPosition? {
+        PortfolioStore.shared.snapshot?.positions.first { $0.tokenMint == mint }
+    }
+
+    /// Closes in order, gaps dropped — the line chart's series.
+    /// Changes whenever a trade lands, so the markers reload.
+    private var tradesKey: String {
+        let snapshot = PortfolioStore.shared.snapshot
+        return "\(snapshot?.stats.tradeCount ?? 0)-\(snapshot?.leveragedPositions?.count ?? 0)-\(snapshot?.leveragedRoundTrips?.count ?? 0)"
+    }
+
+    /// Each of the person's trades placed on the candle bucket it fell in; trades
+    /// outside the shown range are left off.
+    private var indexedMarkers: [(index: Int, marker: ChartTradeMarker)] {
+        let starts = (candles?.candles ?? []).compactMap { $0 }.compactMap { Self.parseDate($0.bucketStart) }
+        guard let first = starts.first, let last = starts.last else { return [] }
+        let startMs = starts.map { Int64($0.timeIntervalSince1970 * 1000) }
+        let firstMs = Int64(first.timeIntervalSince1970 * 1000)
+        let endMs = Int64(last.timeIntervalSince1970 * 1000) + range.interval.milliseconds
+        return myTrades.compactMap { marker -> (index: Int, marker: ChartTradeMarker)? in
+            guard marker.t >= firstMs, marker.t < endMs else { return nil }
+            return (index: startMs.lastIndex { $0 <= marker.t } ?? 0, marker: marker)
+        }
+    }
+
+    private var closes: [Double] {
+        (candles?.candles ?? []).compactMap { $0.map { NSDecimalNumber(decimal: $0.close).doubleValue } }
+    }
 
     var body: some View {
-        ZStack {
-            CookedColor.Terminal.bgBase.ignoresSafeArea()
-
+        Group {
             if isLoading {
-                ProgressView().tint(CookedColor.Brand.fill)
+                loadingState
             } else if let errorMessage {
                 EmptyStateView(symbol: "wifi.slash", title: "Couldn't load this token", detail: errorMessage)
             } else {
-                VStack(spacing: 0) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: CookedSpacing.md) {
-                            header
-                                .entrance(isContentVisible, reduceMotion: reduceMotion)
-                            chartSection
-                                .entrance(isContentVisible, reduceMotion: reduceMotion, delay: 0.06)
-                            statsGrid
-                                .entrance(isContentVisible, reduceMotion: reduceMotion, delay: 0.12)
-                        }
-                        .padding(CookedSpacing.md)
-                    }
-                    tradeBar
-                }
-                .onAppear { isContentVisible = true }
+                content
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.appBackground)
+        .reservesTabBarSpace()
+        .navigationTitle(profile?.token.symbol ?? "")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: toggleWatch) {
-                    Image(systemName: isWatched ? "star.fill" : "star")
-                        .foregroundStyle(isWatched ? CookedColor.Brand.fill : CookedColor.Terminal.textMuted)
-                        .animation(CookedMotion.standard, value: isWatched)
-                }
-            }
-            ToolbarItem(placement: .principal) {
-                Text(profile?.token.symbol ?? "")
-                    .font(CookedFont.headline())
-                    .foregroundStyle(CookedColor.Terminal.textPrimary)
-            }
-        }
         .sheet(item: $tradeSide) { side in
-            TradeSheetView(mint: mint, side: side, tokenSymbol: profile?.token.symbol ?? "token")
+            TradeSheetView(
+                mint: mint,
+                side: side,
+                tokenSymbol: profile?.token.symbol ?? "token",
+                priceUsd: profile?.market.priceUsd.value
+            )
         }
-        .alert("Sign in to save a watchlist", isPresented: $showGuestWatchAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Sign in from Settings to save tokens.")
+        .sheet(isPresented: $showsLeverage) {
+            LeverageSheetView(mint: mint, tokenSymbol: profile?.token.symbol ?? "token")
         }
-        .task { await load() }
-        .onChange(of: interval) { _, _ in Task { await loadCandles() } }
+        .task {
+            // The live tape starts alongside the profile, not after it.
+            syncFeed()
+            await load()
+        }
+        .onChange(of: range) { _, _ in
+            scrubIndex = nil
+            syncFeed()
+            Task { await loadCandles() }
+        }
+        .onChange(of: scenePhase) { _, _ in syncFeed() }
+        .onDisappear { feed.stop() }
+        .task(id: tradesKey) { myTrades = await ChartTradeMarkers.load(mint: mint) }
     }
 
-    // MARK: - Sections
+    private var content: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Space.section) {
+                VStack(alignment: .leading, spacing: Space.s24) {
+                    header
+                    chart
+                    rangePicker
+                }
+
+                VStack(alignment: .leading, spacing: Space.headerGap) {
+                    SectionHeader(title: "Stats")
+                    StatGrid(items: marketStats)
+                }
+
+                if let position {
+                    VStack(alignment: .leading, spacing: Space.headerGap) {
+                        SectionHeader(title: "Your position")
+                        StatGrid(items: positionStats(position))
+                    }
+                }
+
+                Text(candles?.isRelayed ?? false ? "Data · GeckoTerminal" : "Data · Cooked")
+                    .font(.caption13)
+                    .foregroundStyle(Color.textTertiary)
+            }
+            .padding(.horizontal, Space.margin)
+            .padding(.top, Space.s8)
+            .padding(.bottom, Space.s24)
+        }
+        .scrollIndicators(.hidden)
+        .safeAreaInset(edge: .bottom, spacing: 0) { actionBar }
+    }
+
+    // MARK: - Header
+
+    /// Price and change for what's on screen: the scrubbed point while dragging,
+    /// otherwise the live price with the period's change. On LIVE that's the price at
+    /// the chart's playhead, so the header never runs ahead of the line.
+    private func displayed(livePrice: Decimal?) -> (price: Decimal?, change: Decimal?, percent: Decimal?, caption: String) {
+        let series = closes
+        if let scrubIndex, series.indices.contains(scrubIndex), let first = series.first, first > 0 {
+            let value = series[scrubIndex]
+            return (
+                Decimal(value),
+                Decimal(value - first),
+                Decimal((value - first) / first * 100),
+                scrubCaption(at: scrubIndex)
+            )
+        }
+
+        let price = (range == .live ? livePrice : nil) ?? profile?.market.priceUsd.value
+        let percent: Decimal?
+        if range == .day || range == .live {
+            percent = profile?.market.change24h.value
+        } else if let first = series.first, let last = series.last, first > 0 {
+            percent = Decimal((last - first) / first * 100)
+        } else {
+            percent = nil
+        }
+        // Amount moved = price − price / (1 + pct/100), i.e. relative to the period
+        // start, so "−$0.08 (−4.12%)" agree with each other.
+        var change: Decimal?
+        if let price, let percent {
+            let divisor = 1 + percent / 100
+            if divisor != 0 { change = price - price / divisor }
+        }
+        return (price, change, percent, range.changeCaption)
+    }
+
+    private func scrubCaption(at index: Int) -> String {
+        let present = (candles?.candles ?? []).compactMap { $0 }
+        guard present.indices.contains(index), let date = Self.parseDate(present[index].bucketStart) else { return "" }
+        return range == .all || range == .month
+            ? date.formatted(.dateTime.month(.abbreviated).day())
+            : date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+    }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: CookedSpacing.sm) {
-            TokenLogo(mint: mint, size: 44)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: CookedSpacing.xxs) {
-                    Text(profile?.token.name ?? mint)
-                        .font(CookedFont.body())
-                        .foregroundStyle(CookedColor.Terminal.textSecondary)
-                        .lineLimit(1)
-                    if profile?.token.isVerified ?? false {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: CookedIconSize.xs))
-                            .foregroundStyle(CookedColor.Verification.mark)
+        VStack(alignment: .leading, spacing: Space.s8) {
+            HStack(spacing: Space.s12) {
+                TokenAvatar(mint: mint, symbol: profile?.token.symbol, logoURL: profile?.token.logoUri.flatMap(URL.init(string:)), size: 48)
+                Text(profile?.token.name ?? profile?.token.symbol ?? "")
+                    .font(.rowTitle)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+                Spacer(minLength: Space.s8)
+                if range == .live {
+                    // Once a second is plenty to notice the feed going quiet.
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        LiveStatusBadge(state: feed.effectiveState(at: context.date))
                     }
-                }
-                HStack(alignment: .firstTextBaseline, spacing: CookedSpacing.xs) {
-                    if let price = profile?.market.priceUsd.value {
-                        Text(price.usdString(fractionDigits: price < 1 ? 6 : 2))
-                            .font(CookedFont.priceDisplay(30))
-                            .foregroundStyle(CookedColor.Terminal.textPrimary)
-                    } else {
-                        Text("—").font(CookedFont.priceDisplay(30)).foregroundStyle(CookedColor.Terminal.textMuted)
-                    }
-                    PnLText(value: profile?.market.change24h.value, isPercent: true, font: CookedFont.priceMedium())
                 }
             }
-            Spacer()
-        }
-    }
+            .padding(.bottom, Space.s4)
 
-    private var chartSection: some View {
-        VStack(spacing: CookedSpacing.xs) {
-            CandleChartView(
-                candles: candles?.candles ?? [],
-                isRelayed: candles?.isRelayed ?? false,
-                interval: interval,
-                alertLevels: chartAlertLevels
-            )
-            .frame(height: 280)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: CookedSpacing.xs) {
-                    ForEach(CandleInterval.allCases) { option in
-                        CookedChip(title: option.label, isSelected: option == interval) {
-                            interval = option
-                        }
-                    }
-                }
+            // Re-reads the playhead price ten times a second on LIVE (each trade
+            // lands at its own moment, not when its batch arrived); idle otherwise.
+            TimelineView(.animation(minimumInterval: 0.1, paused: range != .live || Self.stillFrames)) { context in
+                priceLines(livePrice: feed.displayPrice(at: Self.stillFrames ? Date() : context.date))
             }
         }
     }
 
-    private var statsGrid: some View {
-        CookedCard {
-            VStack(spacing: CookedSpacing.sm) {
-                statRow("Market cap", profile?.market.marketCapUsd.value)
-                Divider().overlay(CookedColor.Terminal.border)
-                statRow("Liquidity", profile?.market.liquidityUsd.value)
-                Divider().overlay(CookedColor.Terminal.border)
-                statRow("24h volume", profile?.market.volume24hUsd.value)
+    private func priceLines(livePrice: Decimal?) -> some View {
+        let shown = displayed(livePrice: livePrice)
+        return VStack(alignment: .leading, spacing: Space.s8) {
+            PriceText(value: shown.price, font: .heroPrice)
+                .tracking(-0.5)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+
+            HStack(spacing: Space.s4) {
+                if let change = shown.change, let percent = shown.percent {
+                    Text("\(PriceFormat.signedPrice(change, reference: shown.price)) (\(PriceFormat.change(percent)))")
+                        .foregroundStyle(Color.direction(percent))
+                        .contentTransition(.numericText())
+                } else {
+                    Text("—").foregroundStyle(Color.textSecondary)
+                }
+                Text(shown.caption)
+                    .foregroundStyle(Color.textSecondary)
+            }
+            .font(.rowSubvalue)
+        }
+    }
+
+    // MARK: - Chart
+
+    @ViewBuilder
+    private var chart: some View {
+        Group {
+            if range == .live {
+                LiveChartView(
+                    feed: feed,
+                    color: (profile?.market.change24h.value ?? 0) < 0 ? .negative : .positive,
+                    style: showsCandles ? .candles : .line,
+                    markers: myTrades
+                )
+            } else if showsCandles {
+                CandleChartView(
+                    candles: candles?.candles ?? [],
+                    isRelayed: candles?.isRelayed ?? false,
+                    interval: range.interval
+                )
+            } else if closes.count > 1 {
+                PriceLineChart(values: closes, selectedIndex: $scrubIndex, markers: indexedMarkers)
+            } else {
+                EmptyStateView(symbol: "chart.xyaxis.line", title: "No chart yet", detail: "There's no trading history for this window.")
             }
         }
+        .frame(height: 220)
+        .padding(.horizontal, -Space.margin)
     }
 
-    private func statRow(_ title: String, _ value: Decimal?) -> some View {
-        HStack {
-            Text(title)
-                .font(CookedFont.body())
-                .foregroundStyle(CookedColor.Terminal.textSecondary)
-            Spacer()
-            Text(value?.usdString() ?? "—")
-                .font(CookedFont.priceMedium())
-                .foregroundStyle(CookedColor.Terminal.textPrimary)
+    private var rangePicker: some View {
+        HStack(spacing: Space.s4) {
+            ForEach(ChartRange.allCases) { option in
+                Segment(title: option.rawValue, isSelected: option == range) {
+                    range = option
+                }
+            }
+            Button {
+                Haptics.selection()
+                withAnimation(Motion.standard) { showsCandles.toggle() }
+            } label: {
+                Image(systemName: showsCandles ? "chart.xyaxis.line" : "chart.bar.xaxis")
+                    .font(.caption13)
+                    .foregroundStyle(showsCandles ? Color.textPrimary : Color.textSecondary)
+                    .frame(width: 44, height: Metrics.chipHeight)
+                    .background(showsCandles ? Color.appSurfaceElevated : Color.clear, in: Capsule())
+            }
+            .buttonStyle(.pressable)
+            .accessibilityLabel(showsCandles ? "Show line chart" : "Show candles")
         }
     }
 
-    private var holdsPosition: Bool {
-        PortfolioStore.shared.snapshot?.positions.contains { $0.tokenMint == mint } ?? false
+    // MARK: - Stats
+
+    private var marketStats: [StatItem] {
+        let market = profile?.market
+        return [
+            StatItem(label: "Market cap", value: market?.marketCapUsd.value.map(PriceFormat.compact) ?? "—"),
+            StatItem(label: "Liquidity", value: market?.liquidityUsd.value.map(PriceFormat.compact) ?? "—"),
+            StatItem(label: "24h volume", value: market?.volume24hUsd.value.map(PriceFormat.compact) ?? "—"),
+            StatItem(
+                label: "24h change",
+                value: PriceFormat.change(market?.change24h.value),
+                color: Color.direction(market?.change24h.value)
+            ),
+        ]
     }
 
-    private var tradeBar: some View {
-        CookedGlassContainer {
-            HStack(spacing: CookedSpacing.sm) {
-                if holdsPosition {
-                    Button {
-                        Haptics.tap()
-                        tradeSide = .sell
-                    } label: {
-                        Text("Sell")
-                    }
-                    .buttonStyle(.cookedPrimary(destructive: true))
-                }
+    private func positionStats(_ position: PaperPosition) -> [StatItem] {
+        [
+            StatItem(label: "Value", value: PriceFormat.usd(position.valueUsd)),
+            StatItem(label: "Quantity", value: PriceFormat.quantity(position.qty)),
+            StatItem(label: "Average cost", value: PriceFormat.price(position.avgCostUsd)),
+            StatItem(
+                label: "Return",
+                value: PriceFormat.change(position.unrealizedReturnPct),
+                color: Color.direction(position.unrealizedReturnPct)
+            ),
+        ]
+    }
 
-                Button {
+    // MARK: - Actions
+
+    /// Pinned to the bottom; content scrolling beneath fades out into black above
+    /// it so nothing visibly collides with the buttons.
+    private var actionBar: some View {
+        HStack(spacing: Space.s12) {
+            if position != nil {
+                Button("Sell") {
                     Haptics.tap()
-                    tradeSide = .buy
-                } label: {
-                    Text("Buy")
+                    tradeSide = .sell
                 }
-                .buttonStyle(.cookedPrimary)
+                .buttonStyle(.secondary)
             }
-            .padding(CookedSpacing.md)
-            .cookedGlass(in: Rectangle())
-            .overlay(Rectangle().fill(CookedColor.Terminal.border).frame(height: 1), alignment: .top)
+            Button {
+                Haptics.tap()
+                showsLeverage = true
+            } label: {
+                Label("Leverage", systemImage: "bolt.fill")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.secondary)
+            .accessibilityIdentifier("tokenDetail.leverage")
+            Button("Buy") {
+                Haptics.tap()
+                tradeSide = .buy
+            }
+            .buttonStyle(.primary)
+            .accessibilityIdentifier("tokenDetail.buy")
         }
+        .padding(.horizontal, Space.margin)
+        .padding(.top, Space.s24)
+        .padding(.bottom, Space.s8)
+        .background(
+            // The fade the spec asks for: transparent at the top edge to solid black
+            // behind the buttons.
+            LinearGradient(
+                stops: [.init(color: Color.appBackground.opacity(0), location: 0), .init(color: Color.appBackground, location: 0.35)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .bottom)
+        )
+    }
+
+    private var loadingState: some View {
+        VStack(alignment: .leading, spacing: Space.s12) {
+            SkeletonBlock(width: 48, height: 48, cornerRadius: 24)
+            SkeletonBlock(width: 180, height: 44)
+            SkeletonBlock(width: 140, height: 16)
+            SkeletonBlock(height: 220, cornerRadius: Radius.card)
+                .padding(.top, Space.s12)
+        }
+        .padding(.horizontal, Space.margin)
+        .padding(.top, Space.s8)
     }
 
     // MARK: - Loading
@@ -187,72 +365,39 @@ struct TokenDetailView: View {
         errorMessage = nil
         do {
             async let profileFetch = TokenAPI.profile(mint: mint)
-            async let candlesFetch = TokenAPI.candles(mint: mint, interval: interval)
-            async let watchFetch = loadIsWatched()
-            async let alertsFetch = loadAlertLevels()
+            async let candlesFetch = TokenAPI.candles(mint: mint, interval: range.interval, limit: range.limit)
             profile = try await profileFetch
             candles = try await candlesFetch
-            isWatched = await watchFetch
-            chartAlertLevels = await alertsFetch
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+        syncFeed()
     }
 
-    /// The caller's own active `price_crossed` alerts on this mint, drawn as levels on
-    /// the chart. `/social/alerts` has no per-mint filter, so this fetches the whole
-    /// list and filters client-side — the same "never for a guest, never fails the
-    /// screen" shape as `loadIsWatched`, since a chart is still useful with no alerts
-    /// drawn on it.
-    private func loadAlertLevels() async -> [ChartAlertLevel] {
-        guard !SessionStore.shared.isGuest else { return [] }
-        guard let alerts = try? await AlertsAPI.list() else { return [] }
-        return alerts.compactMap { alert in
-            guard case .priceCrossed(let alertMint, let direction, let priceUsd) = alert.rule, alertMint == mint else {
-                return nil
-            }
-            return ChartAlertLevel(id: alert.id, price: priceUsd, direction: direction)
+    /// Runs the live feed only while the LIVE range is showing and the app is in
+    /// the foreground; it resumes from the last seq it saw when either comes back.
+    private func syncFeed() {
+        if range == .live && scenePhase != .background {
+            feed.start()
+        } else {
+            feed.stop()
         }
     }
 
-    /// Hydrates the star from the server so a token already on the caller's watchlist
-    /// doesn't render unstarred on arrival. Never called for a guest (`/watchlist` is
-    /// `auth: 'bearer'`) and never fails the screen — see `DiscoverView`'s twin of
-    /// this.
-    private func loadIsWatched() async -> Bool {
-        guard !SessionStore.shared.isGuest else { return false }
-        guard let list = try? await WatchlistAPI.list() else { return false }
-        return list.items.contains { $0.mint == mint }
+    private static let isoFormatter = ISO8601DateFormatter()
+    private static let isoFormatterFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static func parseDate(_ raw: String) -> Date? {
+        isoFormatter.date(from: raw) ?? isoFormatterFractional.date(from: raw)
     }
 
     private func loadCandles() async {
-        candles = try? await TokenAPI.candles(mint: mint, interval: interval)
-    }
-
-    /// `/watchlist/*` is `auth: 'bearer'` — a guest token is rejected server-side, so
-    /// a guest never reaches the API here; they see the sign-in prompt instead.
-    private func toggleWatch() {
-        guard !SessionStore.shared.isGuest else {
-            showGuestWatchAlert = true
-            return
-        }
-
-        Haptics.tap()
-        let wasWatching = isWatched
-        isWatched.toggle()
-
-        Task {
-            do {
-                if wasWatching {
-                    _ = try await WatchlistAPI.remove(mint: mint)
-                } else {
-                    _ = try await WatchlistAPI.add(mint: mint)
-                }
-            } catch {
-                isWatched = wasWatching
-            }
-        }
+        candles = try? await TokenAPI.candles(mint: mint, interval: range.interval, limit: range.limit)
     }
 }
 

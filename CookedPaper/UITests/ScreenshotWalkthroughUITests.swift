@@ -34,44 +34,124 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
     func testOnboardingAndPaywall() throws {
         let app = XCUIApplication()
 
-        // `RootView` gates onboarding on `@AppStorage("hasSeenOnboarding")`, which
-        // reads straight from UserDefaults. There is no supported way to set an
-        // @AppStorage-backed value from the test side before the app reads it —
-        // `launchArguments`/`launchEnvironment` are both invisible to the property
-        // wrapper, which only observes UserDefaults itself. A fresh simulator
-        // install has no UserDefaults for this bundle at all, so the flag defaults
-        // to `false` and onboarding shows on its own — relying on that clean-
-        // install state is the reliable path here, not fighting UserDefaults from
-        // the test side.
+        // `RootView` gates onboarding on `@AppStorage("hasSeenOnboarding")`; a fresh
+        // simulator install has no UserDefaults for this bundle, so onboarding shows
+        // on its own. The mock API runs as a brand-new account ($10,000 cash, no
+        // positions) so the flow's buys land in a real, changing book.
+        app.launchEnvironment["UITEST_MOCK_API"] = "1"
+        app.launchEnvironment["UITEST_MOCK_FRESH"] = "1"
+        app.launchEnvironment["UITEST_STILL_FRAMES"] = "1"
         app.launch()
 
         var unreachedSteps: [String] = []
 
-        let nextButton = app.buttons["onboarding.next"]
-        if nextButton.waitForExistence(timeout: 15) {
-            attach(app, name: "01-onboarding")
-            nextButton.tap()
-            nextButton.tap()
-            attach(app, name: "02-onboarding-final")
+        func tapIfPresent(_ id: String, timeout: TimeInterval = 10) -> Bool {
+            let element = app.buttons[id]
+            guard element.waitForExistence(timeout: timeout) else {
+                unreachedSteps.append("\(id) never appeared")
+                return false
+            }
+            element.tap()
+            return true
+        }
 
-            let getStartedButton = app.buttons["onboarding.getStarted"]
-            if getStartedButton.waitForExistence(timeout: 5) {
-                getStartedButton.tap()
-            } else {
-                unreachedSteps.append("onboarding.getStarted never appeared")
+        if app.buttons["onboarding.balance.continue"].waitForExistence(timeout: 20) {
+            Thread.sleep(forTimeInterval: 1.8) // let the balance finish counting up
+            attach(app, name: "01-onboarding-balance")
+            _ = tapIfPresent("onboarding.balance.continue")
+        } else {
+            unreachedSteps.append("onboarding balance step never appeared")
+        }
+
+        // Practice round: a sped-up replay of real WIF history. Buy, let it run
+        // into the rally, then sell.
+        if app.buttons["onboarding.practice.buy"].waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.6)
+            attach(app, name: "02-onboarding-practice-ready")
+            _ = tapIfPresent("onboarding.practice.buy")
+            Thread.sleep(forTimeInterval: 8)
+            attach(app, name: "02-onboarding-practice-running")
+            _ = tapIfPresent("onboarding.practice.sell", timeout: 3)
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "02-onboarding-practice-result")
+            _ = tapIfPresent("onboarding.practice.continue")
+        } else {
+            unreachedSteps.append("practice round never appeared")
+        }
+
+        // Sign-in: everyone signs in before trading. Under the mock the Google
+        // button signs straight in (Google's own sheet can't be driven from a test).
+        if app.buttons["signin.google"].waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.8)
+            attach(app, name: "02-onboarding-signin")
+            app.buttons["signin.google"].tap()
+        } else {
+            unreachedSteps.append("sign-in step never appeared")
+        }
+
+        // A brand-new account picks a username (the mock's first sign-in of the run
+        // says `isNewAccount`). Swap the generated handle for a chosen one so the
+        // live availability check shows, then save it.
+        let profileContinue = app.buttons["profileSetup.continue"]
+        if profileContinue.waitForExistence(timeout: 10) {
+            Thread.sleep(forTimeInterval: 0.8)
+            attach(app, name: "02-onboarding-profile")
+            let usernameField = app.textFields["profile.username"]
+            if usernameField.waitForExistence(timeout: 3) {
+                // Tap the right edge so the cursor lands after the generated handle.
+                usernameField.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+                usernameField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 24))
+                usernameField.typeText("wifmaxi")
+                Thread.sleep(forTimeInterval: 1.2) // debounce + availability check
+                attach(app, name: "02-onboarding-profile-picked")
+            }
+            profileContinue.tap()
+            // If saving didn't move on (it shouldn't fail under the mock), skip
+            // rather than stall the rest of the walkthrough.
+            let skip = app.buttons["profileSetup.skip"]
+            if !app.buttons["onboarding.answer.little"].waitForExistence(timeout: 5), skip.exists {
+                skip.tap()
             }
         } else {
-            unreachedSteps.append("onboarding.next never appeared")
+            unreachedSteps.append("profile setup never appeared after a new-account sign-in")
+        }
+
+        if app.buttons["onboarding.answer.little"].waitForExistence(timeout: 10) {
+            Thread.sleep(forTimeInterval: 0.6)
+            attach(app, name: "02-onboarding-experience")
+            _ = tapIfPresent("onboarding.answer.little")
+        }
+
+        if app.buttons["onboarding.coin.0"].waitForExistence(timeout: 10) {
+            Thread.sleep(forTimeInterval: 0.6)
+            attach(app, name: "03-onboarding-pick")
+            for index in 0..<3 { _ = tapIfPresent("onboarding.coin.\(index)", timeout: 3) }
+            Thread.sleep(forTimeInterval: 0.4)
+            attach(app, name: "04-onboarding-picked")
+            _ = tapIfPresent("onboarding.buy")
+        } else {
+            unreachedSteps.append("coin list never appeared")
+        }
+
+        let keep = app.buttons["onboarding.keep"]
+        if keep.waitForExistence(timeout: 10) {
+            // Wait for every fill and a couple of live refreshes so the charts have shape.
+            let enabled = NSPredicate(format: "isEnabled == true")
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: keep)], timeout: 20)
+            Thread.sleep(forTimeInterval: 7)
+            attach(app, name: "05-onboarding-portfolio")
+            keep.tap()
+        } else {
+            unreachedSteps.append("onboarding.keep never appeared")
         }
 
         // No StoreKit Configuration reaches the process under `xcodebuild test`
-        // (see the class doc comment), so `store.products` is reliably empty here
-        // and this screenshot will show the paywall's hero/features but no plan
-        // cards and a disabled Subscribe button — that is the accurate, expected
-        // CI result, not a bug to chase. This test stops here on purpose.
+        // (see the class doc comment), so the plan list can't load here; this
+        // screenshot shows the personalized header and the no-plans state.
         let subscribeButton = app.buttons["paywall.subscribeButton"]
         if subscribeButton.waitForExistence(timeout: 15) {
-            attach(app, name: "03-paywall")
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "06-paywall")
         } else {
             unreachedSteps.append("paywall.subscribeButton never appeared")
         }
@@ -87,19 +167,21 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         // The DEBUG-only escape hatch in SubscriptionStore.refreshEntitlement() --
         // only this test process ever sets this, so it can't reach a Release build.
         app.launchEnvironment["UITEST_BYPASS_PAYWALL"] = "1"
+        // Serve every API call from the in-app demo fixtures (see MockAPI.swift):
+        // the production backend isn't reachable from CI, and without this every
+        // data-backed screen screenshots as an empty/error state.
+        app.launchEnvironment["UITEST_MOCK_API"] = "1"
+        // Freezes ambient loops (see AmbientMotion) so the app can go idle between
+        // steps and every screenshot is deterministic.
+        app.launchEnvironment["UITEST_STILL_FRAMES"] = "1"
         app.launch()
 
         var unreachedSteps: [String] = []
 
-        // With the bypass active, RootView goes straight to AppShellView on first
-        // render -- no onboarding, no paywall -- but the app still has to
-        // bootstrap a guest paper portfolio over the real network
-        // (PortfolioStore.bootstrapIfNeeded), which is slower and genuinely
-        // uncertain in a CI sandbox, hence the generous timeout and a loud,
-        // specific failure rather than silently falling through with no
-        // screenshot if it never shows up.
-        let discoverTab = app.tabBars.buttons["Discover"]
+        let discoverTab = app.buttons["tab.discover"]
         if discoverTab.waitForExistence(timeout: 20) {
+            _ = app.buttons["discover.row.0"].waitForExistence(timeout: 10)
+            Thread.sleep(forTimeInterval: 1)
             attach(app, name: "04-discover")
         } else {
             XCTFail("Main tab bar never appeared within 20s of a bypassed launch.")
@@ -108,17 +190,72 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
 
         // From here on, a missing element is treated as a flaky wait rather than a
         // reason to abort: each step screenshots whatever is on screen and moves on
-        // to the next one, so one slow network call doesn't cost every screenshot
-        // after it. Failures are collected and reported together at the end
-        // instead, so the test's pass/fail status still reflects what happened.
+        // to the next one, so one slow call doesn't cost every screenshot after it.
+        // Failures are collected and reported together at the end instead, so the
+        // test's pass/fail status still reflects what happened.
+        let moversChip = app.buttons["Movers"]
+        if moversChip.waitForExistence(timeout: 5) {
+            moversChip.tap()
+            Thread.sleep(forTimeInterval: 0.8)
+            attach(app, name: "05-discover-movers")
+            app.buttons["Active"].firstMatch.tap()
+        } else {
+            unreachedSteps.append("Movers feed chip never appeared")
+        }
+
+        visitSearch(app, unreachedSteps: &unreachedSteps)
         visitFirstDiscoverRow(app, unreachedSteps: &unreachedSteps)
-        visitTab(app, label: "Portfolio", screenshotName: "06-portfolio", unreachedSteps: &unreachedSteps)
-        visitTab(app, label: "Leaderboard", screenshotName: "07-leaderboard", unreachedSteps: &unreachedSteps)
-        visitTab(app, label: "Settings", screenshotName: "08-settings", unreachedSteps: &unreachedSteps)
+        visitTab(app, label: "Portfolio", screenshotName: "09-portfolio", unreachedSteps: &unreachedSteps)
+        app.swipeUp()
+        Thread.sleep(forTimeInterval: 0.6)
+        attach(app, name: "10-portfolio-scrolled")
+        let leveragedRow = app.buttons["portfolio.leveraged.0"]
+        if leveragedRow.waitForExistence(timeout: 3) {
+            if !leveragedRow.isHittable { app.swipeUp() }
+            leveragedRow.tap()
+            Thread.sleep(forTimeInterval: 1.2)
+            attach(app, name: "10b-leveraged-position")
+            let close = app.buttons["Close"].firstMatch
+            if close.waitForExistence(timeout: 3) { close.tap() } else { app.swipeDown() }
+            Thread.sleep(forTimeInterval: 0.8)
+        } else {
+            unreachedSteps.append("no leveraged position row in Portfolio")
+        }
+        visitTab(app, label: "Leaderboard", screenshotName: "11-leaderboard", unreachedSteps: &unreachedSteps)
+        visitTab(app, label: "Settings", screenshotName: "12-settings", unreachedSteps: &unreachedSteps)
+        visitProfile(app, unreachedSteps: &unreachedSteps)
 
         if !unreachedSteps.isEmpty {
             XCTFail("Main-app walkthrough didn't fully complete: \(unreachedSteps.joined(separator: "; "))")
         }
+    }
+
+    @MainActor
+    private func visitSearch(_ app: XCUIApplication, unreachedSteps: inout [String]) {
+        let searchField = app.searchFields.firstMatch
+        guard searchField.waitForExistence(timeout: 3) else {
+            unreachedSteps.append("no search field on Discover")
+            return
+        }
+        searchField.tap()
+        searchField.typeText("o")
+        Thread.sleep(forTimeInterval: 1.2)
+        attach(app, name: "06-discover-search")
+
+        // Back to the feed: clear the query, dismiss the keyboard, leave search mode.
+        // iOS versions differ on which of these controls exist, so try each.
+        // Delete the query, then press the keyboard's Search/return key (typing a
+        // newline does that), which submits and dismisses the keyboard.
+        searchField.typeText(XCUIKeyboardKey.delete.rawValue)
+        searchField.typeText("\n")
+        for label in ["Cancel", "Close"] {
+            let button = app.buttons[label].firstMatch
+            if button.exists && button.isHittable {
+                button.tap()
+                break
+            }
+        }
+        Thread.sleep(forTimeInterval: 0.8)
     }
 
     @MainActor
@@ -131,29 +268,108 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
 
     @MainActor
     private func visitFirstDiscoverRow(_ app: XCUIApplication, unreachedSteps: inout [String]) {
-        // `app.tables.cells` would miss this if DiscoverView's List ever renders as a
-        // plain container instead of a table-backed accessibility tree; `app.cells`
-        // matches a cell regardless of the underlying container type.
-        let firstRow = app.cells.firstMatch
+        // Discover's feed is a glass panel in a ScrollView, not a List, so its rows
+        // are found by their `discover.row.N` identifiers rather than as cells.
+        let firstRow = app.buttons["discover.row.0"]
         guard firstRow.waitForExistence(timeout: 10) else {
             unreachedSteps.append("no row in the Discover list to open")
-            attach(app, name: "05-token-detail")
+            attach(app, name: "07-token-detail")
             return
         }
+        if !firstRow.isHittable { app.swipeUp() }
         firstRow.tap()
 
         // The nav bar lands before the chart/network calls it triggers finish, so wait
         // a beat past its appearance rather than screenshotting a bare spinner.
         _ = app.navigationBars.firstMatch.waitForExistence(timeout: 8)
         Thread.sleep(forTimeInterval: 1.5)
-        attach(app, name: "05-token-detail")
+        attach(app, name: "07-token-detail")
 
-        let backButton = app.navigationBars.buttons.firstMatch
+        let buyButton = app.buttons["tokenDetail.buy"].firstMatch
+        if buyButton.waitForExistence(timeout: 5) {
+            buyButton.tap()
+            Thread.sleep(forTimeInterval: 1.2)
+            attach(app, name: "08-trade-sheet")
+            let cancel = app.buttons["Cancel"].firstMatch
+            if cancel.waitForExistence(timeout: 3) {
+                cancel.tap()
+            } else {
+                app.swipeDown()
+            }
+            Thread.sleep(forTimeInterval: 0.8)
+        } else {
+            unreachedSteps.append("no Buy button on the token detail screen")
+        }
+
+        visitLeverageSheet(app, unreachedSteps: &unreachedSteps)
+
+        let backButton = app.navigationBars.buttons.element(boundBy: 0)
         if backButton.waitForExistence(timeout: 3) {
             backButton.tap()
         } else {
             unreachedSteps.append("no back button found on the token detail screen")
         }
+    }
+
+    /// Token detail → Leverage: 5x long with $500 of margin, quoted live, then opened.
+    @MainActor
+    private func visitLeverageSheet(_ app: XCUIApplication, unreachedSteps: inout [String]) {
+        let leverageButton = app.buttons["tokenDetail.leverage"].firstMatch
+        guard leverageButton.waitForExistence(timeout: 5) else {
+            unreachedSteps.append("no Leverage button on the token detail screen")
+            return
+        }
+        leverageButton.tap()
+        guard app.buttons["leverage.open"].waitForExistence(timeout: 5) else {
+            unreachedSteps.append("leverage sheet never appeared")
+            return
+        }
+        for key in ["5", "0", "0"] { app.buttons[key].firstMatch.tap() }
+        Thread.sleep(forTimeInterval: 1.5) // debounce + quote
+        attach(app, name: "08b-leverage-sheet")
+        app.buttons["leverage.open"].tap()
+        if app.buttons["leverage.done"].waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.6)
+            attach(app, name: "08c-leverage-opened")
+            app.buttons["leverage.done"].tap()
+        } else {
+            unreachedSteps.append("leverage position never opened")
+            let cancel = app.buttons["Cancel"].firstMatch
+            if cancel.exists { cancel.tap() }
+        }
+        Thread.sleep(forTimeInterval: 0.8)
+    }
+
+    /// Settings → Profile, then its Edit Profile sheet.
+    @MainActor
+    private func visitProfile(_ app: XCUIApplication, unreachedSteps: inout [String]) {
+        // A NavigationLink in a List can surface as a button or a cell, so match
+        // the identifier on any element type.
+        let profileRow = app.descendants(matching: .any)["settings.profile"].firstMatch
+        guard profileRow.waitForExistence(timeout: 5) else {
+            unreachedSteps.append("no Profile row in Settings")
+            return
+        }
+        profileRow.tap()
+        let edit = app.buttons["profile.edit"]
+        guard edit.waitForExistence(timeout: 5) else {
+            unreachedSteps.append("profile screen never appeared")
+            return
+        }
+        Thread.sleep(forTimeInterval: 1) // GET /auth/me fills in the join date and referral code
+        attach(app, name: "13-profile")
+        edit.tap()
+        if app.textFields["profile.username"].waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.8)
+            attach(app, name: "14-edit-profile")
+            let cancel = app.buttons["Cancel"].firstMatch
+            if cancel.waitForExistence(timeout: 3) { cancel.tap() } else { app.swipeDown() }
+            Thread.sleep(forTimeInterval: 0.8)
+        } else {
+            unreachedSteps.append("edit profile sheet never appeared")
+        }
+        let backButton = app.navigationBars.buttons.element(boundBy: 0)
+        if backButton.waitForExistence(timeout: 3) { backButton.tap() }
     }
 
     @MainActor
@@ -163,7 +379,8 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         screenshotName: String,
         unreachedSteps: inout [String]
     ) {
-        let tabButton = app.tabBars.buttons[label]
+        // The app draws its own floating tab bar; its buttons carry `tab.<name>` ids.
+        let tabButton = app.buttons["tab.\(label.lowercased())"]
         guard tabButton.waitForExistence(timeout: 5) else {
             unreachedSteps.append("\(label) tab button never appeared")
             attach(app, name: screenshotName)

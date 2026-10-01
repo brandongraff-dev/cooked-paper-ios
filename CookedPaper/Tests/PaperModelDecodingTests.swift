@@ -110,6 +110,9 @@ struct PaperModelDecodingTests {
         #expect(decoded.stats.maxDrawdownPct.pct == nil)
         #expect(decoded.stats.tradeCount == 5)
         #expect(decoded.equityCurve.points.count == 2)
+        // A server without leverage omits these keys entirely; that must still decode.
+        #expect(decoded.leveragedPositions == nil)
+        #expect(decoded.leveragedValueUsd == nil)
     }
 
     @Test(arguments: ["buy", "sell"])
@@ -181,5 +184,57 @@ struct PaperModelDecodingTests {
         #expect(decoded.trades[0].side == .buy)
         #expect(decoded.trades[1].side == .sell)
         #expect(decoded.trades[0].marketCapUsd == Decimal(string: "125000000.50"))
+    }
+
+    @Test func decodesALiquidatableLongAndAnUnmeasuredShort() throws {
+        let json = Data(
+            """
+            {
+              "positions": [
+                {
+                  "id": "lev_1", "tokenMint": "Mint1", "chain": "solana",
+                  "token": {"mint": "Mint1", "symbol": "WIF", "name": "dogwifhat", "hasLogo": true, "isVerified": true},
+                  "direction": "long", "leverage": 5, "status": "open", "source": "manual",
+                  "entryPriceUsd": "1.745", "entryMidPriceUsd": "1.74", "qtyOpened": "1432.66", "qty": "1432.66",
+                  "notionalUsd": "2500.00", "marginUsd": "500.00", "initialMarginUsd": "500.00",
+                  "maintenanceMarginBps": 100, "liquidationPriceUsd": "1.41010101", "bankruptcyPriceUsd": "1.396",
+                  "markPriceUsd": "1.8342", "markState": "fresh", "markAgeMs": 900, "markFromLastFill": false,
+                  "valueUsd": "627.79", "unrealizedPnlUsd": "127.79", "unrealizedReturnOnMarginPct": "25.56",
+                  "unrealizedUnavailable": null, "distanceToLiquidationPct": "-23.12",
+                  "realizedPnlUsd": "0", "shortfallUsd": "0", "liquidityUsd": "22014330",
+                  "openedAt": "2026-09-28T10:00:00Z", "closedAt": null, "fills": []
+                },
+                {
+                  "id": "lev_2", "tokenMint": "Mint2", "chain": "solana", "token": null,
+                  "direction": "short", "leverage": 10, "status": "open", "source": "manual",
+                  "entryPriceUsd": "0.0000225", "entryMidPriceUsd": "0.0000225", "qtyOpened": "133333333", "qty": "133333333",
+                  "notionalUsd": "3000.00", "marginUsd": "300.00", "initialMarginUsd": "300.00",
+                  "maintenanceMarginBps": 100, "liquidationPriceUsd": "0.0000245", "bankruptcyPriceUsd": "0.00002475",
+                  "markPriceUsd": null, "markState": null, "markAgeMs": null, "markFromLastFill": true,
+                  "valueUsd": "300.00", "unrealizedPnlUsd": null, "unrealizedReturnOnMarginPct": null,
+                  "unrealizedUnavailable": "unmeasured", "distanceToLiquidationPct": null,
+                  "realizedPnlUsd": "0", "shortfallUsd": "0", "liquidityUsd": null,
+                  "openedAt": "2026-09-28T10:00:00Z", "closedAt": null, "fills": []
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(PaperLeveragedListResponse.self, from: json)
+        #expect(decoded.positions.count == 2)
+
+        let long = decoded.positions[0]
+        #expect(long.direction == .long)
+        #expect(long.label == "5x Long")
+        #expect(long.liquidationPriceUsd == Decimal(string: "1.41010101"))
+        #expect(long.unrealizedPnlUsd == Decimal(string: "127.79"))
+
+        // Unmeasured is nil, never zero.
+        let short = decoded.positions[1]
+        #expect(short.direction == .short)
+        #expect(short.markPriceUsd == nil)
+        #expect(short.unrealizedPnlUsd == nil)
+        #expect(short.distanceToLiquidationPct == nil)
     }
 }

@@ -1,10 +1,9 @@
 import Foundation
 import Observation
 
-/// The app's one active paper portfolio. `PaperAPI.starter()` is idempotent and safe
-/// to call on every cold launch — it returns the caller's existing portfolio once one
-/// exists, so this bootstraps a brand-new guest exactly once and is a no-op
-/// thereafter. `snapshot` is REST-driven (refreshed after every trade and on pull-to-
+/// The signed-in account's one paper portfolio. `PaperAPI.starter()` is idempotent
+/// and safe to call on every launch — it returns the account's existing portfolio
+/// once one exists, and creates it (with $10,000) the first time. `snapshot` is REST-driven (refreshed after every trade and on pull-to-
 /// refresh); live price color comes separately from `LiveSocket.shared.latestTick` —
 /// see `Features/Portfolio/PortfolioView.swift` for how the two are merged for
 /// display without this store needing to reconcile them itself.
@@ -28,10 +27,11 @@ final class PortfolioStore {
         isBootstrapping = true
         error = nil
         do {
-            let starter = try await PaperAPI.starter()
-            if let guestToken = starter.guestToken, SessionStore.shared.isGuest {
-                SessionStore.shared.adoptGuestToken(guestToken)
+            guard SessionStore.shared.isSignedIn else {
+                isBootstrapping = false
+                return
             }
+            let starter = try await PaperAPI.starter()
             SessionStore.shared.setActivePortfolio(starter.portfolio.id)
             try await refresh()
             LiveSocket.shared.connectAndSubscribe(portfolioId: starter.portfolio.id)
@@ -52,12 +52,18 @@ final class PortfolioStore {
         try? await refresh()
     }
 
-    /// After sign-out: drop the in-memory snapshot and re-run the full bootstrap,
-    /// which mints a fresh guest session against whatever `SessionStore` now holds
-    /// (nothing, post-`clear()`).
+    /// After sign-in (or reset): drop the in-memory snapshot and load the account's
+    /// portfolio from scratch.
     func resetAndRebootstrap() async {
         snapshot = nil
         LiveSocket.shared.disconnect()
         await bootstrap()
+    }
+
+    /// After sign-out or account deletion.
+    func signedOut() {
+        snapshot = nil
+        error = nil
+        LiveSocket.shared.disconnect()
     }
 }

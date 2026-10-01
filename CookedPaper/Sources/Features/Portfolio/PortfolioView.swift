@@ -1,16 +1,14 @@
-import Charts
 import Foundation
 import SwiftUI
 
 struct PortfolioView: View {
     private let portfolioStore = PortfolioStore.shared
     private let live = LiveSocket.shared
-    @State private var animatedRowIDs: Set<String> = []
+    @State private var scrubIndex: Int?
+    @State private var selectedLeveraged: LeveragedSelection?
 
     var body: some View {
-        ZStack {
-            CookedColor.Terminal.bgBase.ignoresSafeArea()
-
+        Group {
             if portfolioStore.isBootstrapping {
                 skeleton
             } else if let snapshot = portfolioStore.snapshot {
@@ -19,126 +17,163 @@ struct PortfolioView: View {
                 EmptyStateView(symbol: "wifi.slash", title: "Couldn't load your portfolio", detail: error)
             }
         }
-        .navigationTitle(portfolioStore.snapshot?.portfolio.name ?? "Portfolio")
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.appBackground)
+        .reservesTabBarSpace()
+        .navigationTitle("Portfolio")
         .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { SimulatedBadge() }
+        .navigationDestination(for: String.self) { mint in
+            TokenDetailView(mint: mint)
+        }
+        .sheet(item: $selectedLeveraged) { selection in
+            LeveragedPositionSheet(positionId: selection.id)
         }
     }
 
     private func content(_ snapshot: PaperSnapshotResponse) -> some View {
-        List {
-            Section {
-                equityHeader(snapshot)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Space.section) {
+                header(snapshot)
 
-                if snapshot.equityCurve.points.count > 1 {
-                    EquitySparkline(points: snapshot.equityCurve.points)
-                        .frame(height: 100)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                VStack(alignment: .leading, spacing: Space.headerGap) {
+                    SectionHeader(title: "Stats")
+                    StatGrid(items: stats(snapshot))
                 }
-            }
 
-            if snapshot.positions.isEmpty {
-                Section {
-                    EmptyStateView(
-                        symbol: "chart.pie",
-                        title: "No open positions",
-                        detail: "Head to Discover and make your first trade — it's instant, and it's not real money."
-                    )
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                }
-            } else {
-                Section("Positions") {
-                    ForEach(Array(snapshot.positions.enumerated()), id: \.element.id) { index, position in
-                        NavigationLink(value: position.tokenMint) {
-                            PositionRow(position: position, live: livePosition(for: position.tokenMint))
+                VStack(alignment: .leading, spacing: Space.headerGap) {
+                    SectionHeader(title: "Positions")
+                    if snapshot.positions.isEmpty {
+                        EmptyStateView(
+                            symbol: "chart.pie",
+                            title: "No open positions",
+                            detail: "Find a token in Discover and make your first trade."
+                        )
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(Array(snapshot.positions.enumerated()), id: \.element.id) { index, position in
+                                NavigationLink(value: position.tokenMint) {
+                                    PositionRow(position: position, live: livePosition(for: position.tokenMint))
+                                }
+                                .buttonStyle(.pressable)
+                                if index < snapshot.positions.count - 1 { RowSeparator() }
+                            }
                         }
-                        .listRowBackground(CookedColor.Terminal.bgSurface)
-                        .staggeredEntrance(index: index, id: position.id, animatedIDs: $animatedRowIDs)
                     }
                 }
-            }
 
-            if !snapshot.roundTrips.isEmpty {
-                Section("Recently closed") {
-                    ForEach(Array(snapshot.roundTrips.prefix(10).enumerated()), id: \.element.id) { offset, roundTrip in
-                        RoundTripRow(roundTrip: roundTrip)
-                            .listRowBackground(CookedColor.Terminal.bgSurface)
-                            .staggeredEntrance(
-                                index: snapshot.positions.count + offset,
-                                id: roundTrip.id,
-                                animatedIDs: $animatedRowIDs
-                            )
+                let leveraged = snapshot.leveragedPositions ?? []
+                if !leveraged.isEmpty {
+                    VStack(alignment: .leading, spacing: Space.headerGap) {
+                        SectionHeader(
+                            title: "Leverage",
+                            caption: snapshot.lockedMarginUsd.map { "\(PriceFormat.usd($0)) margin" }
+                        )
+                        VStack(spacing: 0) {
+                            ForEach(Array(leveraged.enumerated()), id: \.element.id) { index, position in
+                                Button {
+                                    Haptics.tap()
+                                    selectedLeveraged = LeveragedSelection(id: position.id)
+                                } label: {
+                                    LeveragedPositionRow(position: position)
+                                }
+                                .buttonStyle(.pressable)
+                                .accessibilityIdentifier("portfolio.leveraged.\(index)")
+                                if index < leveraged.count - 1 { RowSeparator() }
+                            }
+                        }
+                    }
+                }
+
+                let closedLeveraged = Array((snapshot.leveragedRoundTrips ?? []).prefix(5))
+                if !snapshot.roundTrips.isEmpty || !closedLeveraged.isEmpty {
+                    let closed = Array(snapshot.roundTrips.prefix(10))
+                    VStack(alignment: .leading, spacing: Space.headerGap) {
+                        SectionHeader(title: "Recently closed")
+                        VStack(spacing: 0) {
+                            ForEach(Array(closedLeveraged.enumerated()), id: \.element.id) { index, roundTrip in
+                                LeveragedRoundTripRow(roundTrip: roundTrip)
+                                if index < closedLeveraged.count - 1 || !closed.isEmpty { RowSeparator() }
+                            }
+                            ForEach(Array(closed.enumerated()), id: \.element.id) { index, roundTrip in
+                                RoundTripRow(roundTrip: roundTrip)
+                                if index < closed.count - 1 { RowSeparator() }
+                            }
+                        }
                     }
                 }
             }
+            .padding(.horizontal, Space.margin)
+            .padding(.top, Space.s8)
+            .padding(.bottom, Space.section)
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
         .refreshable { try? await portfolioStore.refresh() }
-        .navigationDestination(for: String.self) { mint in
-            TokenDetailView(mint: mint)
-        }
     }
 
-    /// Shaped like `content(_:)`'s own `List` — same style, same section chrome — so
-    /// swapping in the real snapshot doesn't reflow or "pop" the screen.
-    private var skeleton: some View {
-        List {
-            Section {
-                VStack(spacing: CookedSpacing.xs) {
-                    SkeletonView().frame(width: 90, height: 12)
-                    SkeletonView().frame(width: 170, height: 36)
-                    SkeletonView().frame(width: 130, height: 14)
-                    SkeletonView().frame(width: 150, height: 12)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, CookedSpacing.md)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            }
+    // MARK: - Header
 
-            Section("Positions") {
-                ForEach(0..<4, id: \.self) { _ in
-                    SkeletonRow()
-                        .listRowBackground(CookedColor.Terminal.bgSurface)
-                }
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-    }
-
-    private func equityHeader(_ snapshot: PaperSnapshotResponse) -> some View {
+    private func header(_ snapshot: PaperSnapshotResponse) -> some View {
         let equity = live.latestTick?.equityUsd ?? snapshot.equityUsd
-        let cash = live.latestTick?.cashUsd ?? snapshot.cashUsd
-        let unrealized = snapshot.stats.unrealizedPnlUsd.usd
+        let values = snapshot.equityCurve.points.map { NSDecimalNumber(decimal: $0.equityUsd).doubleValue }
+        let scrubbed: Double? = scrubIndex.flatMap { values.indices.contains($0) ? values[$0] : nil }
+        let shownEquity = scrubbed.map { Decimal($0) } ?? equity
+        let start = snapshot.portfolio.startingBalanceUsd
+        let change = shownEquity - start
+        let percent: Decimal? = start > 0 ? change / start * 100 : nil
 
-        return VStack(spacing: CookedSpacing.xs) {
-            Text("Total equity")
-                .font(CookedFont.caption())
-                .foregroundStyle(CookedColor.Terminal.textMuted)
-            Text(equity.usdString())
-                .font(CookedFont.priceDisplay(40))
-                .foregroundStyle(CookedColor.Terminal.textPrimary)
-            HStack(spacing: CookedSpacing.xs) {
-                PnLText(value: unrealized, isPercent: false, font: CookedFont.priceMedium())
-                if let pct = snapshot.stats.returnPct.pct {
-                    Text("(\(pct.signedPercentString()) all-time)")
-                        .font(CookedFont.caption())
-                        .foregroundStyle(CookedColor.Terminal.textMuted)
+        return VStack(alignment: .leading, spacing: Space.s24) {
+            VStack(alignment: .leading, spacing: Space.s8) {
+                SimulatedCaption()
+                Text(PriceFormat.usd(shownEquity))
+                    .heroPriceStyle()
+                    .foregroundStyle(Color.textPrimary)
+                    .contentTransition(.numericText())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                HStack(spacing: Space.s4) {
+                    Text("\(PriceFormat.signedUSD(change)) (\(PriceFormat.change(percent)))")
+                        .foregroundStyle(Color.direction(percent))
+                        .contentTransition(.numericText())
+                    Text(scrubIndex == nil ? "All time" : "At this point")
+                        .foregroundStyle(Color.textSecondary)
                 }
+                .font(.rowSubvalue)
             }
-            Text("\(cash.usdString()) cash available")
-                .font(CookedFont.caption())
-                .foregroundStyle(CookedColor.Terminal.textMuted)
+
+            if values.count > 1 {
+                PriceLineChart(values: values, selectedIndex: $scrubIndex)
+                    .frame(height: 160)
+                    .padding(.horizontal, -Space.margin)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, CookedSpacing.md)
+    }
+
+    private func stats(_ snapshot: PaperSnapshotResponse) -> [StatItem] {
+        let cash = live.latestTick?.cashUsd ?? snapshot.cashUsd
+        let stats = snapshot.stats
+        return [
+            StatItem(label: "Cash", value: PriceFormat.usd(cash)),
+            StatItem(
+                label: "Unrealized P&L",
+                value: stats.unrealizedPnlUsd.usd.map(PriceFormat.signedUSD) ?? "—",
+                color: Color.direction(stats.unrealizedPnlUsd.usd)
+            ),
+            StatItem(label: "Win rate", value: stats.winRatePct.pct.map { "\($0.formatted(.number.precision(.fractionLength(0))))%" } ?? "—"),
+            StatItem(label: "Trades", value: "\(stats.tradeCount)"),
+        ]
+    }
+
+    private var skeleton: some View {
+        VStack(alignment: .leading, spacing: Space.s12) {
+            SkeletonBlock(width: 120, height: 14)
+            SkeletonBlock(width: 220, height: 44)
+            SkeletonBlock(width: 160, height: 16)
+            SkeletonBlock(height: 160, cornerRadius: Radius.card)
+                .padding(.bottom, Space.s24)
+            ForEach(0..<4, id: \.self) { _ in SkeletonRow() }
+        }
+        .padding(.horizontal, Space.margin)
+        .padding(.top, Space.s8)
     }
 
     private func livePosition(for mint: String) -> LivePosition? {
@@ -146,25 +181,7 @@ struct PortfolioView: View {
     }
 }
 
-private struct EquitySparkline: View {
-    let points: [EquityPoint]
-
-    var body: some View {
-        Chart(points) { point in
-            LineMark(x: .value("Time", point.at), y: .value("Equity", NSDecimalNumber(decimal: point.equityUsd).doubleValue))
-                .foregroundStyle(CookedColor.Terminal.accent)
-                .interpolationMethod(.monotone)
-            AreaMark(x: .value("Time", point.at), y: .value("Equity", NSDecimalNumber(decimal: point.equityUsd).doubleValue))
-                .foregroundStyle(
-                    LinearGradient(colors: [CookedColor.Terminal.accent.opacity(0.25), .clear], startPoint: .top, endPoint: .bottom)
-                )
-                .interpolationMethod(.monotone)
-        }
-        .chartXAxis(.hidden)
-        .chartYAxis(.hidden)
-    }
-}
-
+/// Avatar | symbol over quantity | value over return.
 private struct PositionRow: View {
     let position: PaperPosition
     let live: LivePosition?
@@ -172,25 +189,18 @@ private struct PositionRow: View {
     private var unrealizedPct: Decimal? { live?.unrealizedPnlPct ?? position.unrealizedReturnPct }
 
     var body: some View {
-        HStack(spacing: CookedSpacing.sm) {
-            TokenLogo(mint: position.tokenMint, size: 36)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(position.token?.symbol ?? "?")
-                    .font(CookedFont.headline())
-                    .foregroundStyle(CookedColor.Terminal.textPrimary)
-                Text("\(position.qty.formatted()) @ \(position.avgCostUsd.usdString(fractionDigits: position.avgCostUsd < 1 ? 6 : 2))")
-                    .font(CookedFont.caption())
-                    .foregroundStyle(CookedColor.Terminal.textMuted)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(position.valueUsd.usdString())
-                    .font(CookedFont.priceMedium())
-                    .foregroundStyle(CookedColor.Terminal.textPrimary)
-                PnLText(value: unrealizedPct, isPercent: true, font: CookedFont.caption())
-            }
+        ListRow(
+            title: position.token?.symbol ?? "?",
+            subtitle: "\(PriceFormat.quantity(position.qty)) tokens"
+        ) {
+            TokenAvatar(mint: position.tokenMint, symbol: position.token?.symbol)
+        } trailing: {
+            Text(PriceFormat.usd(position.valueUsd))
+                .font(.rowValue)
+                .foregroundStyle(Color.textPrimary)
+                .contentTransition(.numericText())
+            ChangeText(percent: unrealizedPct)
         }
-        .padding(.vertical, 2)
     }
 }
 
@@ -198,13 +208,85 @@ private struct RoundTripRow: View {
     let roundTrip: PaperRoundTrip
 
     var body: some View {
-        HStack(spacing: CookedSpacing.sm) {
-            TokenLogo(mint: roundTrip.tokenMint, size: 28)
-            Text(roundTrip.token?.symbol ?? "?")
-                .font(CookedFont.body())
-                .foregroundStyle(CookedColor.Terminal.textPrimary)
-            Spacer()
-            PnLText(value: roundTrip.realizedPnlUsd, isPercent: false, font: CookedFont.priceSmall())
+        ListRow(
+            title: roundTrip.token?.symbol ?? "?",
+            subtitle: roundTrip.returnPct.map { "\(PriceFormat.change($0)) return" }
+        ) {
+            TokenAvatar(mint: roundTrip.tokenMint, symbol: roundTrip.token?.symbol)
+        } trailing: {
+            Text(PriceFormat.signedUSD(roundTrip.realizedPnlUsd))
+                .font(.rowValue)
+                .foregroundStyle(Color.direction(roundTrip.realizedPnlUsd))
+        }
+    }
+}
+
+private struct LeveragedSelection: Identifiable {
+    let id: String
+}
+
+/// Avatar | symbol + "5x Long" over liquidation distance | value over return on margin.
+private struct LeveragedPositionRow: View {
+    let position: PaperLeveragedPosition
+
+    private var subtitle: String {
+        guard let distance = position.distanceToLiquidationPct else {
+            return "Liq. \(PriceFormat.price(position.liquidationPriceUsd))"
+        }
+        let away = abs(distance).formatted(.number.precision(.fractionLength(1)))
+        return "Liq. \(PriceFormat.price(position.liquidationPriceUsd)) · \(away)% away"
+    }
+
+    var body: some View {
+        HStack(spacing: Metrics.avatarGap) {
+            TokenAvatar(mint: position.tokenMint, symbol: position.token?.symbol)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: Space.s8) {
+                    Text(position.symbol)
+                        .font(.rowTitle)
+                        .foregroundStyle(Color.textPrimary)
+                    LeverageBadge(position: position)
+                }
+                Text(subtitle)
+                    .font(.rowSubvalue)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: Space.s8)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(PriceFormat.usd(position.valueUsd))
+                    .font(.rowValue)
+                    .foregroundStyle(Color.textPrimary)
+                    .contentTransition(.numericText())
+                if position.unrealizedPnlUsd == nil {
+                    Text("Unmeasured")
+                        .font(.rowSubvalue)
+                        .foregroundStyle(Color.textTertiary)
+                } else {
+                    ChangeText(percent: position.unrealizedReturnOnMarginPct)
+                }
+            }
+        }
+        .frame(minHeight: Metrics.rowHeight)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct LeveragedRoundTripRow: View {
+    let roundTrip: PaperLeveragedRoundTrip
+
+    var body: some View {
+        ListRow(
+            title: roundTrip.token?.symbol ?? "?",
+            subtitle: roundTrip.isLiquidated
+                ? "\(roundTrip.leverage)x \(roundTrip.direction.title) · Liquidated"
+                : "\(roundTrip.leverage)x \(roundTrip.direction.title) · \(PriceFormat.change(roundTrip.returnOnMarginPct)) on margin"
+        ) {
+            TokenAvatar(mint: roundTrip.tokenMint, symbol: roundTrip.token?.symbol)
+        } trailing: {
+            Text(PriceFormat.signedUSD(roundTrip.realizedPnlUsd))
+                .font(.rowValue)
+                .foregroundStyle(Color.direction(roundTrip.realizedPnlUsd))
         }
     }
 }

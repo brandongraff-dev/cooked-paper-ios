@@ -8,6 +8,9 @@ import Foundation
 struct APIErrorBody: Decodable {
     let error: String
     let message: String
+    /// Detail the server spreads next to `error`, e.g. `reason: "insufficient_cash"`.
+    var reason: String? = nil
+    var status: String? = nil
 }
 
 enum APIError: Error, LocalizedError {
@@ -29,6 +32,12 @@ enum APIError: Error, LocalizedError {
     /// (`bad_request`, `not_found`, …) is handled generically via `errorDescription`.
     var code: String? {
         if case .server(_, let body) = self { return body.error }
+        return nil
+    }
+
+    /// The server's machine-readable `reason`, when it sent one.
+    var reason: String? {
+        if case .server(_, let body) = self { return body.reason }
         return nil
     }
 }

@@ -1,12 +1,21 @@
+import GoogleSignIn
 import SwiftUI
 
 @main
 struct CookedPaperApp: App {
+    init() {
+        #if DEBUG
+        MockAPI.prepareSessionIfNeeded()
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
                 .preferredColorScheme(.dark)
                 .onOpenURL { url in
+                    // Google's sign-in callback comes back as a URL too.
+                    if GIDSignIn.sharedInstance.handle(url) { return }
                     DeepLinkRouter.shared.handle(url)
                 }
         }
@@ -19,31 +28,41 @@ struct CookedPaperApp: App {
 /// either of the other two would flash the paywall at every paying user on launch.
 struct RootView: View {
     let store = SubscriptionStore.shared
+    let session = SessionStore.shared
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     var body: some View {
         Group {
             if store.isLoadingProducts && !store.isSubscribed {
                 LaunchScreen()
+            } else if !hasSeenOnboarding && !store.isSubscribed {
+                OnboardingView(onFinished: { hasSeenOnboarding = true })
+            } else if !session.isSignedIn {
+                // Everyone trades as a signed-in account; there are no guests.
+                SignInView {
+                    Task { await PortfolioStore.shared.resetAndRebootstrap() }
+                }
+            } else if session.needsProfileSetup {
+                // A sign-in outside onboarding just created the account (onboarding
+                // shows this as its own step instead).
+                ProfileSetupView {}
             } else if store.isSubscribed {
                 AppShellView()
-            } else if !hasSeenOnboarding {
-                OnboardingView(onFinished: { hasSeenOnboarding = true })
             } else {
                 PaywallView()
             }
         }
-        .animation(CookedMotion.calm, value: store.isSubscribed)
+        .animation(Motion.standard, value: store.isSubscribed)
+        .animation(Motion.standard, value: session.isSignedIn)
+        .animation(Motion.standard, value: session.needsProfileSetup)
     }
 }
 
 private struct LaunchScreen: View {
     var body: some View {
         ZStack {
-            CookedColor.Product.graphite.ignoresSafeArea()
-            Text("Cooked Paper")
-                .font(CookedFont.title())
-                .foregroundStyle(CookedColor.Product.chalkMuted)
+            Color.appBackground.ignoresSafeArea()
+            BrandMark(height: 96)
         }
     }
 }

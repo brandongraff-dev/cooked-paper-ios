@@ -12,6 +12,9 @@ struct TradeSheetView: View {
     let mint: String
     let side: TradeSide
     let tokenSymbol: String
+    /// Last known price, only for the "≈ N TOKEN" preview under the amount before a
+    /// quote arrives. The order itself is always priced server-side.
+    var priceUsd: Decimal? = nil
 
     @Environment(\.dismiss) private var dismiss
     private let portfolioStore = PortfolioStore.shared
@@ -24,7 +27,6 @@ struct TradeSheetView: View {
     @State private var errorMessage: String?
     @State private var fillResult: ExecutePaperTradeResponse?
     @State private var quoteTask: Task<Void, Never>?
-    @FocusState private var isAmountFieldFocused: Bool
 
     private var cashUsd: Decimal { portfolioStore.snapshot?.cashUsd ?? 0 }
     private var position: PaperPosition? {
@@ -33,118 +35,144 @@ struct TradeSheetView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                CookedColor.Terminal.bgBase.ignoresSafeArea()
-
+            Group {
                 if let fillResult {
                     FillConfirmationView(result: fillResult, symbol: tokenSymbol) { dismiss() }
                 } else {
                     form
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.appSurfaceElevated)
             .navigationTitle("\(side == .buy ? "Buy" : "Sell") \(tokenSymbol)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .foregroundStyle(Color.textPrimary)
                 }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationBackground(CookedColor.Terminal.bgBase)
+        .presentationDetents([.large])
+        .presentationCornerRadius(Radius.sheet)
+        .presentationBackground(Color.appSurfaceElevated)
+        .presentationDragIndicator(.visible)
     }
 
     private var form: some View {
-        VStack(spacing: CookedSpacing.lg) {
-            VStack(spacing: CookedSpacing.xs) {
-                Text(side == .buy ? "Amount to spend" : "Amount to sell")
-                    .font(CookedFont.caption())
-                    .foregroundStyle(CookedColor.Terminal.textMuted)
+        VStack(spacing: 0) {
+            Spacer(minLength: Space.s16)
 
+            amountDisplay
+
+            Spacer(minLength: Space.s16)
+
+            VStack(spacing: Space.s16) {
+                availableLine
+                quickAmountRow
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption13)
+                        .foregroundStyle(Color.negative)
+                        .multilineTextAlignment(.center)
+                }
                 if side == .buy {
-                    HStack {
-                        Text("$")
-                            .font(CookedFont.priceDisplay(36))
-                            .foregroundStyle(CookedColor.Terminal.textMuted)
-                        TextField("0", text: $amountText)
-                            .keyboardType(.decimalPad)
-                            .font(CookedFont.priceDisplay(36))
-                            .foregroundStyle(CookedColor.Terminal.textPrimary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 160)
-                            .focused($isAmountFieldFocused)
-                            .onChange(of: amountText) { _, _ in requestQuote() }
-                            .toolbar {
-                                ToolbarItemGroup(placement: .keyboard) {
-                                    Spacer()
-                                    Button("Done") { isAmountFieldFocused = false }
-                                }
-                            }
-                    }
-                } else {
-                    Text(sellPercent.map { "\($0)%" } ?? "—")
-                        .font(CookedFont.priceDisplay(36))
-                        .foregroundStyle(CookedColor.Terminal.textPrimary)
-                    if let position, let percent = sellPercent {
-                        let estimate = TradeAmountMath.quickSellEstimate(positionValueUsd: position.valueUsd, percent: percent)
-                        Text("≈ \(estimate.usdString())")
-                            .font(CookedFont.caption())
-                            .foregroundStyle(CookedColor.Terminal.textMuted)
+                    NumericKeypad(text: $amountText)
+                        .onChange(of: amountText) { _, _ in requestQuote() }
+                }
+                Button {
+                    Task { await execute() }
+                } label: {
+                    if isExecuting {
+                        ProgressView().tint(Color.inverseText)
+                    } else {
+                        Text("Review")
                     }
                 }
+                .buttonStyle(.primary)
+                .disabled(!canSubmit || isExecuting)
             }
-            .padding(.top, CookedSpacing.lg)
+            .padding(.horizontal, Space.margin)
+            .padding(.bottom, Space.s8)
+        }
+    }
 
-            quickAmountRow
+    // MARK: - Amount
 
-            if let position, side == .sell {
-                Text("You hold \(position.qty.formatted()) \(tokenSymbol) worth \(position.valueUsd.usdString())")
-                    .font(CookedFont.caption())
-                    .foregroundStyle(CookedColor.Terminal.textMuted)
+    private var amountDisplay: some View {
+        VStack(spacing: Space.s8) {
+            if side == .buy {
+                Text(amountText.isEmpty ? "$0" : "$" + groupedAmount)
+                    .font(.amountEntry)
+                    .tracking(-1)
+                    .foregroundStyle(amountText.isEmpty ? Color.textTertiary : Color.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .contentTransition(.numericText())
+                    .animation(Motion.press, value: amountText)
+            } else {
+                Text(sellPercent.map { "\($0)%" } ?? "0%")
+                    .font(.amountEntry)
+                    .tracking(-1)
+                    .foregroundStyle(sellPercent == nil ? Color.textTertiary : Color.textPrimary)
+                    .contentTransition(.numericText())
+                    .animation(Motion.press, value: sellPercent)
             }
 
-            if let quote {
-                quotePreview(quote)
-            } else if isQuoting {
-                ProgressView().tint(CookedColor.Brand.fill)
-            }
+            Text(estimateLine)
+                .font(.rowSubvalue)
+                .foregroundStyle(Color.textSecondary)
+                .contentTransition(.numericText())
+        }
+        .padding(.horizontal, Space.margin)
+    }
 
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(CookedFont.caption())
-                    .foregroundStyle(CookedColor.Terminal.sell)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, CookedSpacing.lg)
-            }
+    /// "1,250.5" for a typed "1250.5" — grouping for display only; `amountText`
+    /// itself stays the plain decimal string the order is sent with.
+    private var groupedAmount: String {
+        let parts = amountText.split(separator: ".", omittingEmptySubsequences: false)
+        let whole = Decimal(string: String(parts.first ?? "0")) ?? 0
+        let grouped = NSDecimalNumber(decimal: whole).intValue.formatted(.number.grouping(.automatic))
+        return parts.count > 1 ? grouped + "." + parts[1] : grouped
+    }
 
-            Spacer()
+    private var estimateLine: String {
+        if side == .buy {
+            if let quote { return "≈ \(PriceFormat.quantity(quote.outAmount)) \(tokenSymbol)" }
+            let amount = Decimal(string: amountText) ?? 0
+            guard let priceUsd, priceUsd > 0 else { return "≈ 0 \(tokenSymbol)" }
+            return "≈ \(PriceFormat.quantity(amount / priceUsd)) \(tokenSymbol)"
+        }
+        guard let position, let percent = sellPercent else { return "≈ $0.00" }
+        return "≈ " + PriceFormat.usd(TradeAmountMath.quickSellEstimate(positionValueUsd: position.valueUsd, percent: percent))
+    }
 
-            Button {
-                Task { await execute() }
-            } label: {
-                if isExecuting {
-                    ProgressView().tint(CookedColor.Brand.onFill)
-                } else {
-                    Text("Review \(side == .buy ? "Buy" : "Sell")")
-                }
-            }
-            .buttonStyle(.cookedPrimary(destructive: side == .sell, enabled: canSubmit))
-            .disabled(!canSubmit || isExecuting)
-            .padding(.horizontal, CookedSpacing.lg)
-            .padding(.bottom, CookedSpacing.lg)
+    private var availableLine: some View {
+        HStack(spacing: Space.s8) {
+            Text(side == .buy
+                 ? "\(PriceFormat.usd(cashUsd)) available"
+                 : "\(position.map { PriceFormat.usd($0.valueUsd) } ?? "$0.00") held")
+                .font(.caption13Digits)
+                .foregroundStyle(Color.textSecondary)
+            Text("PAPER")
+                .font(.caption2.weight(.semibold))
+                .tracking(0.5)
+                .foregroundStyle(Color.textTertiary)
+                .padding(.horizontal, Space.s8)
+                .padding(.vertical, 2)
+                .overlay(Capsule().strokeBorder(Color.appSeparator, lineWidth: 1))
         }
     }
 
     private var quickAmountRow: some View {
-        HStack(spacing: CookedSpacing.xs) {
+        HStack(spacing: Space.s8) {
             ForEach([25, 50, 75, 100], id: \.self) { percent in
                 let isDisabled = isBuyQuickAmountDisabled(percent)
-                CookedChip(title: "\(percent)%", isSelected: isQuickAmountSelected(percent)) {
+                Chip(title: percent == 100 ? "Max" : "\(percent)%", isSelected: isQuickAmountSelected(percent)) {
                     applyQuickAmount(percent)
                 }
                 .disabled(isDisabled)
-                // Same 0.4 dimming `PrimaryButtonStyle` uses for its own disabled state.
-                .opacity(isDisabled ? 0.4 : 1)
+                .opacity(isDisabled ? 0.35 : 1)
             }
         }
     }
@@ -171,37 +199,6 @@ struct TradeSheetView: View {
             amountText = NSDecimalNumber(decimal: target).stringValue
         }
         requestQuote()
-    }
-
-    private func quotePreview(_ quote: PaperQuoteResponse) -> some View {
-        CookedCard {
-            VStack(spacing: CookedSpacing.xs) {
-                previewRow("Price", quote.priceUsd.usdString(fractionDigits: quote.priceUsd < 1 ? 6 : 2))
-                previewRow("Price impact", quote.priceImpactPct.signedPercentString())
-                previewRow("You'll receive", "\(quote.outAmount.formatted()) \(side == .buy ? tokenSymbol : "USD")")
-
-                ForEach(quote.guidance.warnings) { warning in
-                    HStack(alignment: .top, spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: CookedIconSize.xs))
-                            .foregroundStyle(CookedColor.Terminal.warn)
-                        Text(warning.message)
-                            .font(CookedFont.caption())
-                            .foregroundStyle(CookedColor.Terminal.textSecondary)
-                    }
-                    .padding(.top, 2)
-                }
-            }
-        }
-        .padding(.horizontal, CookedSpacing.lg)
-    }
-
-    private func previewRow(_ title: String, _ value: String) -> some View {
-        HStack {
-            Text(title).font(CookedFont.caption()).foregroundStyle(CookedColor.Terminal.textMuted)
-            Spacer()
-            Text(value).font(CookedFont.priceSmall()).foregroundStyle(CookedColor.Terminal.textPrimary)
-        }
     }
 
     private var canSubmit: Bool {
@@ -273,25 +270,88 @@ private struct FillConfirmationView: View {
     let onDone: () -> Void
 
     var body: some View {
-        VStack(spacing: CookedSpacing.lg) {
+        VStack(spacing: Space.s24) {
             Spacer()
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: CookedIconSize.hero))
-                .foregroundStyle(CookedColor.Terminal.buy)
+                .font(.system(size: 56))
+                .foregroundStyle(Color.positive)
             Text(result.trade.side == .buy ? "Bought \(symbol)" : "Sold \(symbol)")
-                .font(CookedFont.title())
-                .foregroundStyle(CookedColor.Terminal.textPrimary)
-            Text("Filled at \(result.fill.fillPriceUsd.usdString(fractionDigits: result.fill.fillPriceUsd < 1 ? 6 : 2))")
-                .font(CookedFont.body())
-                .foregroundStyle(CookedColor.Terminal.textSecondary)
-            Text("Cash balance: \(result.cashUsd.usdString())")
-                .font(CookedFont.caption())
-                .foregroundStyle(CookedColor.Terminal.textMuted)
+                .font(.appLargeTitle)
+                .foregroundStyle(Color.textPrimary)
+            StatGrid(items: [
+                StatItem(label: "Filled at", value: PriceFormat.price(result.fill.fillPriceUsd)),
+                StatItem(label: "Amount", value: PriceFormat.usd(result.trade.valueUsd)),
+                StatItem(label: "Quantity", value: PriceFormat.quantity(result.trade.qty)),
+                StatItem(label: "Cash balance", value: PriceFormat.usd(result.cashUsd)),
+            ])
             Spacer()
             Button("Done", action: onDone)
-                .buttonStyle(.cookedPrimary)
-                .padding(.horizontal, CookedSpacing.lg)
-                .padding(.bottom, CookedSpacing.lg)
+                .buttonStyle(.primary)
         }
+        .padding(.horizontal, Space.margin)
+        .padding(.bottom, Space.s8)
+    }
+}
+
+/// A 3×4 keypad that edits a plain decimal string: digits, one decimal point, at
+/// most two decimals, a sane length cap, and delete. Borderless keys with a press
+/// state and a light haptic.
+struct NumericKeypad: View {
+    @Binding var text: String
+
+    private let keys: [String] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "delete"]
+
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 3), spacing: 0) {
+            ForEach(keys, id: \.self) { key in
+                Button {
+                    Haptics.tap()
+                    press(key)
+                } label: {
+                    Group {
+                        if key == "delete" {
+                            Image(systemName: "delete.left")
+                                .font(.title2)
+                        } else {
+                            Text(key)
+                                .font(.title.weight(.medium))
+                                .monospacedDigit()
+                        }
+                    }
+                    .foregroundStyle(Color.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(KeypadKeyStyle())
+                .accessibilityLabel(key == "delete" ? "Delete" : key)
+            }
+        }
+    }
+
+    private func press(_ key: String) {
+        switch key {
+        case "delete":
+            if !text.isEmpty { text.removeLast() }
+        case ".":
+            guard !text.contains(".") else { return }
+            text = text.isEmpty ? "0." : text + "."
+        default:
+            if let dot = text.firstIndex(of: "."), text.distance(from: dot, to: text.endIndex) > 2 { return }
+            guard text.count < 10 else { return }
+            text = (text == "0") ? key : text + key
+        }
+    }
+}
+
+struct KeypadKeyStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                Circle()
+                    .fill(Color.appFill.opacity(configuration.isPressed ? 1 : 0))
+                    .frame(width: 64, height: 64)
+            )
+            .pressEffect(configuration.isPressed)
     }
 }

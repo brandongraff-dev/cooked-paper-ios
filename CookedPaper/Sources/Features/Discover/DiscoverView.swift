@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct DiscoverView: View {
     @State private var feed: PaperDiscoverFeed = .mostActive
@@ -9,30 +10,37 @@ struct DiscoverView: View {
     @State private var searchText = ""
     @State private var searchResults: [TokenSearchResult] = []
     @State private var searchTask: Task<Void, Never>?
-    @State private var watchedMints: Set<String> = []
-    @State private var showGuestWatchAlert = false
-    @State private var animatedRowIDs: Set<String> = []
 
     var body: some View {
-        ZStack {
-            CookedColor.Terminal.bgBase.ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                feedPicker
-
-                if isSearching {
-                    searchList
-                } else {
-                    feedList
-                }
+        ScrollView {
+            if isSearching {
+                searchResultsList
+            } else {
+                content
             }
-            .navigationDestination(for: String.self) { mint in
-                TokenDetailView(mint: mint)
-            }
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.immediately)
+        .background(Color.appBackground)
+        .refreshable { await load() }
+        .navigationDestination(for: String.self) { mint in
+            TokenDetailView(mint: mint)
         }
         .navigationTitle("Discover")
         .navigationBarTitleDisplayMode(.large)
-        .searchable(text: $searchText, prompt: "Search a token")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                BrandMark(height: 22)
+            }
+        }
+        .reservesTabBarSpace()
+        // Pinned under the title: with no system tab bar, iOS 26 would otherwise
+        // move the field to the bottom edge, where the floating bar lives.
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search tokens")
+        .onSubmit(of: .search) {
+            // Search is live as you type; the Search key just puts the keyboard away.
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
         .onChange(of: searchText) { _, newValue in
             searchTask?.cancel()
             searchTask = Task {
@@ -42,207 +50,188 @@ struct DiscoverView: View {
             }
         }
         .task { await load() }
-        .alert("Sign in to save a watchlist", isPresented: $showGuestWatchAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Sign in from Settings to save tokens.")
-        }
     }
 
     private var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
 
-    private var feedPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: CookedSpacing.xs) {
-                ForEach(PaperDiscoverFeed.allCases) { candidate in
-                    CookedChip(title: candidate.label, isSelected: candidate == feed) {
-                        feed = candidate
-                    }
-                }
+    @ViewBuilder
+    private var content: some View {
+        if isLoading {
+            VStack(spacing: 0) {
+                ForEach(0..<8, id: \.self) { _ in SkeletonRow() }
             }
-            .padding(.horizontal, CookedSpacing.md)
-            .padding(.vertical, CookedSpacing.sm)
+            .padding(.horizontal, Space.margin)
+            .padding(.top, Space.s16)
+        } else if let errorMessage {
+            EmptyStateView(symbol: "wifi.slash", title: "Couldn't load the market", detail: errorMessage)
+        } else {
+            VStack(alignment: .leading, spacing: Space.section) {
+                trendingSection
+                feedSection
+            }
+            .padding(.top, Space.s8)
+            .padding(.bottom, Space.section)
         }
+    }
+
+    // MARK: - Trending
+
+    private var trendingEntries: [PaperDiscoverEntry] {
+        Array((response?.entries(for: .biggestMovers) ?? []).prefix(8))
     }
 
     @ViewBuilder
-    private var feedList: some View {
-        if isLoading {
-            Spacer()
-            ProgressView().tint(CookedColor.Brand.fill)
-            Spacer()
-        } else if let errorMessage {
-            Spacer()
-            EmptyStateView(symbol: "wifi.slash", title: "Couldn't load the market", detail: errorMessage)
-            Spacer()
-        } else {
-            let entries = response?.entries(for: feed) ?? []
-            if entries.isEmpty {
-                Spacer()
-                EmptyStateView(symbol: "tray", title: "Nothing here yet", detail: "Check back in a bit — this feed refreshes about once a minute.")
-                Spacer()
-            } else {
-                List {
-                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                        NavigationLink(value: entry.mint) {
-                            DiscoverRow(
-                                entry: entry,
-                                isWatched: watchedMints.contains(entry.mint),
-                                onToggleStar: { toggleWatch(mint: entry.mint) }
-                            )
+    private var trendingSection: some View {
+        if !trendingEntries.isEmpty {
+            VStack(alignment: .leading, spacing: Space.headerGap) {
+                SectionHeader(title: "Trending")
+                    .padding(.horizontal, Space.margin)
+
+                ScrollView(.horizontal) {
+                    HStack(spacing: Space.s12) {
+                        ForEach(trendingEntries) { entry in
+                            NavigationLink(value: entry.mint) {
+                                TrendingCard(entry: entry)
+                            }
+                            .buttonStyle(.pressable)
+                            .prefetchesLiveMarket(entry.mint)
                         }
-                        .listRowBackground(CookedColor.Terminal.bgBase)
-                        .listRowSeparatorTint(CookedColor.Terminal.border)
-                        .staggeredEntrance(index: index, id: entry.id, animatedIDs: $animatedRowIDs)
                     }
+                    .padding(.horizontal, Space.margin)
+                    .scrollTargetLayout()
                 }
-                .listStyle(.plain)
-                .refreshable { await load() }
+                .scrollIndicators(.hidden)
+                .scrollTargetBehavior(.viewAligned)
             }
         }
     }
 
-    private var searchList: some View {
-        List {
-            ForEach(searchResults) { result in
-                NavigationLink(value: result.mint) {
-                    HStack(spacing: CookedSpacing.sm) {
-                        TokenLogo(mint: result.mint, size: 32)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(result.symbol ?? "?")
-                                .font(CookedFont.headline())
-                                .foregroundStyle(CookedColor.Terminal.textPrimary)
-                            Text(result.name ?? result.mint)
-                                .font(CookedFont.caption())
-                                .foregroundStyle(CookedColor.Terminal.textMuted)
-                                .lineLimit(1)
+    // MARK: - Feed
+
+    private var feedSection: some View {
+        VStack(alignment: .leading, spacing: Space.headerGap) {
+            ScrollView(.horizontal) {
+                HStack(spacing: Space.s8) {
+                    ForEach(PaperDiscoverFeed.allCases) { candidate in
+                        Chip(title: candidate.label, isSelected: candidate == feed) {
+                            feed = candidate
                         }
                     }
                 }
-                .listRowBackground(CookedColor.Terminal.bgBase)
+                .padding(.horizontal, Space.margin)
+            }
+            .scrollIndicators(.hidden)
+
+            let entries = response?.entries(for: feed) ?? []
+            if entries.isEmpty {
+                EmptyStateView(
+                    symbol: "tray",
+                    title: "Nothing here yet",
+                    detail: "This feed refreshes about once a minute."
+                )
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                        NavigationLink(value: entry.mint) {
+                            TokenRow(entry: entry)
+                        }
+                        .buttonStyle(.pressable)
+                        .accessibilityIdentifier("discover.row.\(index)")
+                        .prefetchesLiveMarket(entry.mint)
+
+                        if index < entries.count - 1 {
+                            RowSeparator()
+                        }
+                    }
+                }
+                .padding(.horizontal, Space.margin)
+                .id(feed)
+                .transition(.opacity)
             }
         }
-        .listStyle(.plain)
+        .animation(Motion.standard, value: feed)
+    }
+
+    // MARK: - Search
+
+    private var searchResultsList: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(Array(searchResults.enumerated()), id: \.element.id) { index, result in
+                NavigationLink(value: result.mint) {
+                    ListRow(title: result.symbol ?? "?", subtitle: result.name) {
+                        TokenAvatar(mint: result.mint, symbol: result.symbol)
+                    } trailing: {
+                        EmptyView()
+                    }
+                }
+                .buttonStyle(.pressable)
+
+                if index < searchResults.count - 1 {
+                    RowSeparator()
+                }
+            }
+        }
+        .padding(.horizontal, Space.margin)
     }
 
     private func load() async {
         isLoading = response == nil
         errorMessage = nil
         do {
-            async let discoverFetch = DiscoverAPI.paperDiscover()
-            async let watchlistFetch = loadWatchedMints()
-            response = try await discoverFetch
-            watchedMints = await watchlistFetch
+            response = try await DiscoverAPI.paperDiscover()
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
     }
-
-    /// Hydrates the star state from the server so a token already on the caller's
-    /// watchlist doesn't render unstarred until the next toggle. Never called for a
-    /// guest (`/watchlist` is `auth: 'bearer'`) and never fails the screen — a failed
-    /// fetch here just means every star starts unfilled, the same as before this
-    /// existed.
-    private func loadWatchedMints() async -> Set<String> {
-        guard !SessionStore.shared.isGuest else { return [] }
-        guard let list = try? await WatchlistAPI.list() else { return [] }
-        return Set(list.items.map(\.mint))
-    }
-
-    /// `/watchlist/*` is `auth: 'bearer'` — a guest token is rejected server-side, so
-    /// a guest never reaches the API here; they see the sign-in prompt instead.
-    private func toggleWatch(mint: String) {
-        guard !SessionStore.shared.isGuest else {
-            showGuestWatchAlert = true
-            return
-        }
-
-        Haptics.tap()
-        let wasWatching = watchedMints.contains(mint)
-        if wasWatching {
-            watchedMints.remove(mint)
-        } else {
-            watchedMints.insert(mint)
-        }
-
-        Task {
-            do {
-                if wasWatching {
-                    _ = try await WatchlistAPI.remove(mint: mint)
-                } else {
-                    _ = try await WatchlistAPI.add(mint: mint)
-                }
-            } catch {
-                if wasWatching {
-                    watchedMints.insert(mint)
-                } else {
-                    watchedMints.remove(mint)
-                }
-            }
-        }
-    }
 }
 
-private struct DiscoverRow: View {
+/// Avatar | symbol over volume | price over change. Nothing else.
+private struct TokenRow: View {
     let entry: PaperDiscoverEntry
-    let isWatched: Bool
-    let onToggleStar: () -> Void
 
     var body: some View {
-        HStack(spacing: CookedSpacing.sm) {
-            TokenLogo(mint: entry.mint, size: 36)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.symbol ?? "?")
-                    .font(CookedFont.headline())
-                    .foregroundStyle(CookedColor.Terminal.textPrimary)
-                Text(entry.name ?? entry.mint)
-                    .font(CookedFont.caption())
-                    .foregroundStyle(CookedColor.Terminal.textMuted)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(entry.paperTradeable.priceUsd.usdString(fractionDigits: entry.paperTradeable.priceUsd < 1 ? 6 : 2))
-                    .font(CookedFont.priceMedium())
-                    .foregroundStyle(CookedColor.Terminal.textPrimary)
-                PnLText(value: entry.metrics.priceChangePct, isPercent: true, font: CookedFont.caption())
-            }
-
-            Button(action: onToggleStar) {
-                Image(systemName: isWatched ? "star.fill" : "star")
-                    .foregroundStyle(isWatched ? CookedColor.Brand.fill : CookedColor.Terminal.textMuted)
-                    .imageScale(.medium)
-                    .frame(width: 32, height: 32)
-                    .animation(CookedMotion.standard, value: isWatched)
-            }
-            .buttonStyle(.plain)
+        ListRow(
+            title: entry.symbol ?? "?",
+            subtitle: entry.metrics.volumeUsd.map { "Vol \(PriceFormat.compact($0))" } ?? entry.name
+        ) {
+            TokenAvatar(mint: entry.mint, symbol: entry.symbol, logoURL: entry.logoUri.flatMap(URL.init(string:)))
+        } trailing: {
+            PriceText(value: entry.paperTradeable.priceUsd)
+            ChangeText(percent: entry.metrics.priceChangePct)
         }
-        .padding(.vertical, 4)
     }
 }
 
-struct EmptyStateView: View {
-    let symbol: String
-    let title: String
-    let detail: String
+/// Compact neutral card: avatar, symbol, price, change.
+private struct TrendingCard: View {
+    let entry: PaperDiscoverEntry
 
     var body: some View {
-        VStack(spacing: CookedSpacing.sm) {
-            Image(systemName: symbol)
-                .font(.system(size: CookedIconSize.lg))
-                .foregroundStyle(CookedColor.Terminal.textMuted)
-            Text(title)
-                .font(CookedFont.headline())
-                .foregroundStyle(CookedColor.Terminal.textPrimary)
-            Text(detail)
-                .font(CookedFont.caption())
-                .foregroundStyle(CookedColor.Terminal.textMuted)
-                .multilineTextAlignment(.center)
+        VStack(alignment: .leading, spacing: Space.s12) {
+            TokenAvatar(mint: entry.mint, symbol: entry.symbol, logoURL: entry.logoUri.flatMap(URL.init(string:)), size: 32)
+            VStack(alignment: .leading, spacing: Space.s4) {
+                Text(entry.symbol ?? "?")
+                    .font(.rowTitle)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+                PriceText(value: entry.paperTradeable.priceUsd, font: .rowSubvalue, color: .textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                ChangeText(percent: entry.metrics.priceChangePct, font: .caption13Digits)
+            }
         }
-        .padding(CookedSpacing.xl)
+        .padding(Space.s16)
+        .frame(width: 136, alignment: .leading)
+        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+    }
+}
+
+private extension View {
+    /// Warms this token's live chart while its row is on screen, so opening it
+    /// shows a drawn chart rather than an empty one (see `MarketFeedStore`).
+    func prefetchesLiveMarket(_ mint: String) -> some View {
+        onAppear { MarketFeedStore.shared.prefetch(mint) }
+            .onDisappear { MarketFeedStore.shared.cancelPrefetch(mint) }
     }
 }

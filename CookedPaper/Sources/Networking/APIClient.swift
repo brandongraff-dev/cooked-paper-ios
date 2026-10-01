@@ -1,11 +1,10 @@
 import Foundation
 
 enum APIConfig {
-    /// Same production Railway deployment `apps/mobile/lib/api.ts` falls back to.
-    /// Override by editing this constant for local-worktree development — there is
-    /// no other indirection on the client side (CORS/WEB_URL are server-side,
-    /// browser-only concerns that don't apply to a native `URLSession`).
-    static let baseURL = URL(string: "https://totem-api-production-0323.up.railway.app")!
+    /// The API behind Cloudflare on the Oracle Cloud server (see
+    /// `docs/deploy-oracle.md` in the backend repo). Change this one constant
+    /// if the domain differs, or to point at a local API during development.
+    static let baseURL = URL(string: "https://api.cooked.trade")!
 }
 
 struct Endpoint {
@@ -13,10 +12,7 @@ struct Endpoint {
     var method: String = "GET"
     var query: [String: String?] = [:]
     var body: Data? = nil
-    /// Every route this app calls is `auth: 'public'` or `auth: 'paper'`
-    /// (real-or-guest) — there is no endpoint here that requires withholding a
-    /// present token, so this only ever turns off for calls made *before* any
-    /// session exists (`POST /auth/nonce` for a not-yet-linked wallet, etc.).
+    /// Off only for the sign-in calls themselves, made before a session exists.
     var attachToken: Bool = true
 }
 
@@ -35,12 +31,16 @@ final class APIClient {
     private init(baseURL: URL = APIConfig.baseURL) {
         self.baseURL = baseURL
         let config = URLSessionConfiguration.default
-        // Persistent, non-ephemeral: a real account's httpOnly refresh cookie (set by
-        // /auth/verify, /auth/google, /auth/embedded/verify) must survive an app
-        // relaunch exactly the way it would in a browser tab. httpOnly only blocks
-        // JavaScript — native networking reads and resends it like any other cookie.
+        // The refresh token travels in the body for this app, but cookies stay on so
+        // a server that only sets the cookie still works.
         config.httpCookieStorage = HTTPCookieStorage.shared
         config.httpShouldSetCookies = true
+        #if DEBUG
+        // UI screenshot runs only — see `MockAPI`.
+        if MockAPI.isEnabled {
+            config.protocolClasses = [MockURLProtocol.self as AnyClass] + (config.protocolClasses ?? [])
+        }
+        #endif
         session = URLSession(configuration: config)
         decoder = JSONDecoder()
         encoder = JSONEncoder()
@@ -58,15 +58,19 @@ final class APIClient {
             throw APIError.transport(underlying: URLError(.badServerResponse))
         }
 
-        if http.statusCode == 401, retryingOnAuthFailure, !SessionStore.shared.isGuest {
-            // A real account's short-lived access token expired. Trade the httpOnly
-            // refresh cookie (already in the shared jar above) for a new one and
-            // retry exactly once — a second 401 after a fresh token is a real
-            // failure, not a race to paper over.
-            if let refreshed = try? await AuthAPI.refresh() {
-                SessionStore.shared.updateAccessToken(refreshed.accessToken)
+        if http.statusCode == 401, retryingOnAuthFailure, let refreshToken = SessionStore.shared.refreshToken {
+            // The short-lived access token expired. Trade the refresh token for a new
+            // session and retry exactly once — a second 401 after a fresh token is a
+            // real failure, not a race to paper over.
+            if let refreshed = try? await AuthAPI.refresh(refreshToken: refreshToken) {
+                SessionStore.shared.adopt(refreshed)
                 return try await send(endpoint, as: type, retryingOnAuthFailure: false)
             }
+        }
+        if http.statusCode == 401, endpoint.attachToken, SessionStore.shared.isSignedIn {
+            // The refresh token is gone or revoked: the session is over. Sending the
+            // person back to sign-in beats a screen of silent failures.
+            SessionStore.shared.clear()
         }
 
         guard (200..<300).contains(http.statusCode) else {
@@ -79,6 +83,9 @@ final class APIClient {
             )
         }
 
+        if data.isEmpty, let empty = EmptyResponse() as? Response {
+            return empty // 204 No Content
+        }
         do {
             return try decoder.decode(Response.self, from: data)
         } catch {
@@ -104,6 +111,8 @@ final class APIClient {
         var request = URLRequest(url: components.url!)
         request.httpMethod = endpoint.method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // Asks the auth routes for the refresh token in the body (web gets a cookie).
+        request.setValue("ios", forHTTPHeaderField: "X-Cooked-Client")
         if endpoint.body != nil {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }

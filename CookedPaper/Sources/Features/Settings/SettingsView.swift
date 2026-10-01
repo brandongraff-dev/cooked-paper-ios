@@ -6,62 +6,105 @@ struct SettingsView: View {
     private let subscriptionStore = SubscriptionStore.shared
     private let portfolioStore = PortfolioStore.shared
 
-    @State private var showLinkAccount = false
     @State private var showManageSubscriptions = false
     @State private var showResetConfirm = false
     @State private var isResetting = false
+    @State private var showSignOutConfirm = false
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
+    @State private var deleteError: String?
 
     var body: some View {
         List {
             Section {
-                accountRow
+                // The account itself, as iOS Settings puts it: tap through to Profile.
+                NavigationLink {
+                    ProfileView()
+                } label: {
+                    accountRow
+                }
+                .accessibilityIdentifier("settings.profile")
             }
+            .listRowBackground(Color.appSurface)
 
             Section("Subscription") {
-                Button("Manage Subscription") { showManageSubscriptions = true }
-                    .font(CookedFont.body())
-                Button("Restore Purchases") { Task { await subscriptionStore.restore() } }
-                    .font(CookedFont.body())
-            }
-
-            Section("Portfolio") {
-                Button("Reset Portfolio", role: .destructive) { showResetConfirm = true }
-                    .font(CookedFont.body())
-                    .disabled(isResetting)
-                if isResetting {
-                    ProgressView().tint(CookedColor.Brand.fill)
+                Button { showManageSubscriptions = true } label: {
+                    SettingsRow(symbol: "creditcard", title: "Manage subscription")
+                }
+                Button { Task { await subscriptionStore.restore() } } label: {
+                    SettingsRow(symbol: "arrow.clockwise", title: "Restore purchases")
                 }
             }
-
-            Section("Alerts") {
-                if session.isGuest {
-                    Button("Save Progress to set price alerts") { showLinkAccount = true }
-                        .font(CookedFont.body())
-                        .foregroundStyle(CookedColor.Terminal.textMuted)
-                } else {
-                    NavigationLink("Price Alerts") { AlertsView() }
-                        .font(CookedFont.body())
-                }
-            }
-
-            Section("Legal") {
-                Link("Terms of Use", destination: LegalLinks.terms)
-                    .font(CookedFont.body())
-                Link("Privacy Policy", destination: LegalLinks.privacy)
-                    .font(CookedFont.body())
-            }
+            .listRowBackground(Color.appSurface)
 
             Section {
-                Text("Cooked Paper is a simulated trading experience. Nothing in this app involves real money, and nothing you do here executes on-chain.")
-                    .font(CookedFont.caption())
-                    .foregroundStyle(CookedColor.Terminal.textMuted)
+                Link(destination: LegalLinks.terms) {
+                    SettingsRow(symbol: "doc.text", title: "Terms of Use", trailingSymbol: "arrow.up.right")
+                }
+                Link(destination: LegalLinks.privacy) {
+                    SettingsRow(symbol: "hand.raised", title: "Privacy Policy", trailingSymbol: "arrow.up.right")
+                }
+            } header: {
+                Text("Legal")
+            } footer: {
+                Text("Cooked Paper is a simulated trading experience. Nothing here involves real money or executes on-chain.")
+                    .font(.caption13)
+                    .foregroundStyle(Color.textTertiary)
             }
+            .listRowBackground(Color.appSurface)
+
+            Section("Account") {
+                Button { showSignOutConfirm = true } label: {
+                    SettingsRow(symbol: "rectangle.portrait.and.arrow.right", title: "Sign out")
+                }
+                .accessibilityIdentifier("settings.signOut")
+                Button(role: .destructive) { showDeleteConfirm = true } label: {
+                    HStack {
+                        Text("Delete account")
+                            .font(.body)
+                            .foregroundStyle(Color.negative)
+                        Spacer()
+                        if isDeleting { ProgressView() }
+                    }
+                }
+                .disabled(isDeleting)
+                if let deleteError {
+                    Text(deleteError)
+                        .font(.caption13)
+                        .foregroundStyle(Color.negative)
+                }
+            }
+            .listRowBackground(Color.appSurface)
+
+            Section {
+                Button(role: .destructive) { showResetConfirm = true } label: {
+                    HStack {
+                        Text("Reset portfolio")
+                            .font(.body)
+                            .foregroundStyle(Color.negative)
+                        Spacer()
+                        if isResetting { ProgressView() }
+                    }
+                }
+                .disabled(isResetting)
+            } footer: {
+                VStack(spacing: Space.s8) {
+                    BrandWordmark(height: 22, color: .textTertiary)
+                    Text("Paper trading · Version \(appVersion)")
+                        .font(.caption13)
+                        .foregroundStyle(Color.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, Space.s32)
+            }
+            .listRowBackground(Color.appSurface)
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(CookedColor.Terminal.bgBase.ignoresSafeArea())
+        .background(Color.appBackground)
+        .reservesTabBarSpace()
+        .tint(Color.textPrimary)
         .navigationTitle("Settings")
-        .sheet(isPresented: $showLinkAccount) { LinkAccountSheet() }
         .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
         .confirmationDialog(
             "Reset portfolio?",
@@ -73,38 +116,86 @@ struct SettingsView: View {
         } message: {
             Text("This deletes every trade in this portfolio and restores your starting balance. It can't be undone.")
         }
+        .confirmationDialog("Sign out?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) { Task { await signOut() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your portfolio stays saved to your account.")
+        }
+        .confirmationDialog("Delete your account?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete account", role: .destructive) { Task { await deleteAccount() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes your account, portfolio and trade history. It can't be undone. An App Store subscription is cancelled separately, in Manage subscription.")
+        }
+    }
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
 
     private var accountRow: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                if session.isGuest {
-                    Text("Guest session")
-                        .font(CookedFont.headline())
-                        .foregroundStyle(CookedColor.Terminal.textPrimary)
-                    Text("Not saved past 7 days")
-                        .font(CookedFont.caption())
-                        .foregroundStyle(CookedColor.Terminal.warn)
-                } else {
-                    Text(session.username ?? "Signed in")
-                        .font(CookedFont.headline())
-                        .foregroundStyle(CookedColor.Terminal.textPrimary)
-                    Text("Progress saved to your account")
-                        .font(CookedFont.caption())
-                        .foregroundStyle(CookedColor.Terminal.textMuted)
+        HStack(spacing: Metrics.avatarGap) {
+            ProfileAvatar(
+                seed: session.avatarSeed ?? session.userId ?? session.username ?? "cooked",
+                name: session.displayName ?? session.username ?? "Cooked",
+                size: 48
+            )
+            VStack(alignment: .leading, spacing: Space.s4) {
+                Text(session.displayName ?? session.username.map { "@\($0)" } ?? "Paper account")
+                    .font(.rowTitle)
+                    .foregroundStyle(Color.textPrimary)
+                if session.displayName != nil, let username = session.username {
+                    Text("@\(username)")
+                        .font(.rowSubvalue)
+                        .foregroundStyle(Color.textSecondary)
+                }
+                if let method = signInMethodLabel {
+                    Text(method)
+                        .font(.rowSubvalue)
+                        .foregroundStyle(Color.textTertiary)
+                }
+                if let snapshot = portfolioStore.snapshot {
+                    Text("\(PriceFormat.usd(snapshot.equityUsd)) · started with \(PriceFormat.compact(snapshot.portfolio.startingBalanceUsd))")
+                        .font(.rowSubvalue)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                 }
             }
-            Spacer()
-            if session.isGuest {
-                Button("Save Progress") { showLinkAccount = true }
-                    .buttonStyle(.cookedCompact)
-            } else {
-                Button("Sign Out") { Task { await signOut() } }
-                    .font(CookedFont.body())
-                    .foregroundStyle(CookedColor.Terminal.sell)
-            }
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, CookedSpacing.xxs)
+        .padding(.vertical, Space.s8)
+    }
+
+    private var signInMethodLabel: String? {
+        switch session.method {
+        case "apple": "Signed in with Apple"
+        case "google": "Signed in with Google"
+        default: nil
+        }
+    }
+
+    private func signOut() async {
+        await AuthAPI.logout(refreshToken: session.refreshToken)
+        session.clear()
+        portfolioStore.signedOut()
+        Haptics.success()
+    }
+
+    private func deleteAccount() async {
+        isDeleting = true
+        deleteError = nil
+        do {
+            try await AuthAPI.deleteAccount()
+            session.clear()
+            portfolioStore.signedOut()
+            Haptics.success()
+        } catch {
+            Haptics.error()
+            deleteError = (error as? APIError)?.errorDescription ?? "Couldn't delete your account. Try again."
+        }
+        isDeleting = false
     }
 
     private func resetPortfolio() async {
@@ -116,10 +207,39 @@ struct SettingsView: View {
         isResetting = false
         Haptics.success()
     }
+}
 
-    private func signOut() async {
-        try? await AuthAPI.logout()
-        session.clear()
-        await portfolioStore.resetAndRebootstrap()
+/// One Settings row: a plain SF Symbol in secondary gray, a title, and an optional
+/// detail or trailing glyph.
+private struct SettingsRow: View {
+    let symbol: String
+    let title: String
+    var detail: String? = nil
+    var trailingSymbol: String? = nil
+
+    var body: some View {
+        HStack(spacing: Space.s12) {
+            Image(systemName: symbol)
+                .font(.body)
+                .foregroundStyle(Color.textSecondary)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.body)
+                .foregroundStyle(Color.textPrimary)
+            Spacer()
+            if let detail {
+                Text(detail)
+                    .font(.rowSubtitle)
+                    .foregroundStyle(Color.textTertiary)
+            }
+            if let trailingSymbol {
+                Image(systemName: trailingSymbol)
+                    .font(.caption13)
+                    .foregroundStyle(Color.textTertiary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .contentShape(Rectangle())
     }
 }

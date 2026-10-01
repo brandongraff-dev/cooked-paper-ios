@@ -59,7 +59,13 @@ jobs:
       - name: Select simulator UDID
         run: |
           set -euo pipefail
-          DEVICE_LINE=$(grep -m 1 "iPhone" simctl-devices.txt)
+          # Newest iOS runtime's iPhone 17 Pro: `simctl` lists runtimes oldest first,
+          # so the last match wins. Liquid Glass only renders on iOS 26+, so the old
+          # "first iPhone in the list" pick (an iOS 18 device) hid the app's real UI.
+          DEVICE_LINE=$(awk '/^-- iOS /{ios=1; next} /^-- /{ios=0} ios && /iPhone 17 Pro \(/ {line=$0} END{print line}' simctl-devices.txt)
+          if [ -z "$DEVICE_LINE" ]; then
+            DEVICE_LINE=$(awk '/^-- iOS /{ios=1; next} /^-- /{ios=0} ios && /iPhone/ {line=$0} END{print line}' simctl-devices.txt)
+          fi
           DEVICE_UDID=$(echo "$DEVICE_LINE" | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}')
           echo "Using simulator: $DEVICE_LINE"
           echo "DEVICE_UDID=$DEVICE_UDID" >> "$GITHUB_ENV"
@@ -92,9 +98,9 @@ jobs:
         continue-on-error: true
         run: |
           echo "--- DNS resolution ---"
-          host totem-api-production-0323.up.railway.app || nslookup totem-api-production-0323.up.railway.app || true
+          host api.cooked.trade || nslookup api.cooked.trade || true
           echo "--- curl -v to /health ---"
-          curl -v --max-time 15 https://totem-api-production-0323.up.railway.app/health || true
+          curl -v --max-time 15 https://api.cooked.trade/health || true
 
       - name: Build and test (unit tests + UI screenshot walkthrough)
         run: |
@@ -102,8 +108,43 @@ jobs:
             -project CookedPaper.xcodeproj \
             -scheme CookedPaper \
             -destination "platform=iOS Simulator,id=$DEVICE_UDID" \
+            -derivedDataPath build/DerivedData \
             -resultBundlePath TestResults.xcresult \
+            -skip-testing:CookedPaperUITests/LiveChartRecordingUITests \
+            -skip-testing:CookedPaperUITests/TradeRecordingUITests \
             CODE_SIGNING_ALLOWED=NO
+
+      # A screen recording of the LIVE chart moving: the recording test runs on its
+      # own (reusing the build above) while simctl records the simulator.
+      - name: Record videos (live chart, trade + leverage)
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          mkdir -p recordings
+          for test in LiveChartRecordingUITests TradeRecordingUITests; do
+            xcrun simctl io "$DEVICE_UDID" recordVideo --codec=h264 --force "recordings/$test.mp4" &
+            REC=$!
+            sleep 2
+            xcodebuild test-without-building \
+              -project CookedPaper.xcodeproj \
+              -scheme CookedPaper \
+              -destination "platform=iOS Simulator,id=$DEVICE_UDID" \
+              -derivedDataPath build/DerivedData \
+              -resultBundlePath "Recording-$test.xcresult" \
+              -only-testing:"CookedPaperUITests/$test" \
+              CODE_SIGNING_ALLOWED=NO || echo "$test failed"
+            kill -INT "$REC" || true
+            wait "$REC" || true
+          done
+          ls -la recordings
+
+      - name: Upload live chart recording
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-chart-recording
+          path: CookedPaper/recordings/*
+          if-no-files-found: warn
 
       - name: Upload xcresult bundle
         if: always()
@@ -153,6 +194,12 @@ jobs:
           fi
 
           echo "Collected $n screenshot PNG(s) into screenshots/"
+          {
+            echo "### $n screenshot(s) captured"
+            echo "Download the **ui-screenshots** artifact below to view them."
+            echo
+            for f in screenshots/*.png; do [ -e "$f" ] && echo "- $(basename "$f")"; done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload screenshots
         if: always()

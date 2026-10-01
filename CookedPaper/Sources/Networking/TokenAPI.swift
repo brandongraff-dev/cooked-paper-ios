@@ -41,7 +41,12 @@ enum TokenAPI {
     }
 
     static func logoURL(mint: String) -> URL {
-        APIConfig.baseURL.appendingPathComponent("/tokens/\(mint)/logo")
+        #if DEBUG
+        // Logos load through URLSession.shared, outside the mock protocol, so the
+        // demo tokens point straight at their real CoinGecko images.
+        if MockAPI.isEnabled, let url = MockAPI.logoURL(mint: mint) { return url }
+        #endif
+        return APIConfig.baseURL.appendingPathComponent("/tokens/\(mint)/logo")
     }
 }
 
@@ -53,6 +58,27 @@ enum DiscoverAPI {
         try await APIClient.shared.send(
             Endpoint(path: "/paper/discover", query: ["window": window, "limit": "30"], attachToken: false),
             as: PaperDiscoverResponse.self
+        )
+    }
+}
+
+/// The live-market contract's REST half (`auth: public`). The socket
+/// (`MarketSocket`) is preferred when connected; this is the fallback poll and the
+/// gap filler.
+enum MarketAPI {
+    /// The server's cap on trades per response; a full page means there may be more.
+    static let pageLimit = 500
+
+    /// Without `sinceSeq`: the last 120 s of trades plus 1 s candles. With it: only
+    /// trades newer than that seq (or a full snapshot with `reset: true`).
+    static func live(mint: String, sinceSeq: Int? = nil) async throws -> LiveMarketSnapshot {
+        try await APIClient.shared.send(
+            Endpoint(
+                path: "/market/tokens/\(mint)/live",
+                query: ["sinceSeq": sinceSeq.map { String($0) }],
+                attachToken: false
+            ),
+            as: LiveMarketSnapshot.self
         )
     }
 }
