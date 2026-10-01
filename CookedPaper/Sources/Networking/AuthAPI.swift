@@ -52,6 +52,33 @@ enum AuthAPI {
         )
     }
 
+    /// The signed-in account, fresh from the server.
+    static func me() async throws -> PublicUser {
+        try await APIClient.shared.send(Endpoint(path: "/auth/me"), as: UserResponse.self).user
+    }
+
+    /// Changes the handle and/or display name. Pass nil to leave one as it is, and
+    /// an empty display name to clear it. A bad or taken handle comes back as an
+    /// `APIError` with reason `username_invalid` / `username_taken`.
+    static func updateProfile(username: String?, displayName: String?) async throws -> PublicUser {
+        try await APIClient.shared.send(
+            Endpoint(
+                path: "/auth/me",
+                method: "PATCH",
+                body: APIClient.shared.encode(UpdateProfileBody(username: username, displayName: displayName))
+            ),
+            as: UserResponse.self
+        ).user
+    }
+
+    /// Live feedback while someone types a handle; `PATCH /auth/me` re-checks on save.
+    static func usernameAvailable(_ username: String) async throws -> UsernameAvailability {
+        try await APIClient.shared.send(
+            Endpoint(path: "/auth/username-available", query: ["username": username]),
+            as: UsernameAvailability.self
+        )
+    }
+
     /// Permanently deletes the account and its paper data (App Store 5.1.1(v)).
     static func deleteAccount() async throws {
         try await APIClient.shared.sendIgnoringResponse(Endpoint(path: "/auth/account", method: "DELETE"))

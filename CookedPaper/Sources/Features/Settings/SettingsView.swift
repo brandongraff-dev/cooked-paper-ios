@@ -17,7 +17,13 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section {
-                accountRow
+                // The account itself, as iOS Settings puts it: tap through to Profile.
+                NavigationLink {
+                    ProfileView()
+                } label: {
+                    accountRow
+                }
+                .accessibilityIdentifier("settings.profile")
             }
             .listRowBackground(Color.appSurface)
 
@@ -130,13 +136,20 @@ struct SettingsView: View {
 
     private var accountRow: some View {
         HStack(spacing: Metrics.avatarGap) {
-            BrandMark(height: 30)
-                .frame(width: 48, height: 48)
-                .background(Color.appSurfaceElevated, in: Circle())
+            ProfileAvatar(
+                seed: session.avatarSeed ?? session.userId ?? session.username ?? "cooked",
+                name: session.displayName ?? session.username ?? "Cooked",
+                size: 48
+            )
             VStack(alignment: .leading, spacing: Space.s4) {
-                Text(session.username ?? "Paper account")
+                Text(session.displayName ?? session.username.map { "@\($0)" } ?? "Paper account")
                     .font(.rowTitle)
                     .foregroundStyle(Color.textPrimary)
+                if session.displayName != nil, let username = session.username {
+                    Text("@\(username)")
+                        .font(.rowSubvalue)
+                        .foregroundStyle(Color.textSecondary)
+                }
                 if let method = signInMethodLabel {
                     Text(method)
                         .font(.rowSubvalue)

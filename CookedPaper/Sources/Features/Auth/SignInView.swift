@@ -149,8 +149,15 @@ final class SignInModel {
             let name = credential.fullName.map {
                 AppleSignInBody.FullName(givenName: $0.givenName, familyName: $0.familyName)
             }
+            // Single-use and short-lived; the server trades it for Apple tokens right away.
+            let authorizationCode = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
             do {
-                let session = try await AuthAPI.apple(AppleSignInBody(identityToken: identityToken, nonce: nonce, fullName: name))
+                let session = try await AuthAPI.apple(AppleSignInBody(
+                    identityToken: identityToken,
+                    nonce: nonce,
+                    fullName: name,
+                    authorizationCode: authorizationCode
+                ))
                 complete(session, method: "apple", onSignedIn: onSignedIn)
             } catch {
                 errorMessage = Self.message(for: error)

@@ -89,6 +89,33 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             unreachedSteps.append("sign-in step never appeared")
         }
 
+        // A brand-new account picks a username (the mock's first sign-in of the run
+        // says `isNewAccount`). Swap the generated handle for a chosen one so the
+        // live availability check shows, then save it.
+        let profileContinue = app.buttons["profileSetup.continue"]
+        if profileContinue.waitForExistence(timeout: 10) {
+            Thread.sleep(forTimeInterval: 0.8)
+            attach(app, name: "02-onboarding-profile")
+            let usernameField = app.textFields["profile.username"]
+            if usernameField.waitForExistence(timeout: 3) {
+                // Tap the right edge so the cursor lands after the generated handle.
+                usernameField.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+                usernameField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 24))
+                usernameField.typeText("wifmaxi")
+                Thread.sleep(forTimeInterval: 1.2) // debounce + availability check
+                attach(app, name: "02-onboarding-profile-picked")
+            }
+            profileContinue.tap()
+            // If saving didn't move on (it shouldn't fail under the mock), skip
+            // rather than stall the rest of the walkthrough.
+            let skip = app.buttons["profileSetup.skip"]
+            if !app.buttons["onboarding.answer.little"].waitForExistence(timeout: 5), skip.exists {
+                skip.tap()
+            }
+        } else {
+            unreachedSteps.append("profile setup never appeared after a new-account sign-in")
+        }
+
         if app.buttons["onboarding.answer.little"].waitForExistence(timeout: 10) {
             Thread.sleep(forTimeInterval: 0.6)
             attach(app, name: "02-onboarding-experience")
@@ -196,6 +223,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         }
         visitTab(app, label: "Leaderboard", screenshotName: "11-leaderboard", unreachedSteps: &unreachedSteps)
         visitTab(app, label: "Settings", screenshotName: "12-settings", unreachedSteps: &unreachedSteps)
+        visitProfile(app, unreachedSteps: &unreachedSteps)
 
         if !unreachedSteps.isEmpty {
             XCTFail("Main-app walkthrough didn't fully complete: \(unreachedSteps.joined(separator: "; "))")
@@ -310,6 +338,38 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             if cancel.exists { cancel.tap() }
         }
         Thread.sleep(forTimeInterval: 0.8)
+    }
+
+    /// Settings → Profile, then its Edit Profile sheet.
+    @MainActor
+    private func visitProfile(_ app: XCUIApplication, unreachedSteps: inout [String]) {
+        // A NavigationLink in a List can surface as a button or a cell, so match
+        // the identifier on any element type.
+        let profileRow = app.descendants(matching: .any)["settings.profile"].firstMatch
+        guard profileRow.waitForExistence(timeout: 5) else {
+            unreachedSteps.append("no Profile row in Settings")
+            return
+        }
+        profileRow.tap()
+        let edit = app.buttons["profile.edit"]
+        guard edit.waitForExistence(timeout: 5) else {
+            unreachedSteps.append("profile screen never appeared")
+            return
+        }
+        Thread.sleep(forTimeInterval: 1) // GET /auth/me fills in the join date and referral code
+        attach(app, name: "13-profile")
+        edit.tap()
+        if app.textFields["profile.username"].waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.8)
+            attach(app, name: "14-edit-profile")
+            let cancel = app.buttons["Cancel"].firstMatch
+            if cancel.waitForExistence(timeout: 3) { cancel.tap() } else { app.swipeDown() }
+            Thread.sleep(forTimeInterval: 0.8)
+        } else {
+            unreachedSteps.append("edit profile sheet never appeared")
+        }
+        let backButton = app.navigationBars.buttons.element(boundBy: 0)
+        if backButton.waitForExistence(timeout: 3) { backButton.tap() }
     }
 
     @MainActor

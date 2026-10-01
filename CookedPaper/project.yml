@@ -48,6 +48,9 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+      # Includes PrivacyInfo.xcprivacy (the App Store privacy manifest), which
+      # XcodeGen puts in the Copy Bundle Resources phase like any other file type
+      # it has no compile rule for (PracticeReplay.json rides the same rule).
       - path: Resources
     resources:
       - path: StoreKit/Products.storekit

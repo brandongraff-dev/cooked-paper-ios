@@ -76,7 +76,7 @@ nonisolated enum MockAPI {
         if match("POST", "auth/google/nonce") != nil || match("POST", "auth/apple/nonce") != nil {
             return (200, ["nonce": "demo-nonce-\(Int(Date().timeIntervalSince1970))", "expiresAt": iso(daysFromNow: 0.01)])
         }
-        if match("POST", "auth/google") != nil || match("POST", "auth/apple") != nil { return (200, session) }
+        if match("POST", "auth/google") != nil || match("POST", "auth/apple") != nil { return (200, MockProfile.signInSession()) }
         if match("POST", "auth/refresh") != nil { return (200, session) }
         if match("DELETE", "auth/account") != nil { return (204, [:] as [String: Any]) }
 
@@ -132,6 +132,10 @@ nonisolated enum MockAPI {
         if match("POST", "social/alerts") != nil { return (200, ["alert": alerts[0]]) }
         if match("DELETE", "social/alerts/:") != nil { return (200, ["alert": alerts[0]]) }
         if match("GET", "auth/me") != nil { return (200, ["user": user]) }
+        if match("PATCH", "auth/me") != nil { return MockProfile.update(body) }
+        if match("GET", "auth/username-available") != nil {
+            return (200, MockProfile.availability(query["username"] ?? ""))
+        }
         if match("POST", "auth/logout") != nil { return (200, [:] as [String: Any]) }
         return (404, ["error": "not_found", "message": "No demo fixture for \(method) \(path)."])
     }
@@ -458,8 +462,13 @@ nonisolated enum MockAPI {
         ]
     }
 
-    private static var user: [String: Any] {
-        ["id": "demo-user", "username": "paperhands", "displayName": "Paper Hands", "walletAddress": NSNull(), "foundingMember": true] as [String: Any]
+    static var user: [String: Any] {
+        let (username, displayName) = MockProfile.current()
+        return [
+            "id": "demo-user", "username": username, "displayName": displayName.map { $0 as Any } ?? NSNull(),
+            "walletAddress": NSNull(), "foundingMember": true, "avatarSeed": "demo-user-seed",
+            "createdAt": iso(daysFromNow: -41), "verified": false, "referralCode": "PAPERHANDS",
+        ] as [String: Any]
     }
 
     // MARK: - Helpers
@@ -657,6 +666,82 @@ nonisolated enum FreshAccount {
             "fill": ["fillPriceUsd": dec(price), "marketPriceUsd": dec(price)],
             "summary": ["side": side, "slippageCostUsd": "0", "cashAfterUsd": dec(cash), "vsQuote": NSNull()] as [String: Any],
         ] as [String: Any])
+    }
+}
+
+/// The demo account's editable profile, for `GET`/`PATCH /auth/me` and the
+/// username check. The onboarding walkthrough (`UITEST_MOCK_FRESH`) signs in as a
+/// brand-new account with a generated handle, and its first sign-in of the run
+/// says `isNewAccount: true` so the screenshots cover `ProfileSetupView`; every
+/// other run starts signed in and never sees it.
+nonisolated enum MockProfile {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var username = FreshAccount.isEnabled ? "trader_4f7c2a91" : "paperhands"
+    nonisolated(unsafe) private static var displayName: String? = "Paper Hands"
+    nonisolated(unsafe) private static var signInCount = 0
+
+    /// Handles the mock server treats as someone else's, so the red state can be seen.
+    private static let taken: Set<String> = ["satoshi", "paperhands", "diamondhands", "cooked"]
+    private static let reserved: Set<String> = ["admin", "support", "cooked_team", "moderator"]
+
+    static func current() -> (String, String?) {
+        lock.lock(); defer { lock.unlock() }
+        return (username, displayName)
+    }
+
+    static func signInSession() -> [String: Any] {
+        lock.lock()
+        signInCount += 1
+        let isNew = signInCount == 1 && FreshAccount.isEnabled
+        lock.unlock()
+        var session = MockAPI.session
+        session["isNewAccount"] = isNew
+        return session
+    }
+
+    static func availability(_ candidate: String) -> [String: Any] {
+        let lowered = candidate.lowercased()
+        let (mine, _) = current()
+        if let problem = UsernameRulesMock.problem(candidate) {
+            return ["available": false, "reason": "invalid", "message": problem]
+        }
+        if reserved.contains(lowered) {
+            return ["available": false, "reason": "reserved", "message": "That username is reserved."]
+        }
+        if taken.contains(lowered) && lowered != mine.lowercased() {
+            return ["available": false, "reason": "taken", "message": "That username is taken."]
+        }
+        return ["available": true, "reason": NSNull(), "message": NSNull()] as [String: Any]
+    }
+
+    static func update(_ body: Data?) -> (Int, Any) {
+        guard let body, let request = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            return (400, ["error": "bad_request", "message": "Malformed profile update."])
+        }
+        if let candidate = request["username"] as? String {
+            let check = availability(candidate)
+            if check["available"] as? Bool != true {
+                let reason = check["reason"] as? String == "taken" ? "username_taken" : "username_invalid"
+                return (409, ["error": reason, "reason": reason, "message": check["message"] as? String ?? "That username isn't available."])
+            }
+            lock.lock(); username = candidate; lock.unlock()
+        }
+        if request.keys.contains("displayName") {
+            let name = (request["displayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            lock.lock(); displayName = (name?.isEmpty ?? true) ? nil : name; lock.unlock()
+        }
+        return (200, ["user": MockAPI.user])
+    }
+}
+
+/// The server's handle rules, restated for the mock (the app's `UsernameRules` is
+/// MainActor-isolated by the project default; this runs on URLSession's queue).
+nonisolated enum UsernameRulesMock {
+    static func problem(_ candidate: String) -> String? {
+        if candidate.count < 4 { return "Usernames need at least 4 characters." }
+        if candidate.count > 24 { return "Usernames can be at most 24 characters." }
+        let ok = candidate.unicodeScalars.allSatisfy { $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "_") }
+        return ok ? nil : "Usernames can only use letters, numbers and _."
     }
 }
 

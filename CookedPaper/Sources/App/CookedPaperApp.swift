@@ -42,6 +42,10 @@ struct RootView: View {
                 SignInView {
                     Task { await PortfolioStore.shared.resetAndRebootstrap() }
                 }
+            } else if session.needsProfileSetup {
+                // A sign-in outside onboarding just created the account (onboarding
+                // shows this as its own step instead).
+                ProfileSetupView {}
             } else if store.isSubscribed {
                 AppShellView()
             } else {
@@ -50,6 +54,7 @@ struct RootView: View {
         }
         .animation(Motion.standard, value: store.isSubscribed)
         .animation(Motion.standard, value: session.isSignedIn)
+        .animation(Motion.standard, value: session.needsProfileSetup)
     }
 }
 

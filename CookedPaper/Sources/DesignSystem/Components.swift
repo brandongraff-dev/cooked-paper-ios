@@ -80,6 +80,50 @@ struct MonogramAvatar: View {
     }
 }
 
+/// A person's own avatar: a two-tone gradient circle picked deterministically from
+/// the account's `avatarSeed` (the user id when there isn't one), with the first
+/// letter of their name on it. The one gradient in the app — it is the account's
+/// color, so the same person looks the same on every device.
+struct ProfileAvatar: View {
+    let seed: String
+    /// Display name, else username; the monogram is its first letter or digit.
+    let name: String
+    var size: CGFloat = Metrics.avatar
+
+    var body: some View {
+        let hue = Self.hue(for: seed)
+        Circle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(hue: hue, saturation: 0.62, brightness: 0.92),
+                        Color(hue: (hue + 0.11).truncatingRemainder(dividingBy: 1), saturation: 0.72, brightness: 0.62),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: size, height: size)
+            .overlay(
+                Text(String(name.first(where: { $0.isLetter || $0.isNumber }) ?? "?").uppercased())
+                    .font(.system(size: size * 0.42, weight: .semibold))
+                    .foregroundStyle(Color.textPrimary)
+            )
+            .accessibilityHidden(true)
+    }
+
+    /// FNV-1a over the seed's bytes, folded into 0..<1. Not `Hasher`: that is
+    /// randomized per launch, and the color must never change.
+    static func hue(for seed: String) -> Double {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in seed.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x0000_0100_0000_01B3
+        }
+        return Double(hash % 360) / 360
+    }
+}
+
 // MARK: - Numbers
 
 /// A price, formatted by `PriceFormat.price` and animated digit-by-digit when it

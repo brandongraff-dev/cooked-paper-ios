@@ -2,7 +2,8 @@ import Foundation
 import SwiftUI
 
 /// First run, before the paywall: a new user sees their $10,000 paper balance,
-/// plays a practice round, signs in, answers one question, picks up to three coins,
+/// plays a practice round, signs in (and, for a brand-new account, picks a
+/// username), answers one question, picks up to three coins,
 /// and buys them for real (paper trades filled at the live price on the server). Then they watch those positions
 /// move. The paywall that follows is about keeping that portfolio.
 ///
@@ -26,16 +27,18 @@ struct OnboardingView: View {
                     BalanceStep { go(to: .practice) }
                 case .practice:
                     PracticeRoundStep {
-                        go(to: SessionStore.shared.isSignedIn ? .experience : .signIn)
+                        go(to: SessionStore.shared.isSignedIn ? stepAfterSignIn : .signIn)
                     }
                 case .signIn:
                     SignInView(
                         title: "Save your progress",
                         subtitle: "Sign in to get your $10,000 paper portfolio. It's saved to your account, on any device."
                     ) {
-                        go(to: .experience)
+                        go(to: stepAfterSignIn)
                         Task { await PortfolioStore.shared.resetAndRebootstrap() }
                     }
+                case .profile:
+                    ProfileSetupView { go(to: .experience) }
                 case .experience:
                     ExperienceStep { answer in
                         model.experience = answer
@@ -70,6 +73,11 @@ struct OnboardingView: View {
             }
             await model.loadTokens()
         }
+    }
+
+    /// A sign-in that just created the account picks a username first.
+    private var stepAfterSignIn: OnboardingStep {
+        SessionStore.shared.needsProfileSetup ? .profile : .experience
     }
 
     private var canGoBack: Bool {
@@ -118,7 +126,7 @@ struct OnboardingView: View {
 }
 
 enum OnboardingStep: Int, CaseIterable {
-    case balance, practice, signIn, experience, pick, portfolio
+    case balance, practice, signIn, profile, experience, pick, portfolio
 }
 
 // MARK: - Model
