@@ -132,9 +132,9 @@ struct ProfileView: View {
 
     private var signInMethodLabel: (name: String, symbol: String)? {
         switch session.method {
-        case "apple": (name: "Apple", symbol: "apple.logo")
-        case "google": (name: "Google", symbol: "g.circle")
-        default: nil
+        case "apple": return (name: "Apple", symbol: "apple.logo")
+        case "google": return (name: "Google", symbol: "g.circle")
+        default: return nil
         }
     }
 
