@@ -5,6 +5,7 @@ import UIKit
 struct AppShellView: View {
     let portfolioStore = PortfolioStore.shared
     let router = DeepLinkRouter.shared
+    let tabBarVisibility = FloatingTabBarVisibility.shared
 
     private var deepLinkTarget: DeepLinkTarget? {
         router.pendingTokenMint.map(DeepLinkTarget.init)
@@ -38,7 +39,7 @@ struct AppShellView: View {
                 }
                 // Every screen in the stack (pushed ones too) reads this and keeps
                 // its content and pinned bars clear of the floating tab bar.
-                .environment(\.tabBarInset, FloatingTabBar.height + Space.s8)
+                .environment(\.tabBarInset, tabBarVisibility.isHidden ? 0 : FloatingTabBar.height + Space.s8)
                 .opacity(isSelected ? 1 : 0)
                 .allowsHitTesting(isSelected)
                 .accessibilityHidden(!isSelected)
@@ -53,8 +54,11 @@ struct AppShellView: View {
                 .ignoresSafeArea(.keyboard, edges: .bottom)
                 // Steps aside while typing, as the system tab bar does.
                 .opacity(isKeyboardVisible ? 0 : 1)
-                .allowsHitTesting(!isKeyboardVisible)
+                .allowsHitTesting(!isKeyboardVisible && !tabBarVisibility.isHidden)
                 .animation(Motion.standard, value: isKeyboardVisible)
+                // Slides off the bottom edge under a pushed screen that hides it.
+                .offset(y: tabBarVisibility.isHidden ? FloatingTabBar.height * 2 : 0)
+                .accessibilityHidden(tabBarVisibility.isHidden)
                 .zIndex(2)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in

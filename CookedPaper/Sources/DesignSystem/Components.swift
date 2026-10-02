@@ -1,5 +1,7 @@
 import Foundation
+import Observation
 import SwiftUI
+import UIKit
 
 // MARK: - Brand
 
@@ -45,10 +47,14 @@ struct TokenAvatar: View {
     var logoURL: URL? = nil
     var size: CGFloat = Metrics.avatar
 
+    @State private var loaded: UIImage?
+
+    private var url: URL { logoURL ?? TokenAPI.logoURL(mint: mint) }
+
     var body: some View {
-        AsyncImage(url: logoURL ?? TokenAPI.logoURL(mint: mint)) { phase in
-            if case .success(let image) = phase {
-                image
+        Group {
+            if let image = loaded ?? LogoCache.image(for: url) {
+                Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
                     .frame(width: size, height: size)
@@ -59,6 +65,34 @@ struct TokenAvatar: View {
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
+        .task(id: url) {
+            guard LogoCache.image(for: url) == nil, let image = await LogoCache.load(url) else { return }
+            withAnimation(Motion.standard) { loaded = image }
+        }
+    }
+}
+
+/// Token logos, kept in memory once fetched. `AsyncImage` doesn't cache, so a row
+/// scrolled back into view showed its monogram again before the logo popped in.
+/// Misses are remembered too, so a logo-less token isn't re-requested per row.
+enum LogoCache {
+    private static let images = NSCache<NSURL, UIImage>()
+    private static var misses: Set<URL> = []
+
+    static func image(for url: URL) -> UIImage? {
+        images.object(forKey: url as NSURL)
+    }
+
+    static func load(_ url: URL) async -> UIImage? {
+        guard !misses.contains(url) else { return nil }
+        guard let result = try? await URLSession.shared.data(from: url) else { return nil }
+        let ok = (result.1 as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? true
+        guard ok, let image = UIImage(data: result.0) else {
+            misses.insert(url)
+            return nil
+        }
+        images.setObject(image, forKey: url as NSURL)
+        return image
     }
 }
 
@@ -562,6 +596,32 @@ extension EnvironmentValues {
     @Entry var tabBarInset: CGFloat = 0
 }
 
+/// Screens that want the floating tab bar out of the way while they're on screen
+/// (a pushed detail with its own bottom action bar), as UIKit's
+/// `hidesBottomBarWhenPushed` does. The shell hides the bar while any screen holds it.
+@Observable
+final class FloatingTabBarVisibility {
+    static let shared = FloatingTabBarVisibility()
+
+    private var hiders: Set<UUID> = []
+    var isHidden: Bool { !hiders.isEmpty }
+
+    private init() {}
+
+    func hide(for id: UUID) { hiders.insert(id) }
+    func show(for id: UUID) { hiders.remove(id) }
+}
+
+private struct HidesFloatingTabBar: ViewModifier {
+    @State private var id = UUID()
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { withAnimation(Motion.standard) { FloatingTabBarVisibility.shared.hide(for: id) } }
+            .onDisappear { withAnimation(Motion.standard) { FloatingTabBarVisibility.shared.show(for: id) } }
+    }
+}
+
 private struct ReservesTabBarSpace: ViewModifier {
     @Environment(\.tabBarInset) private var inset
 
@@ -577,5 +637,12 @@ extension View {
     /// Apply outermost, after the screen's own bottom insets.
     func reservesTabBarSpace() -> some View {
         modifier(ReservesTabBarSpace())
+    }
+
+    /// Hides the floating tab bar while this screen is on screen. For pushed
+    /// screens only: back (or the swipe) is the way out, so the bottom edge is
+    /// free for the screen's own actions.
+    func hidesFloatingTabBar() -> some View {
+        modifier(HidesFloatingTabBar())
     }
 }

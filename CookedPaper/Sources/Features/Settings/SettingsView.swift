@@ -53,11 +53,22 @@ struct SettingsView: View {
             }
             .listRowBackground(Color.appSurface)
 
-            Section("Account") {
+            Section {
                 Button { showSignOutConfirm = true } label: {
                     SettingsRow(symbol: "rectangle.portrait.and.arrow.right", title: "Sign out")
                 }
                 .accessibilityIdentifier("settings.signOut")
+                // The destructive actions live together, each behind a confirmation.
+                Button(role: .destructive) { showResetConfirm = true } label: {
+                    HStack {
+                        Text("Reset portfolio")
+                            .font(.body)
+                            .foregroundStyle(Color.negative)
+                        Spacer()
+                        if isResetting { ProgressView() }
+                    }
+                }
+                .disabled(isResetting)
                 Button(role: .destructive) { showDeleteConfirm = true } label: {
                     HStack {
                         Text("Delete account")
@@ -73,20 +84,8 @@ struct SettingsView: View {
                         .font(.caption13)
                         .foregroundStyle(Color.negative)
                 }
-            }
-            .listRowBackground(Color.appSurface)
-
-            Section {
-                Button(role: .destructive) { showResetConfirm = true } label: {
-                    HStack {
-                        Text("Reset portfolio")
-                            .font(.body)
-                            .foregroundStyle(Color.negative)
-                        Spacer()
-                        if isResetting { ProgressView() }
-                    }
-                }
-                .disabled(isResetting)
+            } header: {
+                Text("Account")
             } footer: {
                 VStack(spacing: Space.s8) {
                     BrandWordmark(height: 22, color: .textTertiary)

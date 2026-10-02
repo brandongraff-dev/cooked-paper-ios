@@ -68,7 +68,6 @@ struct TradeSheetView: View {
             Spacer(minLength: Space.s16)
 
             VStack(spacing: Space.s16) {
-                availableLine
                 quickAmountRow
                 if let errorMessage {
                     Text(errorMessage)
@@ -123,6 +122,11 @@ struct TradeSheetView: View {
                 .font(.rowSubvalue)
                 .foregroundStyle(Color.textSecondary)
                 .contentTransition(.numericText())
+
+            // With the amount rather than above the keypad: what you're typing
+            // and what you can spend read as one group.
+            availableLine
+                .padding(.top, Space.s8)
         }
         .padding(.horizontal, Space.margin)
     }

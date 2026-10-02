@@ -2,11 +2,12 @@ import Foundation
 
 /// `GET /paper/leaderboard`'s `window` query param. `all` is season-to-date (the
 /// current UTC calendar month), never since-inception — labeled "This month" so the
-/// UI doesn't imply a longer history than the backend actually ranks.
+/// UI doesn't imply a longer history than the backend actually ranks. The server's
+/// rolling `30d` window isn't offered: next to "This month" it reads as the same
+/// thing twice.
 enum LeaderboardWindow: String, CaseIterable, Identifiable {
     case day = "24h"
     case week = "7d"
-    case month = "30d"
     case all
 
     var id: String { rawValue }
@@ -15,7 +16,6 @@ enum LeaderboardWindow: String, CaseIterable, Identifiable {
         switch self {
         case .day: "24h"
         case .week: "7d"
-        case .month: "30d"
         case .all: "This month"
         }
     }

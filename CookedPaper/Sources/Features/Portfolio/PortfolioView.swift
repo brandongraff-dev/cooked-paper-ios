@@ -126,7 +126,9 @@ struct PortfolioView: View {
                 SimulatedCaption()
                 Text(PriceFormat.usd(shownEquity))
                     .heroPriceStyle()
-                    .foregroundStyle(Color.textPrimary)
+                    // Flashes on live ticks only; scrubbing the curve isn't the
+                    // portfolio moving.
+                    .modifier(TickFlash(value: scrubIndex == nil ? equity : nil, base: .textPrimary))
                     .contentTransition(.numericText())
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
@@ -188,6 +190,13 @@ private struct PositionRow: View {
 
     private var unrealizedPct: Decimal? { live?.unrealizedPnlPct ?? position.unrealizedReturnPct }
 
+    /// Marked to the live price when the feed has one, so the value ticks between
+    /// refreshes; the snapshot's value otherwise (never a made-up mark).
+    private var valueUsd: Decimal {
+        if case .measured(let mark, _)? = live?.pricing { return position.qty * mark }
+        return position.valueUsd
+    }
+
     var body: some View {
         ListRow(
             title: position.token?.symbol ?? "?",
@@ -195,9 +204,9 @@ private struct PositionRow: View {
         ) {
             TokenAvatar(mint: position.tokenMint, symbol: position.token?.symbol)
         } trailing: {
-            Text(PriceFormat.usd(position.valueUsd))
+            Text(PriceFormat.usd(valueUsd))
                 .font(.rowValue)
-                .foregroundStyle(Color.textPrimary)
+                .modifier(TickFlash(value: valueUsd, base: .textPrimary))
                 .contentTransition(.numericText())
             ChangeText(percent: unrealizedPct)
         }

@@ -53,7 +53,10 @@ nonisolated final class TradeRecordingUITests: XCTestCase {
         tap(app.buttons["leverage.done"], "Done after open")
         pause(4) // a second "+" for the long
 
+        // Back to Discover (the tab bar is hidden on token detail), then
         // Portfolio → the new leveraged position → close it.
+        tap(app.navigationBars.buttons.element(boundBy: 0), "Back button")
+        pause(1)
         tap(app.buttons["tab.portfolio"], "Portfolio tab")
         pause(2)
         let row = app.buttons["portfolio.leveraged.0"]

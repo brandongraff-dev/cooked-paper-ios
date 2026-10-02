@@ -69,6 +69,8 @@ struct TokenDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.appBackground)
         .reservesTabBarSpace()
+        // Buy/Sell own the bottom edge here; back is the way out.
+        .hidesFloatingTabBar()
         .navigationTitle(profile?.token.symbol ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $tradeSide) { side in
