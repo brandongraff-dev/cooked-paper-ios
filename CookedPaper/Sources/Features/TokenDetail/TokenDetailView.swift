@@ -203,7 +203,9 @@ struct TokenDetailView: View {
     private func priceLines(livePrice: Decimal?) -> some View {
         let shown = displayed(livePrice: livePrice)
         return VStack(alignment: .leading, spacing: Space.s8) {
-            PriceText(value: shown.price, font: .heroPrice)
+            // Flash only for real ticks: scrubbing or switching ranges also moves
+            // this number, and that isn't the market going up or down.
+            PriceText(value: shown.price, font: .heroPrice, flashes: range == .live && scrubIndex == nil)
                 .tracking(-0.5)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)

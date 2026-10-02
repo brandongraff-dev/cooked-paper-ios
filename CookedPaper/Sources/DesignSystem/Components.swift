@@ -127,19 +127,74 @@ struct ProfileAvatar: View {
 // MARK: - Numbers
 
 /// A price, formatted by `PriceFormat.price` and animated digit-by-digit when it
-/// changes.
+/// changes. Flashes green on an uptick and red on a downtick (see `TickFlash`);
+/// pass `flashes: false` where the value changes for a reason other than the
+/// market moving (scrubbing a chart, switching ranges).
 struct PriceText: View {
+    let value: Decimal?
+    var font: Font = .rowValue
+    var color: Color = .textPrimary
+    var flashes = true
+
+    var body: some View {
+        TickingText(value: value, format: PriceFormat.price, font: font, color: color, flashes: flashes)
+    }
+}
+
+/// A market cap (or any dollar figure that moves with price) in compact form —
+/// $1.8B, $432.4M — with the same tick flash as `PriceText`.
+struct MarketCapText: View {
     let value: Decimal?
     var font: Font = .rowValue
     var color: Color = .textPrimary
 
     var body: some View {
-        Text(value.map(PriceFormat.price) ?? "—")
+        TickingText(value: value, format: PriceFormat.compact, font: font, color: color, flashes: true)
+    }
+}
+
+private struct TickingText: View {
+    let value: Decimal?
+    let format: (Decimal) -> String
+    let font: Font
+    let color: Color
+    let flashes: Bool
+
+    var body: some View {
+        Text(value.map(format) ?? "—")
             .font(font)
             .monospacedDigit()
-            .foregroundStyle(color)
+            .modifier(TickFlash(value: flashes ? value : nil, base: color))
             .contentTransition(.numericText(value: value.map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0))
             .animation(Motion.standard, value: value)
+    }
+}
+
+/// Colours its content green when `value` rises and red when it falls, holds
+/// that for a beat, then eases back to `base`. A new tick mid-fade restarts it
+/// in the new direction. A `nil` on either side of a change (first load, or
+/// flashing switched off) doesn't flash.
+struct TickFlash: ViewModifier {
+    let value: Decimal?
+    let base: Color
+
+    @State private var flash: Color?
+    @State private var tick = 0
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(flash ?? base)
+            .onChange(of: value) { old, new in
+                guard let old, let new, old != new else { return }
+                flash = new > old ? Color.positive : Color.negative
+                tick &+= 1
+            }
+            .task(id: tick) {
+                guard flash != nil else { return }
+                try? await Task.sleep(for: Motion.flashHold)
+                guard !Task.isCancelled else { return }
+                withAnimation(Motion.flashFade) { flash = nil }
+            }
     }
 }
 

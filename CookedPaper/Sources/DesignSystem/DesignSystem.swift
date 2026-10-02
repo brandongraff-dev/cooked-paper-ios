@@ -135,6 +135,9 @@ enum Radius {
 enum Motion {
     static let press = Animation.spring(response: 0.2, dampingFraction: 0.9)
     static let standard = Animation.spring(response: 0.3, dampingFraction: 1)
+    /// How long a price stays green/red after a tick before fading back.
+    static let flashHold = Duration.milliseconds(350)
+    static let flashFade = Animation.easeOut(duration: 0.45)
 }
 
 // MARK: - Number formatting
