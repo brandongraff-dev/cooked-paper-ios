@@ -244,7 +244,12 @@ struct TokenDetailView: View {
                     interval: range.interval
                 )
             } else if closes.count > 1 {
-                PriceLineChart(values: closes, selectedIndex: $scrubIndex, markers: indexedMarkers)
+                PriceLineChart(
+                    values: closes,
+                    selectedIndex: $scrubIndex,
+                    markers: indexedMarkers,
+                    direction: range == .day ? profile?.market.change24h.value.map { $0 >= 0 } : nil
+                )
             } else {
                 EmptyStateView(symbol: "chart.xyaxis.line", title: "No chart yet", detail: "There's no trading history for this window.")
             }
