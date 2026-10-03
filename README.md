@@ -2,13 +2,17 @@
 
 A native SwiftUI, paper-trading-only companion to Cooked, hard-paywalled at **$7.99/mo**
 or **$29.99/yr**. Built against the same `apps/api` backend as `apps/web` and
-`apps/mobile` — no new backend code, no billing tables (paper trading is free/
-unlimited server-side by design; the subscription is enforced entirely on-device via
-StoreKit 2).
+`apps/mobile`. The subscription is enforced on-device via StoreKit 2, with the
+server consulted as a second opinion once its Apple billing routes are deployed
+(see "Subscriptions" below).
 
-This was scaffolded from a Windows machine with no Xcode, so nothing here has been
-compiled. Read this whole file before opening the project — there are placeholder
-values that must be filled in before it will run.
+It was scaffolded on a machine with no Xcode, but it is now built on every push by
+GitHub Actions on a macOS runner (`.github/workflows/ios-build-and-screenshot.yml`):
+`xcodegen generate`, a full simulator build, the unit tests, and the UI screenshot
+walkthrough against the in-app mock API. Check that workflow's latest run before
+assuming a change compiles. Read this whole file before opening the project — a few
+values are owner-provided and must be filled in before it will sign or run against
+real services.
 
 **Requires Xcode 26+ to build**, even though the app's own deployment target stays
 iOS 17 — the UI adopts Liquid Glass (`glassEffect`, `.glassProminent`,
@@ -17,10 +21,8 @@ is gated behind `if #available(iOS 26.0, *)` with a pre-26 fallback. That gating
 needs the iOS 26 SDK to be *present* to compile at all — an older Xcode without that
 SDK will fail on the `Glass`/`glassEffect` symbols regardless of the availability
 check, since the check only decides which code *runs*, not which code *compiles
-against a known symbol*. See `Sources/DesignSystem/Glass.swift` for the one shared
-`.cookedGlass()`/`CookedGlassContainer` pair every glass surface in the app goes
-through — extend that file rather than adding a new bare `.glassEffect()` call site
-if this needs to grow.
+against a known symbol*. Today the only glass surface is the floating tab bar
+(`TabBarBackground` in `Sources/App/AppShellView.swift`).
 
 ## What's here
 
@@ -33,14 +35,16 @@ CookedPaper/
                             the shared portfolio store
     DesignSystem/           Colors/type/motion ported from packages/config/design-tokens.ts,
                             plus skeleton-loading components
-    Networking/             APIClient, Keychain session storage, the /paper Socket.IO
-                            client (with the real resume/gap/heartbeat protocol)
+    Networking/             APIClient, Keychain session storage, the /paper and
+                            /market Socket.IO clients (with the real
+                            resume/gap/heartbeat protocol), alerts/push/billing APIs,
+                            and the DEBUG-only MockAPI the UI tests run against
     Models/                 Codable models, incl. the DecimalString wrappers every
                             money field on this API needs (see Models/DecimalCodable.swift)
     Paywall/                StoreKit 2 subscription store + the paywall screen
     Features/               Onboarding, Discover, TokenDetail
-                            (chart + trade), Trade, Portfolio, Leaderboard,
-                            Settings
+                            (chart + trade), Trade, Leverage, Alerts, Portfolio,
+                            Leaderboard, Profile, Settings
   Resources/                Info.plist, entitlements, Assets.xcassets
   Scripts/                  GenerateIcon.swift — renders the real app icon PNG
   StoreKit/Products.storekit  Local StoreKit Configuration for the two subscriptions
@@ -57,11 +61,15 @@ CookedPaper/
    xcodegen generate
    open CookedPaper.xcodeproj
    ```
-2. **Apple Developer / signing**
-   - Set `DEVELOPMENT_TEAM` in `project.yml`'s `settings.base` to your Team ID, or set it in
-     Xcode's Signing & Capabilities tab.
+2. **Apple Developer / signing** (owner-provided)
+   - `DEVELOPMENT_TEAM` in `project.yml`'s `settings.base` is deliberately empty in the
+     repo: set it to your Team ID (or set it in Xcode's Signing & Capabilities tab).
+     CI doesn't need it — it builds with `CODE_SIGNING_ALLOWED=NO`.
    - Bundle id is `app.cooked.paper`, matching the `app.cooked.mobile` convention the
-     Expo app already uses. Enable **Sign in with Apple** on the App ID.
+     Expo app already uses. Enable **Sign in with Apple** and **Push Notifications**
+     on the App ID. The `aps-environment` entitlement comes from the
+     `APS_ENVIRONMENT` build setting: `development` for Debug, `production` for
+     Release.
 3. **App Store Connect — subscriptions**
    - Create a subscription group ("Cooked Paper Pro") with two auto-renewable
      subscriptions: `app.cooked.paper.monthly` ($7.99/mo) and
@@ -71,10 +79,19 @@ CookedPaper/
      Options → StoreKit Configuration) without needing App Store Connect at all
      during development. Xcode will offer to repair its internal IDs the first time
      you open it — let it.
-4. **API base URL** — `Sources/Networking/APIClient.swift`'s `APIConfig.baseURL`
-   points at `https://api.cooked.trade`: the backend on an Oracle Cloud server
-   behind Cloudflare (see `docs/deploy-oracle.md` in the backend repo). Point it
-   at a local API for development.
+4. **API base URL** — `APIConfig.baseURL` (`Sources/Networking/APIClient.swift`) reads
+   the `COOKED_API_BASE_URL` Info.plist key, which `project.yml` fills from the build
+   setting of the same name under the target's `settings.configs`. Debug and Release
+   both default to `https://api.cooked.trade` (the backend behind Cloudflare; see
+   `docs/deploy-oracle.md` in the backend repo). REST and both sockets use it.
+   - To point **Debug** at a local or staging API, change `COOKED_API_BASE_URL` under
+     `configs: Debug:` in `project.yml` (e.g. `http://localhost:3000` for an API on
+     the Mac running the simulator, or `https://staging.example.com`) and re-run
+     `xcodegen generate`. Plain `http://` is allowed only for localhost and `.local`
+     hosts (`NSAllowsLocalNetworking`); a physical phone needs your Mac's
+     `.local` name or an https tunnel. If you override it from an `.xcconfig`
+     instead, write `https:/$()/host` — `//` starts a comment there.
+   - A missing, empty or malformed value falls back to production, never to nothing.
 
 ## Product decisions this was built against
 
@@ -85,9 +102,11 @@ CookedPaper/
   Keychain). The portfolio belongs to the account, so it follows the person to any
   device. Settings has Sign out and Delete account (App Store 5.1.1(v)). There is
   no wallet login (Privy was removed; there is no real trading).
-  - **Google** needs the iOS OAuth client id: set `GOOGLE_IOS_CLIENT_ID` and
-    `GOOGLE_REVERSED_CLIENT_ID` in `project.yml`, and add that client id to the
-    API's Google audiences.
+  - **Google** needs the iOS OAuth client id (owner-provided): `GOOGLE_IOS_CLIENT_ID`
+    and `GOOGLE_REVERSED_CLIENT_ID` in `project.yml` are `REPLACE_ME` placeholders in
+    the repo. Fill them in from Google Cloud Console → Credentials → iOS client
+    (bundle id `app.cooked.paper`) and add that client id to the API's Google
+    audiences. Until then the Google button says it isn't configured.
   - **Apple** needs the Sign in with Apple capability on the App ID
     (`app.cooked.paper`); the entitlement is already in `project.yml`.
 - **No dark patterns**, on purpose, matching `apps/api/src/paper/onboarding.ts`'s own
@@ -113,46 +132,87 @@ CookedPaper/
   page-scroll attempt that happens to start over the chart. A quick swipe scrolls the
   page; a deliberate press-and-hold-then-drag scrubs the chart.
 
+## Push notifications and price alerts
+
+- **Permission is asked at a moment of intent** — creating a price alert, or after a
+  trade — never at launch. Once allowed, the app registers with APNs on every launch
+  and sends the hex device token to `POST /social/apns-tokens`
+  (`{ deviceToken, environment }`, `sandbox` for Debug builds, `production` for
+  Release) after registration, on launch and after every sign-in. Sign-out revokes
+  it first with `POST /social/apns-tokens/revoke`.
+- A push whose payload has a top-level `"mint"` opens that token (the same
+  `cookedpaper://token/<mint>` path as a deep link); banners also show while the app
+  is open.
+- **Price alerts** use the existing `GET/POST/PATCH/DELETE /social/alerts` routes
+  with `price_crossed` rules (channel `push`, 5-minute cooldown): the bell on a
+  token's screen sets one (price prefilled, ±10/25% chips, above/below inferred from
+  the target), active levels are drawn on the candle chart, and Settings → Price
+  alerts lists, pauses and deletes them.
+- **Status:** the alert routes exist in the backend today; `/social/apns-tokens` does
+  not yet (the backend only has Expo/web push), so token uploads 404 harmlessly until
+  it ships — alerts save, they just can't be delivered to iOS yet.
+
+## Subscriptions
+
+StoreKit 2 decides on the device as before. In addition, every verified
+transaction's signed JWS is sent to `POST /billing/apple/transactions`
+(`{ signedTransaction }`) — after a purchase or renewal, on restore, and for current
+entitlements on launch and after sign-in — and `GET /billing/apple/entitlement` is
+read back. Purchases carry `appAccountToken` = the account id when it's a UUID. The
+person is subscribed if StoreKit says so **or** the server says active; an
+unreachable server, a 404 (these routes aren't in the backend yet) or an inactive
+answer never takes away a StoreKit entitlement.
+
 ## Known gaps / what to do before shipping
 
-- **The app icon PNG doesn't exist on disk yet** — `Resources/Assets.xcassets/AppIcon.appiconset/Contents.json`
-  points at `icon-1024.png`, but it has to be rendered on a Mac first; see
-  "Generating the app icon" below. Nothing to design by hand, just one command to run.
+- **Backend routes this app already calls that don't exist yet:**
+  `POST /social/apns-tokens`, `POST /social/apns-tokens/revoke`,
+  `POST /billing/apple/transactions`, `GET /billing/apple/entitlement` (shapes above).
+  The app degrades cleanly without them.
+- **Owner-provided values:** `DEVELOPMENT_TEAM`, `GOOGLE_IOS_CLIENT_ID` /
+  `GOOGLE_REVERSED_CLIENT_ID` (see First-time setup), plus the App ID capabilities
+  (Sign in with Apple, Push Notifications) and an APNs key on the backend.
 - **Numerals use SF Mono, not IBM Plex Mono.** The web/Expo apps both set prices in
-  IBM Plex Mono; this port uses the system monospaced design instead of bundling the
-  font files (see `Sources/DesignSystem/Typography.swift`). Swap in the real TTFs
-  under a new `Resources/Fonts` if exact brand parity matters more than the
-  dependency.
+  IBM Plex Mono; this port uses the system monospaced design (`.monospacedDigit()` in
+  `Sources/DesignSystem/DesignSystem.swift`) instead of bundling the font files. Swap
+  in the real TTFs under a new `Resources/Fonts` if exact brand parity matters more
+  than the dependency.
 - **The Terms of Use this app links to are marked "Draft: not reviewed by counsel
   and not in force"** as of this writing
   (`apps/web/app/legal/terms/page.tsx`). Apple Guideline 3.1.2 requires a functional
   link to real terms before a paid subscription can ship — confirm that document's
   status has flipped before submitting for review.
-- **No server-side receipt validation.** `Transaction.currentEntitlements` (checked
-  at launch and on every `Transaction.updates` event) is standard StoreKit 2 practice
-  and syncs automatically across a user's devices via their Apple ID, but there's no
-  App Store Server Notifications webhook on the backend to reconcile entitlement
-  independently of the device. Reasonable for v1 given apps/api carries no billing
-  tables by design; worth revisiting if this needs to resist a jailbroken/tampered
-  client.
-- **Nothing here has been built.** This was authored on Windows, with no Xcode
-  available to compile against. Do a full build on a Mac before treating any of it
-  as done — expect a small number of mechanical fixes (an import, a label) rather
-  than structural rework, but budget the time.
+- **Server-side receipt validation is client-ready but not live** until the billing
+  routes above ship (and an App Store Server Notifications webhook would be needed
+  for the server to learn about renewals/refunds without the device).
+- **CI is the only compiler in the loop.** The project is generated and built on a
+  macOS runner on every push; there's no local Mac build in the authoring loop, so a
+  red CI run is the first place to look after any change.
 
 ## What was deliberately left out of v1
 
 No social/community feed, no multiple-portfolio management UI (the app always trades
-the caller's one "starter" portfolio), no watchlist or price alerts. Leaderboard, onboarding, and deep linking all shipped
-despite the original "don't need a ton of features" framing —
-each was cheap given how much the backend already provides, and none of them touch
-the paper-trading-only, no-real-money scope.
+the caller's one "starter" portfolio), no watchlist. Leaderboard, onboarding, deep
+linking, leverage and price alerts all shipped despite the original "don't need a ton
+of features" framing — each was cheap given how much the backend already provides,
+and none of them touch the paper-trading-only, no-real-money scope.
+
+## Live data
+
+- Token charts: LIVE streams trade by trade from the `/market` socket (1 s REST
+  polling as a fallback). Other ranges refetch their candles in place while on screen
+  (1H every 15 s, 1D every 30 s, 1W every 60 s, 1M/ALL every 120 s), fold the live
+  price into the current candle, and the header price is live on every range.
+- Discover refreshes every 30 s and Leaderboard every 60 s while visible, silently,
+  and on returning to the foreground.
+- Both sockets re-read the access token before every reconnect and, if a handshake
+  is refused, refresh the session the same way a REST 401 does.
+- A small banner appears app-wide while the device is offline.
 
 ## Generating the app icon
 
-`Resources/Assets.xcassets/AppIcon.appiconset` now points at `icon-1024.png`, but
-that file doesn't exist until you render it — this was written on a machine with no
-Xcode, so there was nothing to rasterize it with. On a Mac, from `CookedPaper`, run:
+`Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png` is checked in. To
+regenerate it after changing the design, on a Mac, from `CookedPaper`, run:
 
 ```
 swift Scripts/GenerateIcon.swift
