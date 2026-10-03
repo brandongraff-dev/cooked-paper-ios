@@ -13,6 +13,8 @@ struct SettingsView: View {
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
     @State private var deleteError: String?
+    /// Set when a reset fails; drives the alert that says so (with a retry).
+    @State private var resetError: String?
 
     var body: some View {
         List {
@@ -116,6 +118,15 @@ struct SettingsView: View {
         } message: {
             Text("This deletes every trade in this portfolio and restores your starting balance. It can't be undone.")
         }
+        .alert(
+            "Couldn't reset your portfolio",
+            isPresented: Binding(get: { resetError != nil }, set: { if !$0 { resetError = nil } })
+        ) {
+            Button("Try again") { Task { await resetPortfolio() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(resetError ?? "")
+        }
         .confirmationDialog("Sign out?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
             Button("Sign out", role: .destructive) { Task { await signOut() } }
             Button("Cancel", role: .cancel) {}
@@ -202,7 +213,16 @@ struct SettingsView: View {
         guard let id = session.activePortfolioId else { return }
         isResetting = true
         Haptics.warning()
-        try? await PaperAPI.reset(portfolioId: id)
+        do {
+            try await PaperAPI.reset(portfolioId: id)
+        } catch {
+            isResetting = false
+            Haptics.error()
+            resetError = (error as? APIError)?.errorDescription ?? "Check your connection and try again."
+            return
+        }
+        // The reset itself went through; a failed reload just leaves the old numbers
+        // until the next refresh, which isn't worth an error.
         try? await portfolioStore.refresh()
         isResetting = false
         Haptics.success()

@@ -62,7 +62,9 @@ struct LeaderboardView: View {
                 ForEach(0..<8, id: \.self) { _ in SkeletonRow() }
             }
         } else if let errorMessage {
-            EmptyStateView(symbol: "wifi.slash", title: "Couldn't load the leaderboard", detail: errorMessage)
+            EmptyStateView(symbol: "wifi.slash", title: "Couldn't load the leaderboard", detail: errorMessage) {
+                Task { await load() }
+            }
         } else if entries.isEmpty {
             EmptyStateView(
                 symbol: "trophy",

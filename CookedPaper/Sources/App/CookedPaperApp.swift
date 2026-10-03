@@ -29,6 +29,7 @@ struct CookedPaperApp: App {
 struct RootView: View {
     let store = SubscriptionStore.shared
     let session = SessionStore.shared
+    let network = NetworkMonitor.shared
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     var body: some View {
@@ -55,6 +56,14 @@ struct RootView: View {
         .animation(Motion.standard, value: store.isSubscribed)
         .animation(Motion.standard, value: session.isSignedIn)
         .animation(Motion.standard, value: session.needsProfileSetup)
+        .overlay(alignment: .top) {
+            if !network.isOnline {
+                OfflineBanner()
+                    .padding(.top, Space.s4)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(Motion.standard, value: network.isOnline)
     }
 }
 

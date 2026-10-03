@@ -12,6 +12,9 @@ struct TokenDetailView: View {
     @State private var scrubIndex: Int?
     @State private var isLoading = true
     @State private var errorMessage: String?
+    /// The selected range's candles failed to load; the chart area offers a retry.
+    @State private var candlesError: String?
+    @State private var isLoadingCandles = false
     @State private var tradeSide: TradeSide?
     @State private var showsLeverage = false
     /// The person's own buys and sells on this token, drawn on the chart.
@@ -92,7 +95,9 @@ struct TokenDetailView: View {
             if isLoading {
                 loadingState
             } else if let errorMessage {
-                EmptyStateView(symbol: "wifi.slash", title: "Couldn't load this token", detail: errorMessage)
+                EmptyStateView(symbol: "wifi.slash", title: "Couldn't load this token", detail: errorMessage) {
+                    Task { await load() }
+                }
             } else {
                 content
             }
@@ -118,10 +123,15 @@ struct TokenDetailView: View {
             syncFeed()
             await load()
         }
-        .onChange(of: range) { _, _ in
+        .onChange(of: range) { _, newRange in
             scrubIndex = nil
             syncFeed()
-            Task { await loadCandles() }
+            // LIVE draws from the feed, not candles; nothing to fetch or fail.
+            if newRange == .live {
+                candlesError = nil
+            } else {
+                Task { await loadCandles() }
+            }
         }
         .onChange(of: scenePhase) { _, _ in syncFeed() }
         .onDisappear { feed.stop() }
@@ -272,6 +282,10 @@ struct TokenDetailView: View {
                     style: showsCandles ? .candles : .line,
                     markers: myTrades
                 )
+            } else if let candlesError {
+                ChartRetryView(message: candlesError, isRetrying: isLoadingCandles) {
+                    Task { await loadCandles() }
+                }
             } else if showsCandles {
                 CandleChartView(
                     candles: displayedCandles,
@@ -397,16 +411,29 @@ struct TokenDetailView: View {
 
     // MARK: - Loading
 
+    /// The profile is what the screen can't do without; candles failing only costs
+    /// the chart, which then offers its own retry.
     private func load() async {
         isLoading = true
         errorMessage = nil
+        let requested = range
+        async let profileFetch = TokenAPI.profile(mint: mint)
+        async let candlesFetch = TokenAPI.candles(mint: mint, interval: requested.interval, limit: requested.limit)
         do {
-            async let profileFetch = TokenAPI.profile(mint: mint)
-            async let candlesFetch = TokenAPI.candles(mint: mint, interval: range.interval, limit: range.limit)
             profile = try await profileFetch
-            candles = try await candlesFetch
         } catch {
             errorMessage = error.localizedDescription
+        }
+        do {
+            let fetched = try await candlesFetch
+            if requested == range {
+                candles = fetched
+                candlesError = nil
+            }
+        } catch {
+            if requested == range && requested != .live {
+                candlesError = error.localizedDescription
+            }
         }
         isLoading = false
         syncFeed()
@@ -449,11 +476,65 @@ struct TokenDetailView: View {
                   !Task.isCancelled, requested == range
             else { continue }
             candles = fresh
+            candlesError = nil
         }
     }
 
+    /// A range switch (or its retry). Keeps the previous chart up while loading; a
+    /// failure swaps it for an inline retry. A late answer for a range that's no
+    /// longer selected is dropped.
     private func loadCandles() async {
-        candles = try? await TokenAPI.candles(mint: mint, interval: range.interval, limit: range.limit)
+        let requested = range
+        isLoadingCandles = true
+        defer { isLoadingCandles = false }
+        do {
+            let fetched = try await TokenAPI.candles(mint: mint, interval: requested.interval, limit: requested.limit)
+            guard requested == range else { return }
+            candles = fetched
+            candlesError = nil
+        } catch {
+            guard requested == range else { return }
+            candlesError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+}
+
+/// The chart area's error state: small enough for the 220pt chart frame.
+private struct ChartRetryView: View {
+    let message: String
+    let isRetrying: Bool
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: Space.s8) {
+            Image(systemName: "chart.xyaxis.line")
+                .font(.title3)
+                .foregroundStyle(Color.textTertiary)
+            Text("Couldn't load this chart")
+                .font(.rowTitle)
+                .foregroundStyle(Color.textPrimary)
+            Text(message)
+                .font(.rowSubtitle)
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+            Button {
+                Haptics.tap()
+                retry()
+            } label: {
+                if isRetrying {
+                    ProgressView().tint(Color.inverseText)
+                } else {
+                    Text("Try again")
+                }
+            }
+            .buttonStyle(.compact)
+            .disabled(isRetrying)
+            .padding(.top, Space.s4)
+            .accessibilityIdentifier("tokenDetail.chartRetry")
+        }
+        .padding(.horizontal, Space.margin)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
