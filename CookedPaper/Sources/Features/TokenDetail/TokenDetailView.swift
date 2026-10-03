@@ -53,7 +53,38 @@ struct TokenDetailView: View {
     }
 
     private var closes: [Double] {
-        (candles?.candles ?? []).compactMap { $0.map { NSDecimalNumber(decimal: $0.close).doubleValue } }
+        displayedCandles.compactMap { $0.map { NSDecimalNumber(decimal: $0.close).doubleValue } }
+    }
+
+    /// The fetched candles with the live price folded into the newest bucket, so a
+    /// non-LIVE chart moves between its periodic refetches. Only when that bucket is
+    /// the one happening now (a relayed series whose last candle is hours old is left
+    /// alone) and only for a USD series — the tape is in dollars, and a
+    /// quote-denominated candle must never be overwritten with one.
+    private var displayedCandles: [Candle?] {
+        let fetched = candles?.candles ?? []
+        guard range != .live,
+              candles?.denomination == "usd",
+              let live = feed.latestPrice, live > 0,
+              let lastIndex = fetched.lastIndex(where: { $0 != nil }),
+              var last = fetched[lastIndex],
+              let start = Self.parseDate(last.bucketStart)
+        else { return fetched }
+        let elapsed = Date().timeIntervalSince(start)
+        let bucketSeconds = TimeInterval(range.interval.milliseconds) / 1000
+        guard elapsed >= 0, elapsed < bucketSeconds else { return fetched }
+        last.close = live
+        if live > last.high { last.high = live }
+        if live < last.low { last.low = live }
+        var folded = fetched
+        folded[lastIndex] = last
+        return folded
+    }
+
+    /// Restarts the periodic candle refetch whenever the range changes or the app
+    /// comes and goes from the foreground.
+    private var chartRefreshKey: String {
+        "\(range.rawValue)|\(scenePhase == .active)"
     }
 
     var body: some View {
@@ -94,6 +125,9 @@ struct TokenDetailView: View {
         }
         .onChange(of: scenePhase) { _, _ in syncFeed() }
         .onDisappear { feed.stop() }
+        // Cancelled on disappear and whenever the key changes, so it only ever runs
+        // while this range is on screen with the app active.
+        .task(id: chartRefreshKey) { await refreshCandlesPeriodically() }
         .task(id: tradesKey) { myTrades = await ChartTradeMarkers.load(mint: mint) }
     }
 
@@ -147,7 +181,7 @@ struct TokenDetailView: View {
             )
         }
 
-        let price = (range == .live ? livePrice : nil) ?? profile?.market.priceUsd.value
+        let price = livePrice ?? profile?.market.priceUsd.value
         let percent: Decimal?
         if range == .day || range == .live {
             percent = profile?.market.change24h.value
@@ -193,9 +227,12 @@ struct TokenDetailView: View {
             .padding(.bottom, Space.s4)
 
             // Re-reads the playhead price ten times a second on LIVE (each trade
-            // lands at its own moment, not when its batch arrived); idle otherwise.
+            // lands at its own moment, not when its batch arrived). Other ranges show
+            // the newest price held, which redraws as the feed delivers.
             TimelineView(.animation(minimumInterval: 0.1, paused: range != .live || Self.stillFrames)) { context in
-                priceLines(livePrice: feed.displayPrice(at: Self.stillFrames ? Date() : context.date))
+                priceLines(livePrice: range == .live
+                    ? feed.displayPrice(at: Self.stillFrames ? Date() : context.date)
+                    : feed.latestPrice)
             }
         }
     }
@@ -237,7 +274,7 @@ struct TokenDetailView: View {
                 )
             } else if showsCandles {
                 CandleChartView(
-                    candles: candles?.candles ?? [],
+                    candles: displayedCandles,
                     isRelayed: candles?.isRelayed ?? false,
                     interval: range.interval
                 )
@@ -375,10 +412,11 @@ struct TokenDetailView: View {
         syncFeed()
     }
 
-    /// Runs the live feed only while the LIVE range is showing and the app is in
-    /// the foreground; it resumes from the last seq it saw when either comes back.
+    /// Runs the live feed while this screen is up and the app is in the
+    /// foreground — on every range, since the header price and the newest candle
+    /// follow it too; it resumes from the last seq it saw when the app comes back.
     private func syncFeed() {
-        if range == .live && scenePhase != .background {
+        if scenePhase != .background {
             feed.start()
         } else {
             feed.stop()
@@ -396,8 +434,40 @@ struct TokenDetailView: View {
         isoFormatter.date(from: raw) ?? isoFormatterFractional.date(from: raw)
     }
 
+    /// Refetches the range's candles in place while it's on screen — often enough
+    /// that a candle closing shows up without leaving the screen, rarely enough
+    /// that a month-long view doesn't hammer the API. Silent: a failed refetch
+    /// keeps the chart that's already drawn.
+    private func refreshCandlesPeriodically() async {
+        guard scenePhase == .active, let interval = range.refreshInterval else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: interval)
+            guard !Task.isCancelled else { return }
+            let requested = range
+            guard !isLoading,
+                  let fresh = try? await TokenAPI.candles(mint: mint, interval: requested.interval, limit: requested.limit),
+                  !Task.isCancelled, requested == range
+            else { continue }
+            candles = fresh
+        }
+    }
+
     private func loadCandles() async {
         candles = try? await TokenAPI.candles(mint: mint, interval: range.interval, limit: range.limit)
+    }
+}
+
+extension ChartRange {
+    /// How often a non-LIVE range refetches its candles while on screen; nil for
+    /// LIVE, which streams. Roughly a quarter of a bucket for the short ranges.
+    var refreshInterval: Duration? {
+        switch self {
+        case .live: nil
+        case .hour: .seconds(15)
+        case .day: .seconds(30)
+        case .week: .seconds(60)
+        case .month, .all: .seconds(120)
+        }
     }
 }
 
