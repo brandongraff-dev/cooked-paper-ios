@@ -1,10 +1,31 @@
 import Foundation
 
 enum APIConfig {
-    /// The API behind Cloudflare on the Oracle Cloud server (see
-    /// `docs/deploy-oracle.md` in the backend repo). Change this one constant
-    /// if the domain differs, or to point at a local API during development.
-    static let baseURL = URL(string: "https://api.cooked.trade")!
+    /// Production: the API behind Cloudflare (see `docs/deploy-oracle.md` in the
+    /// backend repo). Also the fallback whenever the build doesn't name a usable URL.
+    static let productionURL = URL(string: "https://api.cooked.trade")!
+
+    /// The API every REST call and both sockets (`/paper`, `/market`) talk to. Read
+    /// from the `COOKED_API_BASE_URL` Info.plist key, which `project.yml` fills from
+    /// the build setting of the same name per configuration (Debug and Release both
+    /// default to production). Point Debug at a local or staging API by changing that
+    /// setting — see the README's "API base URL" section.
+    static let baseURL: URL = resolveBaseURL(Bundle.main.object(forInfoDictionaryKey: "COOKED_API_BASE_URL") as? String)
+
+    /// Anything unusable — missing, empty, an unexpanded `$(…)`, or not an
+    /// http(s) URL with a host — falls back to production rather than leaving every
+    /// request pointed at nothing.
+    static func resolveBaseURL(_ raw: String?) -> URL {
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty,
+              !trimmed.contains("$("),
+              let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http",
+              let host = url.host, !host.isEmpty
+        else { return productionURL }
+        return url
+    }
 }
 
 struct Endpoint {
