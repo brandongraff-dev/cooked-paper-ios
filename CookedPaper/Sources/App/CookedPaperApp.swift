@@ -70,8 +70,12 @@ struct RootView: View {
         // On launch with a session, and again after every sign-in: hand the APNs
         // token to this account and reconcile the subscription with the server.
         .task(id: session.userId) {
-            guard session.userId != nil else { return }
+            guard session.userId != nil else {
+                store.clearServerEntitlement()
+                return
+            }
             await PushRegistrar.shared.uploadIfSignedIn()
+            await store.syncWithServer()
         }
     }
 }
