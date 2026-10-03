@@ -46,6 +46,8 @@ final class APIClient {
 
     private let baseURL: URL
     private let session: URLSession
+    /// The refresh in flight, if any (see `refreshSession()`).
+    private var refreshTask: Task<Bool, Never>?
     let decoder: JSONDecoder
     let encoder: JSONEncoder
 
@@ -79,12 +81,11 @@ final class APIClient {
             throw APIError.transport(underlying: URLError(.badServerResponse))
         }
 
-        if http.statusCode == 401, retryingOnAuthFailure, let refreshToken = SessionStore.shared.refreshToken {
+        if http.statusCode == 401, retryingOnAuthFailure, SessionStore.shared.refreshToken != nil {
             // The short-lived access token expired. Trade the refresh token for a new
             // session and retry exactly once — a second 401 after a fresh token is a
             // real failure, not a race to paper over.
-            if let refreshed = try? await AuthAPI.refresh(refreshToken: refreshToken) {
-                SessionStore.shared.adopt(refreshed)
+            if await refreshSession() {
                 return try await send(endpoint, as: type, retryingOnAuthFailure: false)
             }
         }
@@ -112,6 +113,28 @@ final class APIClient {
         } catch {
             throw APIError.decoding(underlying: error)
         }
+    }
+
+    /// Trades the stored refresh token for a new session and adopts it. The one
+    /// refresh path in the app: a 401 here and a socket refused at its handshake
+    /// both come through this. Concurrent callers share a single request, so a
+    /// burst of 401s (or a 401 racing a socket rejection) can't spend the refresh
+    /// token twice. False when there's no refresh token or the server refused it.
+    @discardableResult
+    func refreshSession() async -> Bool {
+        if let inFlight = refreshTask {
+            return await inFlight.value
+        }
+        guard let refreshToken = SessionStore.shared.refreshToken else { return false }
+        let task = Task<Bool, Never> {
+            guard let refreshed = try? await AuthAPI.refresh(refreshToken: refreshToken) else { return false }
+            SessionStore.shared.adopt(refreshed)
+            return true
+        }
+        refreshTask = task
+        let refreshed = await task.value
+        refreshTask = nil
+        return refreshed
     }
 
     func sendIgnoringResponse(_ endpoint: Endpoint) async throws {

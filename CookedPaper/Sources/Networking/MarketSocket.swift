@@ -16,7 +16,8 @@ enum MarketSocketEvent {
 /// `LiveSocket`'s: that one exists only while a portfolio is subscribed and is torn
 /// down with it, while market data is public and is wanted on a token page even
 /// signed out. The bearer token is attached when there is one (the namespace uses
-/// the same auth as `/paper` but lets public token data through without it).
+/// the same auth as `/paper` but lets public token data through without it), and is
+/// re-read before every reconnect (see `SocketAuth`).
 ///
 /// Nothing here is load-bearing for correctness: `MarketFeed` polls the REST
 /// endpoint whenever this isn't connected and subscribed, so a server without the
@@ -33,6 +34,7 @@ final class MarketSocket {
     /// Leaving one token for another shouldn't cost a reconnect, so the connection
     /// outlives its last subscriber by a few seconds.
     private var idleDisconnect: Task<Void, Never>?
+    private var isRecoveringAuth = false
 
     private init() {}
 
@@ -68,20 +70,13 @@ final class MarketSocket {
     }
 
     private func connect() {
-        let manager: SocketManager
         // Reconnect quickly: while disconnected the chart is on 1 s polling, which
-        // works but costs more than the socket.
-        if let token = SessionStore.shared.token {
-            manager = SocketManager(
-                socketURL: APIConfig.baseURL,
-                config: [.log(false), .compress, .reconnectWait(1), .reconnectWaitMax(5), .extraHeaders(["Authorization": "Bearer \(token)"])]
-            )
-        } else {
-            manager = SocketManager(
-                socketURL: APIConfig.baseURL,
-                config: [.log(false), .compress, .reconnectWait(1), .reconnectWaitMax(5)]
-            )
-        }
+        // works but costs more than the socket. The token (when signed in) is read
+        // now and again before every automatic reconnect, never kept from here.
+        let manager = SocketManager(
+            socketURL: APIConfig.baseURL,
+            config: [.log(false), .compress, .reconnectWait(1), .reconnectWaitMax(5), .extraHeaders(SocketAuth.currentHeaders())]
+        )
         self.manager = manager
         let socket = manager.socket(forNamespace: "/market")
         self.socket = socket
@@ -99,6 +94,19 @@ final class MarketSocket {
         socket.on(clientEvent: .reconnect) { [weak self] _, _ in
             self?.connectionDropped()
         }
+        // A reconnect is a new handshake; give it the access token as of now rather
+        // than the one this manager was created with.
+        socket.on(clientEvent: .reconnectAttempt) { [weak manager] _, _ in
+            guard let manager else { return }
+            SocketAuth.refreshHeaders(on: manager)
+        }
+        // `/market` is public today, so a refused token shouldn't happen; if the
+        // namespace ever does check it, refresh and reconnect rather than polling
+        // forever.
+        socket.on(clientEvent: .error) { [weak self] data, _ in
+            guard let self, SocketAuth.isAuthFailure(data) else { return }
+            self.recoverFromAuthFailure()
+        }
         socket.on("trades") { [weak self] data, _ in
             guard let self, let message = MarketSocket.decode(MarketTradesMessage.self, from: data) else { return }
             self.listeners[message.mint]?(.trades(message))
@@ -108,6 +116,19 @@ final class MarketSocket {
             self.listeners[message.mint]?(.status(message.status))
         }
         socket.connect()
+    }
+
+    private func recoverFromAuthFailure() {
+        guard !isRecoveringAuth else { return }
+        isRecoveringAuth = true
+        Task { [weak self] in
+            let refreshed = await APIClient.shared.refreshSession()
+            guard let self else { return }
+            self.isRecoveringAuth = false
+            guard refreshed, !self.listeners.isEmpty else { return }
+            self.disconnect()
+            self.connect()
+        }
     }
 
     private func sendSubscribe(_ mint: String) {
