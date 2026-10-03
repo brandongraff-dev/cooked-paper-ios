@@ -24,6 +24,13 @@ final class DeepLinkRouter {
         pendingTokenMint = mint
     }
 
+    /// Opens a token's detail sheet from inside the app (a tapped price-alert
+    /// notification) through the same `cookedpaper://token/<mint>` handling.
+    func openToken(mint: String) {
+        guard let url = URL(string: "cookedpaper://token/\(mint)") else { return }
+        handle(url)
+    }
+
     func clear() {
         pendingTokenMint = nil
     }

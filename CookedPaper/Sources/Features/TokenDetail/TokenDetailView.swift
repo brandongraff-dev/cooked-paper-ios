@@ -17,9 +17,11 @@ struct TokenDetailView: View {
     @State private var isLoadingCandles = false
     @State private var tradeSide: TradeSide?
     @State private var showsLeverage = false
+    @State private var showsAlerts = false
     /// The person's own buys and sells on this token, drawn on the chart.
     @State private var myTrades: [ChartTradeMarker] = []
     @Environment(\.scenePhase) private var scenePhase
+    private let alertStore = PriceAlertStore.shared
 
     init(mint: String) {
         self.mint = mint
@@ -117,6 +119,30 @@ struct TokenDetailView: View {
         }
         .sheet(isPresented: $showsLeverage) {
             LeverageSheetView(mint: mint, tokenSymbol: profile?.token.symbol ?? "token")
+        }
+        .sheet(isPresented: $showsAlerts) {
+            PriceAlertSheet(
+                mint: mint,
+                symbol: profile?.token.symbol ?? "token",
+                currentPrice: feed.latestPrice ?? profile?.market.priceUsd.value
+            )
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Haptics.tap()
+                    showsAlerts = true
+                } label: {
+                    Image(systemName: alertStore.hasActiveAlert(for: mint) ? "bell.fill" : "bell")
+                        .foregroundStyle(Color.textPrimary)
+                }
+                .accessibilityLabel("Price alerts")
+                .accessibilityIdentifier("tokenDetail.alerts")
+                .disabled(profile == nil)
+            }
+        }
+        .task {
+            if SessionStore.shared.isSignedIn { await alertStore.loadIfNeeded() }
         }
         .task {
             // The live tape starts alongside the profile, not after it.
@@ -290,7 +316,9 @@ struct TokenDetailView: View {
                 CandleChartView(
                     candles: displayedCandles,
                     isRelayed: candles?.isRelayed ?? false,
-                    interval: range.interval
+                    interval: range.interval,
+                    // Alert thresholds are dollars; only a USD series can show them.
+                    alertLevels: candles?.denomination == "usd" ? alertStore.chartLevels(for: mint) : []
                 )
             } else if closes.count > 1 {
                 PriceLineChart(values: closes, selectedIndex: $scrubIndex, markers: indexedMarkers)

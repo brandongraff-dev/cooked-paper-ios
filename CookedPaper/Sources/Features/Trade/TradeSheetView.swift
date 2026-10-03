@@ -240,6 +240,9 @@ struct TradeSheetView: View {
             fillResult = result
             Haptics.success()
             await portfolioStore.refreshAfterTrade()
+            // A trade is when price alerts start to matter; iOS only ever shows
+            // this prompt once, so in practice it's after the first one.
+            await PushRegistrar.shared.requestPermissionIfNeeded()
         } catch let error as APIError {
             Haptics.error()
             errorMessage = error.errorDescription

@@ -29,6 +29,16 @@ struct SettingsView: View {
             }
             .listRowBackground(Color.appSurface)
 
+            Section("Notifications") {
+                NavigationLink {
+                    AlertsListView()
+                } label: {
+                    SettingsRow(symbol: "bell", title: "Price alerts")
+                }
+                .accessibilityIdentifier("settings.alerts")
+            }
+            .listRowBackground(Color.appSurface)
+
             Section("Subscription") {
                 Button { showManageSubscriptions = true } label: {
                     SettingsRow(symbol: "creditcard", title: "Manage subscription")
@@ -188,9 +198,13 @@ struct SettingsView: View {
     }
 
     private func signOut() async {
+        // While the session still works: this phone stops getting this account's
+        // alerts.
+        await PushRegistrar.shared.revokeForSignOut()
         await AuthAPI.logout(refreshToken: session.refreshToken)
         session.clear()
         portfolioStore.signedOut()
+        PriceAlertStore.shared.reset()
         Haptics.success()
     }
 
@@ -201,6 +215,7 @@ struct SettingsView: View {
             try await AuthAPI.deleteAccount()
             session.clear()
             portfolioStore.signedOut()
+            PriceAlertStore.shared.reset()
             Haptics.success()
         } catch {
             Haptics.error()

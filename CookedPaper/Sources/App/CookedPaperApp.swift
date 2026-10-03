@@ -3,6 +3,9 @@ import SwiftUI
 
 @main
 struct CookedPaperApp: App {
+    /// APNs callbacks and notification taps (see `AppDelegate`).
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         #if DEBUG
         MockAPI.prepareSessionIfNeeded()
@@ -64,6 +67,12 @@ struct RootView: View {
             }
         }
         .animation(Motion.standard, value: network.isOnline)
+        // On launch with a session, and again after every sign-in: hand the APNs
+        // token to this account and reconcile the subscription with the server.
+        .task(id: session.userId) {
+            guard session.userId != nil else { return }
+            await PushRegistrar.shared.uploadIfSignedIn()
+        }
     }
 }
 
