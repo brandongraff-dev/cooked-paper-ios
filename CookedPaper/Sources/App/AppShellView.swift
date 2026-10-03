@@ -39,6 +39,8 @@ struct AppShellView: View {
                 // Every screen in the stack (pushed ones too) reads this and keeps
                 // its content and pinned bars clear of the floating tab bar.
                 .environment(\.tabBarInset, FloatingTabBar.height + Space.s8)
+                // Lets a screen's auto-refresh pause while its tab is hidden.
+                .environment(\.isSelectedTab, isSelected)
                 .opacity(isSelected ? 1 : 0)
                 .allowsHitTesting(isSelected)
                 .accessibilityHidden(!isSelected)

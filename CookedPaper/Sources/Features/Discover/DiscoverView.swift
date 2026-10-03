@@ -50,6 +50,9 @@ struct DiscoverView: View {
             }
         }
         .task { await load() }
+        // The server caches the feeds for ~60 s; every 30 s catches each update
+        // within half a cache window, without a skeleton or a scroll jump.
+        .autoRefresh(every: 30) { await refreshSilently() }
     }
 
     private var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -183,6 +186,14 @@ struct DiscoverView: View {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    /// The auto-refresh: swaps in fresh feeds in place (same row ids, so the list
+    /// keeps its scroll position) and leaves whatever is shown alone on failure.
+    private func refreshSilently() async {
+        guard !isLoading, let fresh = try? await DiscoverAPI.paperDiscover() else { return }
+        response = fresh
+        errorMessage = nil
     }
 }
 

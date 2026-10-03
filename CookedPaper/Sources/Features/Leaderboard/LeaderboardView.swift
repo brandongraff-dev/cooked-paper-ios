@@ -52,6 +52,7 @@ struct LeaderboardView: View {
         .onChange(of: window) { _, _ in
             Task { await load() }
         }
+        .autoRefresh(every: 60) { await refreshSilently() }
     }
 
     @ViewBuilder
@@ -121,6 +122,18 @@ struct LeaderboardView: View {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    /// The auto-refresh: replaces the ranks in place, never shows the skeleton, and
+    /// keeps the current list if the request fails or the window changed meanwhile.
+    private func refreshSilently() async {
+        let requested = window
+        guard !isLoading,
+              let fresh = try? await LeaderboardAPI.paperLeaderboard(window: requested),
+              requested == window
+        else { return }
+        response = fresh
+        errorMessage = nil
     }
 }
 
