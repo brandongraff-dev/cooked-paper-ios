@@ -405,6 +405,96 @@ struct DuelEvent: Decodable {
     let duel: Duel
 }
 
+// MARK: - Leagues
+
+/// A friend league: a private leaderboard joined by invite code, ranked on each
+/// member's main-portfolio return for the current season.
+struct League: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let ownerUsername: String?
+    let isOwner: Bool
+    /// The current code; may be null for a member if the server only shows it to
+    /// the owner.
+    let inviteCode: String?
+    let memberCount: Int
+    let maxMembers: Int?
+    let createdAt: String?
+    let season: Season?
+    /// Null while you haven't qualified this season.
+    let yourRank: Int?
+
+    var inviteURL: URL? {
+        inviteCode.flatMap { URL(string: "https://cooked.trade/l/\($0)") }
+    }
+}
+
+struct LeagueStanding: Decodable, Identifiable, Hashable {
+    var id: String { userId }
+    let rank: Int?
+    let userId: String
+    let username: String
+    let displayName: String?
+    let avatarSeed: String?
+    @OptionalDecimalString var returnPct: Decimal?
+    let roundTrips: Int?
+    let qualified: Bool
+    let tier: String?
+    let isYou: Bool
+
+    var shownName: String { displayName.flatMap { $0.isEmpty ? nil : $0 } ?? username }
+}
+
+struct LeagueResponse: Decodable {
+    let league: League
+}
+
+/// `GET /paper/leagues/:id`.
+struct LeagueDetailResponse: Decodable {
+    let league: League
+    let standings: [LeagueStanding]
+}
+
+/// `GET /paper/leagues`.
+struct LeagueListResponse: Decodable {
+    let leagues: [League]
+}
+
+/// `POST /paper/leagues` and `PATCH /paper/leagues/:id`.
+struct LeagueNameBody: Encodable {
+    let name: String
+}
+
+/// `POST /paper/leagues/join`.
+struct JoinLeagueBody: Encodable {
+    let inviteCode: String
+}
+
+enum LeagueRules {
+    static let maxNameLength = 32
+
+    /// Trimmed, inner runs of whitespace collapsed — what the server keeps.
+    static func sanitizedName(_ raw: String) -> String {
+        raw.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).joined(separator: " ")
+    }
+
+    static func isValidName(_ raw: String) -> Bool {
+        let name = sanitizedName(raw)
+        return !name.isEmpty && name.count <= maxNameLength
+    }
+
+    /// An invite code from whatever was pasted: a bare code, or a
+    /// `https://cooked.trade/l/<code>` / `cookedpaper://league/<code>` link.
+    static func inviteCode(from raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let url = URL(string: trimmed), url.scheme != nil,
+           let last = url.pathComponents.last(where: { $0 != "/" }), !last.isEmpty {
+            return last
+        }
+        return trimmed
+    }
+}
+
 // MARK: - Dates
 
 /// The API's ISO-8601 timestamps, with or without fractional seconds.

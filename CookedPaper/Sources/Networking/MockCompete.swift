@@ -3,10 +3,11 @@ import Foundation
 
 /// DEBUG-only fixtures for seasons, achievements and duels (see `MockAPI` for why
 /// the mock exists). The demo account sits at #42 of 1,310 (Head Chef) this
-/// season, has 8 of 20 achievements with one not yet seen (so the unlock toast
-/// plays at launch), and has one active duel, one incoming invite, one open invite
-/// link and two finished duels. Duel actions (accept, decline, cancel, create,
-/// join, rematch) change that state for the rest of the run.
+/// season, has 9 of 22 achievements with one not yet seen (so the unlock toast
+/// plays at launch), has one active duel, one incoming invite, one open invite
+/// link and two finished duels, and is in two friend leagues (owns one with 7
+/// members, 2 not yet qualified; joined another). Duel and league actions change
+/// that state for the rest of the run.
 nonisolated enum MockCompete {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var duels: [[String: Any]]?
@@ -49,6 +50,23 @@ nonisolated enum MockCompete {
             return (200, ["duel": duel])
         case ("POST", let rest) where rest.count == 3 && rest[0] == "duels":
             return act(id: rest[1], verb: rest[2])
+
+        // Leagues
+        case ("GET", ["leagues"]): return (200, ["leagues": leagueList()])
+        case ("POST", ["leagues"]): return createLeague(json["name"] as? String ?? "")
+        case ("POST", ["leagues", "join"]): return joinLeague(json["inviteCode"] as? String ?? "")
+        case ("GET", let rest) where rest.count == 2 && rest[0] == "leagues":
+            return leagueDetail(rest[1])
+        case ("PATCH", let rest) where rest.count == 2 && rest[0] == "leagues":
+            return renameLeague(rest[1], name: json["name"] as? String ?? "")
+        case ("DELETE", let rest) where rest.count == 2 && rest[0] == "leagues":
+            return deleteLeague(rest[1])
+        case ("POST", let rest) where rest.count == 3 && rest[0] == "leagues" && rest[2] == "leave":
+            return leaveLeague(rest[1])
+        case ("POST", let rest) where rest.count == 3 && rest[0] == "leagues" && rest[2] == "rotate-code":
+            return rotateLeagueCode(rest[1])
+        case ("POST", let rest) where rest.count == 5 && rest[0] == "leagues" && rest[2] == "members" && rest[4] == "remove":
+            return removeLeagueMember(rest[1], userId: rest[3])
 
         // A duel's own portfolio (the main one is `MockAPI`'s).
         case ("GET", let rest) where rest.count == 2 && rest[0] == "portfolios" && rest[1].hasPrefix("duel-pf-"):
@@ -183,13 +201,15 @@ nonisolated enum MockCompete {
         Entry(id: "season_sous_chef", title: "Sous Chef", description: "Finish a season in the top 25%", tier: "silver", icon: "medal.fill"),
         Entry(id: "season_head_chef", title: "Head Chef", description: "Finish a season in the top 10%", tier: "gold", icon: "trophy"),
         Entry(id: "season_michelin", title: "Michelin Star", description: "Finish a season in the top 1%", tier: "legendary", icon: "trophy.fill"),
+        Entry(id: "league_founder", title: "Host", description: "Start a league that reaches 3 members", tier: "bronze", icon: "person.3.fill"),
+        Entry(id: "league_champion", title: "League Champion", description: "Finish a season #1 in a league of 5+", tier: "gold", icon: "crown.fill"),
     ]
 
     /// Unlocked ids, newest first, with how many days ago. `hot_streak` is the
     /// one the demo account hasn't seen yet.
     private static let unlocked: [(id: String, daysAgo: Double)] = [
         ("hot_streak", 0.02), ("duel_first_win", 1.5), ("season_head_chef", 3), ("season_finisher", 3.1),
-        ("high_roller", 6), ("first_leverage", 9), ("first_profit", 11), ("first_trade", 12),
+        ("league_founder", 5), ("high_roller", 6), ("first_leverage", 9), ("first_profit", 11), ("first_trade", 12),
     ]
 
     private static let progress: [String: (Int, Int)] = [
@@ -410,6 +430,241 @@ nonisolated enum MockCompete {
         }
         duels = all
         return (200, ["duel": target])
+    }
+
+    // MARK: - Leagues
+
+    nonisolated(unsafe) private static var leagues: [[String: Any]]?
+
+    private static func member(_ name: String, returnPct: String?, roundTrips: Int, tier: String) -> [String: Any] {
+        [
+            "userId": "user-\(name)", "username": name, "displayName": NSNull(), "avatarSeed": "seed-\(name)",
+            "returnPct": returnPct.map { $0 as Any } ?? NSNull(), "roundTrips": roundTrips, "tier": tier,
+        ]
+    }
+
+    private static func meMember() -> [String: Any] {
+        let (username, displayName) = MockProfile.current()
+        return [
+            "userId": "demo-user", "username": username,
+            "displayName": displayName.map { $0 as Any } ?? NSNull(), "avatarSeed": "demo-user-seed",
+            "returnPct": "18.45", "roundTrips": 7, "tier": "head_chef",
+        ]
+    }
+
+    private static func seedLeagues() -> [[String: Any]] {
+        [
+            [
+                "id": "league-1", "name": "Group chat degens", "ownerUsername": MockProfile.current().0,
+                "inviteCode": "Q7m2Lx9a", "createdAt": iso(hoursFromNow: -24 * 9),
+                "members": [
+                    member("degenwizard", returnPct: "34.10", roundTrips: 9, tier: "head_chef"),
+                    meMember(),
+                    member("moonboi", returnPct: "11.62", roundTrips: 5, tier: "sous_chef"),
+                    member("bagholder", returnPct: "2.04", roundTrips: 3, tier: "line_cook"),
+                    member("fomo_fren", returnPct: "-6.80", roundTrips: 4, tier: "prep_cook"),
+                    member("wenlambo", returnPct: nil, roundTrips: 1, tier: "unranked"),
+                    member("gmgn", returnPct: nil, roundTrips: 0, tier: "unranked"),
+                ],
+            ],
+            [
+                "id": "league-2", "name": "Desk 4 traders", "ownerUsername": "solsniper",
+                "inviteCode": "Hb3kPq7z", "createdAt": iso(hoursFromNow: -24 * 20),
+                "members": [
+                    member("solsniper", returnPct: "52.30", roundTrips: 12, tier: "head_chef"),
+                    member("chartooor", returnPct: "21.75", roundTrips: 8, tier: "sous_chef"),
+                    meMember(),
+                    member("rugsurvivor", returnPct: "-3.10", roundTrips: 6, tier: "prep_cook"),
+                ],
+            ],
+        ]
+    }
+
+    /// Call with `lock` held.
+    private static func currentLeagues() -> [[String: Any]] {
+        if let leagues { return leagues }
+        let seeded = seedLeagues()
+        leagues = seeded
+        return seeded
+    }
+
+    private static func isQualified(_ member: [String: Any]) -> Bool {
+        (member["roundTrips"] as? Int ?? 0) >= 2 && member["returnPct"] is String
+    }
+
+    /// Ranked members (best return first) with ranks, then the unqualified.
+    private static func standings(_ league: [String: Any]) -> [[String: Any]] {
+        let members = league["members"] as? [[String: Any]] ?? []
+        let ranked = members.filter(isQualified).sorted {
+            (Double($0["returnPct"] as? String ?? "") ?? 0) > (Double($1["returnPct"] as? String ?? "") ?? 0)
+        }
+        let rest = members.filter { !isQualified($0) }
+        var rows: [[String: Any]] = []
+        for (index, var row) in ranked.enumerated() {
+            row["rank"] = index + 1
+            row["qualified"] = true
+            row["isYou"] = row["userId"] as? String == "demo-user"
+            rows.append(row)
+        }
+        for var row in rest {
+            row["rank"] = NSNull()
+            row["qualified"] = false
+            row["isYou"] = row["userId"] as? String == "demo-user"
+            rows.append(row)
+        }
+        return rows
+    }
+
+    private static func leagueObject(_ league: [String: Any]) -> [String: Any] {
+        let rows = standings(league)
+        let mine = rows.first { $0["isYou"] as? Bool == true }
+        let owner = league["ownerUsername"] as? String ?? ""
+        return [
+            "id": league["id"] ?? "", "name": league["name"] ?? "", "ownerUsername": owner,
+            "isOwner": owner.lowercased() == MockProfile.current().0.lowercased(),
+            "inviteCode": league["inviteCode"] ?? NSNull(),
+            "memberCount": rows.count, "maxMembers": 50,
+            "createdAt": league["createdAt"] ?? MockISO.string(Date()),
+            "season": season(monthsAgo: 0),
+            "yourRank": mine?["rank"] ?? NSNull(),
+        ]
+    }
+
+    private static func isOwner(_ league: [String: Any]) -> Bool {
+        (league["ownerUsername"] as? String ?? "").lowercased() == MockProfile.current().0.lowercased()
+    }
+
+    private static func leagueNotFound() -> (Int, Any) {
+        (404, ["error": "league_not_found", "message": "No such league."])
+    }
+
+    private static func notOwner() -> (Int, Any) {
+        (403, ["error": "not_owner", "message": "Only the owner can do that."])
+    }
+
+    private static func newInviteCode() -> String {
+        String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))
+    }
+
+    private static func sanitized(_ name: String) -> String {
+        name.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).joined(separator: " ")
+    }
+
+    private static func leagueList() -> [[String: Any]] {
+        lock.lock(); defer { lock.unlock() }
+        return currentLeagues().map(leagueObject)
+    }
+
+    private static func leagueDetail(_ id: String) -> (Int, Any) {
+        lock.lock(); defer { lock.unlock() }
+        guard let league = currentLeagues().first(where: { $0["id"] as? String == id }) else { return leagueNotFound() }
+        return (200, ["league": leagueObject(league), "standings": standings(league)])
+    }
+
+    private static func createLeague(_ rawName: String) -> (Int, Any) {
+        let name = sanitized(rawName)
+        guard !name.isEmpty, name.count <= 32 else {
+            return (400, ["error": "bad_request", "message": "League names are 1–32 characters."])
+        }
+        lock.lock(); defer { lock.unlock() }
+        var all = currentLeagues()
+        guard all.count < 10, all.filter(isOwner).count < 5 else {
+            return (409, ["error": "league_limit", "message": "Too many leagues."])
+        }
+        let created: [String: Any] = [
+            "id": nextId("league-new"), "name": name, "ownerUsername": MockProfile.current().0,
+            "inviteCode": newInviteCode(), "createdAt": MockISO.string(Date()), "members": [meMember()],
+        ]
+        all.insert(created, at: 0)
+        leagues = all
+        return (201, ["league": leagueObject(created)])
+    }
+
+    private static func joinLeague(_ code: String) -> (Int, Any) {
+        lock.lock(); defer { lock.unlock() }
+        var all = currentLeagues()
+        if all.contains(where: { $0["inviteCode"] as? String == code }) {
+            return (409, ["error": "already_member", "message": "Already a member."])
+        }
+        guard code.count == 8 else {
+            return (404, ["error": "invite_invalid", "message": "That invite isn't valid."])
+        }
+        guard all.count < 10 else {
+            return (409, ["error": "league_limit", "message": "Too many leagues."])
+        }
+        let joined: [String: Any] = [
+            "id": nextId("league-joined"), "name": "Friday night fills", "ownerUsername": "cookedcat",
+            "inviteCode": code, "createdAt": iso(hoursFromNow: -24 * 3),
+            "members": [
+                member("cookedcat", returnPct: "27.40", roundTrips: 6, tier: "sous_chef"),
+                member("diamondpaws", returnPct: "9.15", roundTrips: 4, tier: "line_cook"),
+                member("paperhands_og", returnPct: nil, roundTrips: 1, tier: "unranked"),
+                meMember(),
+            ],
+        ]
+        all.insert(joined, at: 0)
+        leagues = all
+        return (200, ["league": leagueObject(joined)])
+    }
+
+    private static func renameLeague(_ id: String, name rawName: String) -> (Int, Any) {
+        let name = sanitized(rawName)
+        guard !name.isEmpty, name.count <= 32 else {
+            return (400, ["error": "bad_request", "message": "League names are 1–32 characters."])
+        }
+        lock.lock(); defer { lock.unlock() }
+        var all = currentLeagues()
+        guard let index = all.firstIndex(where: { $0["id"] as? String == id }) else { return leagueNotFound() }
+        guard isOwner(all[index]) else { return notOwner() }
+        all[index]["name"] = name
+        leagues = all
+        return (200, ["league": leagueObject(all[index])])
+    }
+
+    private static func rotateLeagueCode(_ id: String) -> (Int, Any) {
+        lock.lock(); defer { lock.unlock() }
+        var all = currentLeagues()
+        guard let index = all.firstIndex(where: { $0["id"] as? String == id }) else { return leagueNotFound() }
+        guard isOwner(all[index]) else { return notOwner() }
+        all[index]["inviteCode"] = newInviteCode()
+        leagues = all
+        return (200, ["league": leagueObject(all[index])])
+    }
+
+    private static func removeLeagueMember(_ id: String, userId: String) -> (Int, Any) {
+        lock.lock(); defer { lock.unlock() }
+        var all = currentLeagues()
+        guard let index = all.firstIndex(where: { $0["id"] as? String == id }) else { return leagueNotFound() }
+        guard isOwner(all[index]) else { return notOwner() }
+        guard userId != "demo-user" else {
+            return (400, ["error": "bad_request", "message": "Leave the league instead."])
+        }
+        var members = all[index]["members"] as? [[String: Any]] ?? []
+        members.removeAll { $0["userId"] as? String == userId }
+        all[index]["members"] = members
+        leagues = all
+        return (200, ["ok": true])
+    }
+
+    private static func deleteLeague(_ id: String) -> (Int, Any) {
+        lock.lock(); defer { lock.unlock() }
+        var all = currentLeagues()
+        guard let index = all.firstIndex(where: { $0["id"] as? String == id }) else { return leagueNotFound() }
+        guard isOwner(all[index]) else { return notOwner() }
+        all.remove(at: index)
+        leagues = all
+        return (200, ["ok": true])
+    }
+
+    /// Leaving drops the league from your list; server-side, ownership passes to
+    /// the longest-standing member (or the league goes if you were the last).
+    private static func leaveLeague(_ id: String) -> (Int, Any) {
+        lock.lock(); defer { lock.unlock() }
+        var all = currentLeagues()
+        guard let index = all.firstIndex(where: { $0["id"] as? String == id }) else { return leagueNotFound() }
+        all.remove(at: index)
+        leagues = all
+        return (200, ["ok": true])
     }
 
     // MARK: - Duel portfolio

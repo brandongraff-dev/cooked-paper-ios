@@ -121,4 +121,39 @@ struct CompeteModelDecodingTests {
         #expect(object["opponentUsername"] is NSNull)
         #expect(object["durationHours"] as? Int == 24)
     }
+
+    @Test func decodesALeagueWithRankedAndUnqualifiedMembers() throws {
+        let json = Data(
+            """
+            { "league": { "id": "l1", "name": "Group chat degens", "ownerUsername": "wifmaxi", "isOwner": true,
+                          "inviteCode": "Q7m2Lx9a", "memberCount": 2, "maxMembers": 50,
+                          "createdAt": "2026-10-01T00:00:00Z",
+                          "season": { "id": "2026-10", "number": 10, "label": "Season 10 · October 2026",
+                                      "startsAt": "2026-10-01T00:00:00Z", "endsAt": "2026-11-01T00:00:00Z" },
+                          "yourRank": null },
+              "standings": [
+                { "rank": 1, "userId": "u2", "username": "degenwizard", "displayName": null, "avatarSeed": "s",
+                  "returnPct": "34.10", "roundTrips": 9, "qualified": true, "tier": "head_chef", "isYou": false },
+                { "rank": null, "userId": "u1", "username": "wifmaxi", "displayName": "Wif Maxi", "avatarSeed": null,
+                  "returnPct": null, "roundTrips": 1, "qualified": false, "tier": "unranked", "isYou": true }
+              ] }
+            """.utf8
+        )
+        let decoded = try JSONDecoder().decode(LeagueDetailResponse.self, from: json)
+        #expect(decoded.league.isOwner)
+        #expect(decoded.league.yourRank == nil)
+        #expect(decoded.league.inviteURL?.absoluteString == "https://cooked.trade/l/Q7m2Lx9a")
+        #expect(decoded.standings[0].returnPct == Decimal(string: "34.10"))
+        #expect(decoded.standings[1].rank == nil)
+        #expect(decoded.standings[1].shownName == "Wif Maxi")
+    }
+
+    @Test func cleansLeagueNamesAndInviteCodes() {
+        #expect(LeagueRules.sanitizedName("  Group   chat\n degens ") == "Group chat degens")
+        #expect(!LeagueRules.isValidName("   "))
+        #expect(!LeagueRules.isValidName(String(repeating: "a", count: 33)))
+        #expect(LeagueRules.inviteCode(from: " Q7m2Lx9a ") == "Q7m2Lx9a")
+        #expect(LeagueRules.inviteCode(from: "https://cooked.trade/l/Q7m2Lx9a") == "Q7m2Lx9a")
+        #expect(LeagueRules.inviteCode(from: "cookedpaper://league/Q7m2Lx9a") == "Q7m2Lx9a")
+    }
 }
