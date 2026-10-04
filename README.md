@@ -148,9 +148,10 @@ CookedPaper/
   token's screen sets one (price prefilled, ±10/25% chips, above/below inferred from
   the target), active levels are drawn on the candle chart, and Settings → Price
   alerts lists, pauses and deletes them.
-- **Status:** the alert routes exist in the backend today; `/social/apns-tokens` does
-  not yet (the backend only has Expo/web push), so token uploads 404 harmlessly until
-  it ships — alerts save, they just can't be delivered to iOS yet.
+- **Status:** the alert and `/social/apns-tokens` routes exist in the backend; the
+  server refuses token registration (`bad_request`) until an APNs key is configured
+  on the deployment, which the app treats as a silent no-op. Guests' tokens are held
+  and registered after sign-in.
 
 ## Subscriptions
 
@@ -158,17 +159,26 @@ StoreKit 2 decides on the device as before. In addition, every verified
 transaction's signed JWS is sent to `POST /billing/apple/transactions`
 (`{ signedTransaction }`) — after a purchase or renewal, on restore, and for current
 entitlements on launch and after sign-in — and `GET /billing/apple/entitlement` is
-read back. Purchases carry `appAccountToken` = the account id when it's a UUID. The
-person is subscribed if StoreKit says so **or** the server says active; an
-unreachable server, a 404 (these routes aren't in the backend yet) or an inactive
-answer never takes away a StoreKit entitlement.
+read back. Purchases carry `appAccountToken` = the account id when it's a UUID (a
+guest buying before sign-in has none; the transaction is sent once they sign in).
+The person is subscribed if StoreKit says so **or** the server says active; an
+unreachable server, a 404 or an inactive answer never takes away a StoreKit
+entitlement.
+
+The annual plan has a 7-day free trial (weekly keeps its 3-day one). When the Apple
+ID is eligible, the paywall says "Start 7-day free trial", shows a three-step "how
+your trial works" timeline, offers a soft "want a reminder?" ask before the purchase,
+and schedules a local reminder two days before the trial converts.
 
 ## Known gaps / what to do before shipping
 
-- **Backend routes this app already calls that don't exist yet:**
-  `POST /social/apns-tokens`, `POST /social/apns-tokens/revoke`,
-  `POST /billing/apple/transactions`, `GET /billing/apple/entitlement` (shapes above).
-  The app degrades cleanly without them.
+- **Guest onboarding needs `PAPER_GUEST_SESSIONS_ENABLED=true` on the API.** It
+  defaults to `false` (and production's example env says `false`); with guests off
+  the app falls back to signing in right after the practice round, as before.
+- **A returning account owner who taps "Save your portfolio"** gets the guest
+  portfolio claimed into their account, but the app keeps trading their oldest
+  portfolio, so the onboarding positions don't show there. "Already have an
+  account? Sign in" on the first screen avoids this.
 - **Owner-provided values:** `DEVELOPMENT_TEAM`, `GOOGLE_IOS_CLIENT_ID` /
   `GOOGLE_REVERSED_CLIENT_ID` (see First-time setup), plus the App ID capabilities
   (Sign in with Apple, Push Notifications) and an APNs key on the backend.
@@ -182,9 +192,9 @@ answer never takes away a StoreKit entitlement.
   (`apps/web/app/legal/terms/page.tsx`). Apple Guideline 3.1.2 requires a functional
   link to real terms before a paid subscription can ship — confirm that document's
   status has flipped before submitting for review.
-- **Server-side receipt validation is client-ready but not live** until the billing
-  routes above ship (and an App Store Server Notifications webhook would be needed
-  for the server to learn about renewals/refunds without the device).
+- **App Store Server Notifications** go to `POST /billing/apple/notifications`;
+  set that URL in App Store Connect so the server learns about renewals and refunds
+  without the device.
 - **CI is the only compiler in the loop.** The project is generated and built on a
   macOS runner on every push; there's no local Mac build in the authoring loop, so a
   red CI run is the first place to look after any change.
@@ -196,6 +206,23 @@ the caller's one "starter" portfolio), no watchlist. Leaderboard, onboarding, de
 linking, leverage and price alerts all shipped despite the original "don't need a ton
 of features" framing — each was cheap given how much the backend already provides,
 and none of them touch the paper-trading-only, no-real-money scope.
+
+## First run
+
+Balance → practice round → two questions (experience, goal) → pick three coins →
+live portfolio → paywall → "Save your portfolio" sign-in → the app. Everything
+before sign-in runs as a **guest paper session** (`POST /paper/portfolios/starter`
+with no `Authorization` mints a 7-day guest token, kept in the Keychain); signing in
+claims it (`POST /paper/portfolios/claim`) so the positions carry over. The first
+screen has "Already have an account? Sign in", and the paywall has "Sign in". After
+the first fill, a soft card asks whether to send price notifications (the system
+prompt only follows a yes). The paywall headline follows the goal answer and shows
+this month's top trader from the public leaderboard when there's a positive one.
+
+A profitable sell or leveraged close asks for an App Store review (at most once per
+90 days, never after a loss). Sells and closes offer a share button for the
+server-rendered P&L card (`/cards/meta/…`, percentages only), hidden when the card
+endpoint doesn't answer.
 
 ## Live data
 
