@@ -14,6 +14,10 @@ struct PaywallView: View {
     /// The plan waiting on the "want a reminder?" pre-prompt.
     @State private var pendingProduct: Product?
     @State private var showsReminderPrompt = false
+    /// "This month's top trader", from the public leaderboard; nil hides it.
+    @State private var topTrader: TopTrader?
+    /// The onboarding goal answer, for the headline.
+    private let goal = TradingGoal.saved
     @State private var isPurchasing = false
     /// Product ids whose introductory offer this Apple ID can still redeem — a trial
     /// is only ever advertised to someone who will actually get it.
@@ -146,7 +150,7 @@ struct PaywallView: View {
             BrandWordmark(height: 34)
                 .padding(.top, Space.s48)
 
-            Text(heldPositions.isEmpty ? "Trade live prices\nwith paper money." : "Keep your\nportfolio.")
+            Text(goal?.paywallHeadline ?? (heldPositions.isEmpty ? "Trade live prices\nwith paper money." : "Keep your\nportfolio."))
                 .font(.system(size: 34, weight: .bold))
                 .tracking(-0.8)
                 .multilineTextAlignment(.center)
@@ -207,13 +211,38 @@ struct PaywallView: View {
         .padding(.top, Space.s4)
     }
 
+    /// The highest multiple the server offers (from its leverage config when this
+    /// session has loaded it), else 10x.
+    private var maxLeverage: Int {
+        LeverageConfigStore.shared.leverageOptions.max() ?? 10
+    }
+
     private var features: some View {
         VStack(alignment: .leading, spacing: Space.s16) {
-            FeatureCheck(text: "Unlimited paper trades on live tokens")
-            FeatureCheck(text: "Your full record: win rate, P&L, every trade")
-            FeatureCheck(text: "A monthly leaderboard to climb")
+            if let topTrader {
+                TopTraderBanner(trader: topTrader)
+            }
+            FeatureCheck(symbol: "chart.xyaxis.line", text: "Live on-chain prices & charts")
+            FeatureCheck(symbol: "bolt.fill", text: "Leverage up to \(maxLeverage)x")
+            FeatureCheck(symbol: "bell.badge.fill", text: "Price alerts on any token")
+            FeatureCheck(symbol: "trophy.fill", text: "Monthly leaderboard")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .task { await loadTopTrader() }
+    }
+
+    /// Social proof that's real or absent: the leaderboard's #1 this month, shown
+    /// only with a positive, measured return.
+    private func loadTopTrader() async {
+        guard topTrader == nil,
+              let board = try? await LeaderboardAPI.paperLeaderboard(window: .all, limit: 1),
+              let leader = board.entries.first,
+              leader.returnPct.unavailable == nil,
+              let pct = leader.returnPct.pct, pct > 0
+        else { return }
+        withAnimation(Motion.standard) {
+            topTrader = TopTrader(username: leader.username, returnPct: pct)
+        }
     }
 
     @ViewBuilder
@@ -516,12 +545,45 @@ private struct TrialStep: View {
     }
 }
 
+private struct TopTrader: Equatable {
+    let username: String
+    let returnPct: Decimal
+}
+
+private struct TopTraderBanner: View {
+    let trader: TopTrader
+
+    var body: some View {
+        HStack(spacing: Space.s12) {
+            Image(systemName: "crown.fill")
+                .font(.body)
+                .foregroundStyle(Color.accent)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                (Text("This month's top trader: ").foregroundStyle(Color.textPrimary)
+                    + Text(PriceFormat.change(trader.returnPct)).foregroundStyle(Color.positive))
+                    .font(.body.weight(.semibold))
+                Text("@\(trader.username) · paper, simulated")
+                    .font(.footnote)
+                    .foregroundStyle(Color.textSecondary)
+            }
+        }
+        .padding(Space.s16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("paywall.topTrader")
+    }
+}
+
 private struct FeatureCheck: View {
+    var symbol = "checkmark"
     let text: String
 
     var body: some View {
         HStack(spacing: Space.s16) {
-            Image(systemName: "checkmark")
+            Image(systemName: symbol)
                 .font(.body.weight(.semibold))
                 .foregroundStyle(Color.accent)
                 .frame(width: 20)
