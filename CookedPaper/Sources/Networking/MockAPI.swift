@@ -92,6 +92,7 @@ nonisolated enum MockAPI {
         if match("DELETE", "auth/account") != nil { return (204, [:] as [String: Any]) }
 
         if let leverage = MockLeverage.route(method: method, parts: parts, body: body) { return leverage }
+        if let compete = MockCompete.route(method: method, parts: parts, body: body) { return compete }
 
         if match("POST", "paper/portfolios/starter") != nil {
             return (200, [

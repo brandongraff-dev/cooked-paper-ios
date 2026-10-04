@@ -1,0 +1,435 @@
+import Foundation
+
+// Seasons, achievements and head-to-head duels ("Compete"). Every shape here
+// mirrors the shared compete spec the backend implements: camelCase JSON, decimals
+// as strings, ISO-8601 timestamps. Ids that the server may grow (tiers, statuses)
+// stay raw `String`s with a typed view on top, so a value this build doesn't know
+// yet degrades to a neutral rendering instead of failing the whole decode.
+
+// MARK: - Seasons
+
+struct Season: Decodable, Hashable, Identifiable {
+    /// `"2026-10"` — a UTC calendar month.
+    let id: String
+    let number: Int
+    /// `"Season 10 · October 2026"`.
+    let label: String
+    let startsAt: String
+    let endsAt: String
+
+    var endDate: Date? { CompeteDate.parse(endsAt) }
+}
+
+/// The season tier ids. `unknown` covers anything a newer server adds.
+enum SeasonTier: String, CaseIterable {
+    case michelin
+    case headChef = "head_chef"
+    case sousChef = "sous_chef"
+    case lineCook = "line_cook"
+    case prepCook = "prep_cook"
+    case unranked
+    case unknown
+
+    init(id: String?) {
+        self = id.flatMap(SeasonTier.init(rawValue:)) ?? .unknown
+    }
+
+    /// The fallback name when the server's `tiers` list doesn't carry this one.
+    var defaultName: String {
+        switch self {
+        case .michelin: "Michelin"
+        case .headChef: "Head Chef"
+        case .sousChef: "Sous Chef"
+        case .lineCook: "Line Cook"
+        case .prepCook: "Prep Cook"
+        case .unranked: "Unranked"
+        case .unknown: "Ranked"
+        }
+    }
+}
+
+struct SeasonTierInfo: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    /// The percentile ceiling for the tier (1 = top 1%). Lenient: absent, null or
+    /// a non-number reads as nil.
+    let topPercent: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, topPercent
+    }
+
+    init(id: String, name: String, topPercent: Double?) {
+        self.id = id
+        self.name = name
+        self.topPercent = topPercent
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? SeasonTier(id: id).defaultName
+        topPercent = (try? container.decodeIfPresent(Double.self, forKey: .topPercent)) ?? nil
+    }
+
+    var tier: SeasonTier { SeasonTier(id: id) }
+}
+
+struct SeasonNextTier: Decodable, Hashable {
+    let id: String
+    /// The rank to reach for that tier (e.g. 13 when rank 13 is the top 1%).
+    let rankNeeded: Int
+}
+
+struct SeasonStanding: Decodable {
+    let qualified: Bool
+    let rank: Int?
+    let of: Int?
+    @OptionalDecimalString var percentile: Decimal?
+    let tier: String
+    @OptionalDecimalString var returnPct: Decimal?
+    let roundTrips: Int?
+    let minRoundTrips: Int?
+    let nextTier: SeasonNextTier?
+}
+
+struct SeasonTopEntry: Decodable, Identifiable {
+    var id: String { "\(rank)-\(username)" }
+    let rank: Int
+    let username: String
+    let displayName: String?
+    let avatarSeed: String?
+    @OptionalDecimalString var returnPct: Decimal?
+    let tier: String
+}
+
+/// `GET /paper/seasons/current`.
+struct SeasonCurrentResponse: Decodable {
+    let season: Season
+    let tiers: [SeasonTierInfo]
+    let me: SeasonStanding?
+    let top: [SeasonTopEntry]
+}
+
+struct SeasonHistoryEntry: Decodable, Identifiable {
+    var id: String { season.id }
+    let season: Season
+    let rank: Int
+    let of: Int
+    let tier: String
+    @OptionalDecimalString var returnPct: Decimal?
+}
+
+/// `GET /paper/seasons/history`.
+struct SeasonHistoryResponse: Decodable {
+    let seasons: [SeasonHistoryEntry]
+}
+
+/// `GET /paper/seasons/:id/results`.
+struct SeasonResultsResponse: Decodable {
+    let season: Season
+    let results: [SeasonTopEntry]
+}
+
+// MARK: - Achievements
+
+enum AchievementTier: String {
+    case bronze, silver, gold, legendary
+
+    init(id: String) {
+        self = AchievementTier(rawValue: id) ?? .bronze
+    }
+
+    var title: String {
+        switch self {
+        case .bronze: "Bronze"
+        case .silver: "Silver"
+        case .gold: "Gold"
+        case .legendary: "Legendary"
+        }
+    }
+}
+
+struct AchievementProgress: Decodable, Hashable {
+    let current: Double
+    let target: Double
+
+    /// 0...1, for a progress bar.
+    var fraction: Double {
+        guard target > 0 else { return 0 }
+        return min(1, max(0, current / target))
+    }
+}
+
+struct Achievement: Decodable, Identifiable, Hashable {
+    let id: String
+    let title: String
+    let description: String
+    let tier: String
+    /// An SF Symbol name (see `AchievementBadge` for the fallback).
+    let icon: String
+    let unlocked: Bool
+    let unlockedAt: String?
+    let seen: Bool?
+    let progress: AchievementProgress?
+
+    var tierKind: AchievementTier { AchievementTier(id: tier) }
+}
+
+/// `GET /paper/achievements`.
+struct AchievementsResponse: Decodable {
+    let achievements: [Achievement]
+    let unlockedCount: Int
+    let total: Int
+}
+
+/// `POST /paper/achievements/seen`.
+struct AchievementsSeenBody: Encodable {
+    let ids: [String]
+}
+
+/// `paper:achievement` on the `/paper` socket.
+struct AchievementEvent: Decodable {
+    let achievement: Achievement
+}
+
+// MARK: - Duels
+
+enum DuelStatus: String {
+    case pending, active, finished, declined, cancelled, expired, unknown
+
+    init(id: String) {
+        self = DuelStatus(rawValue: id) ?? .unknown
+    }
+}
+
+/// How a finished duel went for the person looking at it.
+enum DuelOutcome {
+    case won, lost, draw
+
+    var letter: String {
+        switch self {
+        case .won: "W"
+        case .lost: "L"
+        case .draw: "D"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .won: "You won"
+        case .lost: "You lost"
+        case .draw: "Draw"
+        }
+    }
+}
+
+/// The three durations the server accepts, in hours.
+enum DuelDuration: Int, CaseIterable, Identifiable {
+    case hour = 1
+    case day = 24
+    case week = 168
+
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .hour: "1h"
+        case .day: "24h"
+        case .week: "7d"
+        }
+    }
+
+    var longLabel: String {
+        switch self {
+        case .hour: "1 hour"
+        case .day: "24 hours"
+        case .week: "7 days"
+        }
+    }
+
+    /// "24h" for a known duration, "<n>h" otherwise.
+    static func label(hours: Int) -> String {
+        DuelDuration(rawValue: hours)?.label ?? "\(hours)h"
+    }
+}
+
+struct DuelPlayer: Decodable, Hashable {
+    let userId: String
+    let username: String
+    let displayName: String?
+    let avatarSeed: String?
+    /// Null until the duel starts (both portfolios are created at accept).
+    let portfolioId: String?
+    /// Live while active, final once finished, null while pending.
+    @OptionalDecimalString var returnPct: Decimal?
+    @OptionalDecimalString var equityUsd: Decimal?
+
+    var handle: String { "@\(username)" }
+    var shownName: String { displayName.flatMap { $0.isEmpty ? nil : $0 } ?? handle }
+    var seed: String { avatarSeed ?? userId }
+}
+
+struct Duel: Decodable, Identifiable, Hashable {
+    let id: String
+    let status: String
+    let durationHours: Int
+    let createdAt: String
+    let startsAt: String?
+    let endsAt: String?
+    let finishedAt: String?
+    /// Only for the challenger while pending; else null.
+    let inviteCode: String?
+    let challenger: DuelPlayer
+    /// Null for an open invite nobody has joined yet.
+    let opponent: DuelPlayer?
+    /// `"challenger"` or `"opponent"` — which side the caller is.
+    let you: String
+    /// `"challenger"`, `"opponent"`, `"draw"` or null.
+    let winner: String?
+    @DecimalString var startingBalanceUsd: Decimal
+
+    static func == (lhs: Duel, rhs: Duel) -> Bool {
+        lhs.id == rhs.id && lhs.status == rhs.status
+            && lhs.challenger == rhs.challenger && lhs.opponent == rhs.opponent
+            && lhs.winner == rhs.winner && lhs.endsAt == rhs.endsAt
+    }
+
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+
+    var state: DuelStatus { DuelStatus(id: status) }
+    var isChallenger: Bool { you == "challenger" }
+    var me: DuelPlayer? { isChallenger ? challenger : opponent }
+    var them: DuelPlayer? { isChallenger ? opponent : challenger }
+    var endDate: Date? { endsAt.flatMap(CompeteDate.parse) }
+    var startDate: Date? { startsAt.flatMap(CompeteDate.parse) }
+    var durationLabel: String { DuelDuration.label(hours: durationHours) }
+
+    /// Nil until the duel has a result.
+    var outcome: DuelOutcome? {
+        guard let winner else { return nil }
+        if winner == "draw" { return .draw }
+        return winner == you ? .won : .lost
+    }
+
+    /// Whoever is ahead on return right now; nil when tied or unmeasured.
+    var leader: DuelLeader? {
+        guard let mine = me?.returnPct, let theirs = them?.returnPct else { return nil }
+        let gap = mine - theirs
+        if abs(NSDecimalNumber(decimal: gap).doubleValue) < 0.01 { return .tied }
+        return gap > 0 ? .me : .them
+    }
+
+    /// The invite's shareable web link, when there is one.
+    var inviteURL: URL? {
+        inviteCode.flatMap { URL(string: "https://cooked.trade/d/\($0)") }
+    }
+}
+
+enum DuelLeader {
+    case me, them, tied
+}
+
+struct DuelResponse: Decodable {
+    let duel: Duel
+}
+
+/// `GET /paper/duels`. Lenient: a missing bucket is empty.
+struct DuelListResponse: Decodable {
+    var active: [Duel]
+    var incoming: [Duel]
+    var outgoing: [Duel]
+    var finished: [Duel]
+
+    private enum CodingKeys: String, CodingKey {
+        case active, incoming, outgoing, finished
+    }
+
+    init(active: [Duel] = [], incoming: [Duel] = [], outgoing: [Duel] = [], finished: [Duel] = []) {
+        self.active = active
+        self.incoming = incoming
+        self.outgoing = outgoing
+        self.finished = finished
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        active = try container.decodeIfPresent([Duel].self, forKey: .active) ?? []
+        incoming = try container.decodeIfPresent([Duel].self, forKey: .incoming) ?? []
+        outgoing = try container.decodeIfPresent([Duel].self, forKey: .outgoing) ?? []
+        finished = try container.decodeIfPresent([Duel].self, forKey: .finished) ?? []
+    }
+
+    var isEmpty: Bool { active.isEmpty && incoming.isEmpty && outgoing.isEmpty && finished.isEmpty }
+
+    var all: [Duel] { active + incoming + outgoing + finished }
+}
+
+/// `GET /paper/duels/stats`.
+struct DuelStats: Decodable {
+    let wins: Int
+    let losses: Int
+    let draws: Int
+    let currentStreak: Int
+    let bestStreak: Int
+}
+
+/// `POST /paper/duels`. A nil `opponentUsername` (sent as JSON null) creates an
+/// open invite link.
+struct CreateDuelBody: Encodable {
+    let opponentUsername: String?
+    let durationHours: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case opponentUsername, durationHours
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        if let opponentUsername {
+            try container.encode(opponentUsername, forKey: .opponentUsername)
+        } else {
+            try container.encodeNil(forKey: .opponentUsername)
+        }
+        try container.encode(durationHours, forKey: .durationHours)
+    }
+}
+
+/// `POST /paper/duels/join`.
+struct JoinDuelBody: Encodable {
+    let inviteCode: String
+}
+
+/// `paper:duel` on the `/paper` socket.
+struct DuelEvent: Decodable {
+    let duel: Duel
+}
+
+// MARK: - Dates
+
+/// The API's ISO-8601 timestamps, with or without fractional seconds.
+enum CompeteDate {
+    nonisolated(unsafe) private static let plain = ISO8601DateFormatter()
+    nonisolated(unsafe) private static let fractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    static func parse(_ string: String) -> Date? {
+        fractional.date(from: string) ?? plain.date(from: string)
+    }
+
+    /// "2d 4h", "5h 12m", "12:04" — the time left until `end`, or nil once past.
+    static func remaining(until end: Date, from now: Date = Date()) -> String? {
+        let seconds = Int(end.timeIntervalSince(now))
+        guard seconds > 0 else { return nil }
+        let days = seconds / 86_400
+        let hours = (seconds % 86_400) / 3_600
+        let minutes = (seconds % 3_600) / 60
+        let secs = seconds % 60
+        if days > 0 { return "\(days)d \(hours)h" }
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        return String(format: "%d:%02d", minutes, secs)
+    }
+}
