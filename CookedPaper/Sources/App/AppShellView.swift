@@ -11,6 +11,8 @@ struct AppShellView: View {
         if let mint = router.pendingTokenMint { return .token(mint) }
         if let code = router.pendingDuelInviteCode { return .duelInvite(code) }
         if let id = router.pendingDuelId { return .duel(id) }
+        if let code = router.pendingLeagueInviteCode { return .leagueInvite(code) }
+        if let id = router.pendingLeagueId { return .league(id) }
         if router.showsAchievements { return .achievements }
         return nil
     }
@@ -104,6 +106,19 @@ struct AppShellView: View {
             case .duel(let id):
                 NavigationStack {
                     DuelDetailView(duelId: id)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") { router.clear() }
+                                    .foregroundStyle(Color.textPrimary)
+                            }
+                        }
+                }
+                .presentationDragIndicator(.visible)
+            case .leagueInvite(let code):
+                JoinLeagueSheet(initialCode: code)
+            case .league(let id):
+                NavigationStack {
+                    LeagueDetailView(leagueId: id)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button("Done") { router.clear() }
@@ -225,6 +240,8 @@ private enum DeepLinkTarget: Identifiable {
     case token(String)
     case duelInvite(String)
     case duel(String)
+    case leagueInvite(String)
+    case league(String)
     case achievements
 
     var id: String {
@@ -232,6 +249,8 @@ private enum DeepLinkTarget: Identifiable {
         case .token(let mint): "token-\(mint)"
         case .duelInvite(let code): "invite-\(code)"
         case .duel(let id): "duel-\(id)"
+        case .leagueInvite(let code): "league-invite-\(code)"
+        case .league(let id): "league-\(id)"
         case .achievements: "achievements"
         }
     }

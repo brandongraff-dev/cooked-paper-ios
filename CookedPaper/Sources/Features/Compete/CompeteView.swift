@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The Compete tab: this month's season, head-to-head duels, and the existing
-/// paper leaderboard, behind one segmented control.
+/// The Compete tab: this month's season, head-to-head duels, friend leagues and
+/// the existing paper leaderboard, behind one segmented control.
 struct CompeteView: View {
     @State private var section: CompeteSection = .season
 
@@ -10,6 +10,7 @@ struct CompeteView: View {
             switch section {
             case .season: SeasonView()
             case .duels: DuelsView()
+            case .leagues: LeaguesView()
             case .leaderboard: LeaderboardView(title: "Compete")
             }
         }
@@ -42,7 +43,7 @@ struct CompeteView: View {
 }
 
 enum CompeteSection: String, CaseIterable, Identifiable {
-    case season, duels, leaderboard
+    case season, duels, leagues, leaderboard
 
     var id: String { rawValue }
 
@@ -50,6 +51,7 @@ enum CompeteSection: String, CaseIterable, Identifiable {
         switch self {
         case .season: "Season"
         case .duels: "Duels"
+        case .leagues: "Leagues"
         case .leaderboard: "Leaderboard"
         }
     }
@@ -62,6 +64,7 @@ nonisolated enum CompeteRoute: Hashable {
     case seasonHistory
     case seasonResults(id: String, label: String)
     case duel(id: String)
+    case league(id: String)
 
     @MainActor @ViewBuilder
     var destination: some View {
@@ -70,6 +73,7 @@ nonisolated enum CompeteRoute: Hashable {
         case .seasonHistory: SeasonHistoryView()
         case .seasonResults(let id, let label): SeasonResultsView(seasonId: id, label: label)
         case .duel(let id): DuelDetailView(duelId: id)
+        case .league(let id): LeagueDetailView(leagueId: id, initial: LeaguesStore.shared.leagues?.first { $0.id == id })
         }
     }
 }

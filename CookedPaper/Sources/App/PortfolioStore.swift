@@ -158,5 +158,6 @@ final class PortfolioStore {
         // The account's compete state goes with it.
         AchievementCenter.shared.signedOut()
         DuelsStore.shared.signedOut()
+        LeaguesStore.shared.signedOut()
     }
 }

@@ -157,7 +157,7 @@ CookedPaper/
 ## Compete: seasons, achievements, duels
 
 The fourth tab is **Compete** (it replaced Leaderboard, which lives on inside it):
-a segmented Season · Duels · Leaderboard screen. Everything is paper money with no
+a segmented Season · Duels · Leagues · Leaderboard screen. Everything is paper money with no
 stakes, and the season and duel screens say "No stakes. Paper money only. Results
 are simulated."
 
@@ -174,8 +174,14 @@ are simulated."
   normal buy/sell/leverage tickets with `TradePortfolioContext.duel`, so duel
   trades only ever touch that duel's portfolio. Detail refreshes every ~5 s and on
   `paper:duel` socket events.
+- **Friend leagues** (`/paper/leagues…`): private leaderboards joined by invite
+  code (`https://cooked.trade/l/<code>`, `cookedpaper://league/<code>`), ranked on
+  the same season return. Create, join with a code, standings (ranked, then not yet
+  qualified), invite sharing; the owner can rename, rotate the code, remove members
+  and delete; members can leave.
 - Deep links and pushes: `cookedpaper://duel-id/<id>` or a push with `duelId` opens
-  a duel; a push with `achievementId` opens the achievements grid.
+  a duel; `leagueId` opens a league; a push with `achievementId` opens the
+  achievements grid.
 - **Status:** the backend routes are being built to the shared compete spec. Until
   they're deployed, a 404 hides the feature behind a calm "coming soon" state; the
   DEBUG mock (`MockCompete`) serves all of it for the UI tests and screenshots.

@@ -256,7 +256,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
     }
 
     /// Compete: Season, then the Leaderboard and Duels segments, a duel's detail,
-    /// and the achievements grid (from the Season page).
+    /// Leagues and a league's standings, and the achievements grid (from Season).
     @MainActor
     private func visitCompete(_ app: XCUIApplication, unreachedSteps: inout [String]) {
         let tabButton = app.buttons["tab.compete"]
@@ -299,6 +299,28 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             }
         } else {
             unreachedSteps.append("Duels segment never appeared in Compete")
+        }
+
+        let leaguesSegment = app.buttons["compete.segment.leagues"]
+        if leaguesSegment.waitForExistence(timeout: 3) {
+            leaguesSegment.tap()
+            _ = app.buttons["leagues.row.0"].waitForExistence(timeout: 5)
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "34-leagues")
+            let firstLeague = app.buttons["leagues.row.0"]
+            if firstLeague.exists {
+                firstLeague.tap()
+                _ = app.descendants(matching: .any)["league.header"].firstMatch.waitForExistence(timeout: 5)
+                Thread.sleep(forTimeInterval: 1.2)
+                attach(app, name: "35-league-detail")
+                let backButton = app.navigationBars.buttons.element(boundBy: 0)
+                if backButton.waitForExistence(timeout: 3) { backButton.tap() }
+                Thread.sleep(forTimeInterval: 0.8)
+            } else {
+                unreachedSteps.append("no league row in Leagues")
+            }
+        } else {
+            unreachedSteps.append("Leagues segment never appeared in Compete")
         }
 
         let seasonSegment = app.buttons["compete.segment.season"]
