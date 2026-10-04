@@ -7,6 +7,7 @@ import UIKit
 /// `GET /auth/me` for the fields only the server has (join date, referral code).
 struct ProfileView: View {
     private let session = SessionStore.shared
+    private let achievements = AchievementCenter.shared
 
     @State private var user: PublicUser?
     @State private var showEdit = false
@@ -30,6 +31,19 @@ struct ProfileView: View {
                 .accessibilityIdentifier("profile.edit")
             }
             .listRowBackground(Color.appSurface)
+
+            // Hidden entirely on a server without achievements (404).
+            if !achievements.isUnavailable {
+                Section("Achievements") {
+                    NavigationLink {
+                        AchievementsView()
+                    } label: {
+                        AchievementsSummaryRow(center: achievements)
+                    }
+                    .accessibilityIdentifier("profile.achievements")
+                }
+                .listRowBackground(Color.appSurface)
+            }
 
             Section("Account") {
                 ProfileRow(symbol: "at", title: "Username", detail: session.username.map { "@\($0)" })
@@ -96,6 +110,7 @@ struct ProfileView: View {
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refresh() }
+        .task { await achievements.load() }
         .refreshable { await refresh() }
         .sheet(isPresented: $showEdit) {
             EditProfileView()
@@ -266,6 +281,44 @@ private struct ProfileRow: View {
                     .accessibilityHidden(true)
             }
         }
+        .contentShape(Rectangle())
+    }
+}
+
+/// Profile's achievements row: the count, and the latest few medallions.
+private struct AchievementsSummaryRow: View {
+    let center: AchievementCenter
+
+    private var recent: [Achievement] {
+        Array(center.achievements.filter(\.unlocked).prefix(4))
+    }
+
+    var body: some View {
+        HStack(spacing: Space.s12) {
+            Image(systemName: "rosette")
+                .font(.body)
+                .foregroundStyle(Color.textSecondary)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Achievements")
+                    .font(.body)
+                    .foregroundStyle(Color.textPrimary)
+                if center.response != nil {
+                    Text("\(center.unlockedCount) of \(center.total) unlocked")
+                        .font(.caption13Digits)
+                        .foregroundStyle(Color.textTertiary)
+                }
+            }
+            Spacer(minLength: Space.s8)
+            HStack(spacing: -Space.s8) {
+                ForEach(recent) { achievement in
+                    AchievementBadge(achievement: achievement, size: 28)
+                        .background(Color.appSurface, in: Circle())
+                }
+            }
+        }
+        .padding(.vertical, Space.s4)
         .contentShape(Rectangle())
     }
 }

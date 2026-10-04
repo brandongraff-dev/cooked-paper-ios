@@ -40,14 +40,31 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     }
 
     /// A push with a top-level `"mint"` opens that token, as
-    /// `cookedpaper://token/<mint>` would.
+    /// `cookedpaper://token/<mint>` would; `"duelId"` opens that duel and
+    /// `"leagueId"` that league, and `"achievementId"` the achievements grid.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let mint = response.notification.request.content.userInfo["mint"] as? String
-        if let mint, !mint.isEmpty {
+        let userInfo = response.notification.request.content.userInfo
+        let mint = userInfo["mint"] as? String
+        let duelId = userInfo["duelId"] as? String
+        let achievementId = userInfo["achievementId"] as? String
+        let leagueId = userInfo["leagueId"] as? String
+        if let duelId, !duelId.isEmpty {
+            Task { @MainActor in
+                DeepLinkRouter.shared.openDuel(id: duelId)
+            }
+        } else if let leagueId, !leagueId.isEmpty {
+            Task { @MainActor in
+                DeepLinkRouter.shared.openLeague(id: leagueId)
+            }
+        } else if let achievementId, !achievementId.isEmpty {
+            Task { @MainActor in
+                DeepLinkRouter.shared.openAchievements()
+            }
+        } else if let mint, !mint.isEmpty {
             Task { @MainActor in
                 DeepLinkRouter.shared.openToken(mint: mint)
             }

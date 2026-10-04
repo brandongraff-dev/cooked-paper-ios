@@ -192,6 +192,9 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         let discoverTab = app.buttons["tab.discover"]
         if discoverTab.waitForExistence(timeout: 20) {
             _ = app.buttons["discover.row.0"].waitForExistence(timeout: 10)
+            // The demo account has one unseen achievement, celebrated at launch;
+            // capture the toast, then let it leave before the Discover screenshot.
+            waitOutAchievementToast(app)
             Thread.sleep(forTimeInterval: 1)
             attach(app, name: "04-discover")
         } else {
@@ -232,12 +235,113 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         } else {
             unreachedSteps.append("no leveraged position row in Portfolio")
         }
-        visitTab(app, label: "Leaderboard", screenshotName: "11-leaderboard", unreachedSteps: &unreachedSteps)
+        visitCompete(app, unreachedSteps: &unreachedSteps)
         visitTab(app, label: "Settings", screenshotName: "12-settings", unreachedSteps: &unreachedSteps)
         visitProfile(app, unreachedSteps: &unreachedSteps)
 
         if !unreachedSteps.isEmpty {
             XCTFail("Main-app walkthrough didn't fully complete: \(unreachedSteps.joined(separator: "; "))")
+        }
+    }
+
+    /// Screenshots the launch-time unlock toast if it shows, then waits for it to
+    /// go (it dismisses itself after a few seconds).
+    @MainActor
+    private func waitOutAchievementToast(_ app: XCUIApplication) {
+        let toast = app.descendants(matching: .any)["achievement.toast"].firstMatch
+        guard toast.waitForExistence(timeout: 4) else { return }
+        attach(app, name: "29-achievement-toast")
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: toast)
+        _ = XCTWaiter.wait(for: [gone], timeout: 10)
+    }
+
+    /// Compete: Season, then the Leaderboard and Duels segments, a duel's detail,
+    /// Leagues and a league's standings, and the achievements grid (from Season).
+    @MainActor
+    private func visitCompete(_ app: XCUIApplication, unreachedSteps: inout [String]) {
+        let tabButton = app.buttons["tab.compete"]
+        guard tabButton.waitForExistence(timeout: 5) else {
+            unreachedSteps.append("Compete tab button never appeared")
+            attach(app, name: "11-leaderboard")
+            return
+        }
+        tabButton.tap()
+        _ = app.descendants(matching: .any)["season.header"].firstMatch.waitForExistence(timeout: 5)
+        Thread.sleep(forTimeInterval: 1)
+        attach(app, name: "30-compete-season")
+
+        let leaderboardSegment = app.buttons["compete.segment.leaderboard"]
+        if leaderboardSegment.waitForExistence(timeout: 3) {
+            leaderboardSegment.tap()
+            Thread.sleep(forTimeInterval: 1.2)
+            attach(app, name: "11-leaderboard")
+        } else {
+            unreachedSteps.append("Leaderboard segment never appeared in Compete")
+        }
+
+        let duelsSegment = app.buttons["compete.segment.duels"]
+        if duelsSegment.waitForExistence(timeout: 3) {
+            duelsSegment.tap()
+            _ = app.buttons["duels.active.0"].waitForExistence(timeout: 5)
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "31-compete-duels")
+            let activeDuel = app.buttons["duels.active.0"]
+            if activeDuel.exists {
+                activeDuel.tap()
+                _ = app.descendants(matching: .any)["duel.headToHead"].firstMatch.waitForExistence(timeout: 5)
+                Thread.sleep(forTimeInterval: 1.2)
+                attach(app, name: "32-duel-detail")
+                let backButton = app.navigationBars.buttons.element(boundBy: 0)
+                if backButton.waitForExistence(timeout: 3) { backButton.tap() }
+                Thread.sleep(forTimeInterval: 0.8)
+            } else {
+                unreachedSteps.append("no active duel row in Duels")
+            }
+        } else {
+            unreachedSteps.append("Duels segment never appeared in Compete")
+        }
+
+        let leaguesSegment = app.buttons["compete.segment.leagues"]
+        if leaguesSegment.waitForExistence(timeout: 3) {
+            leaguesSegment.tap()
+            _ = app.buttons["leagues.row.0"].waitForExistence(timeout: 5)
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "34-leagues")
+            let firstLeague = app.buttons["leagues.row.0"]
+            if firstLeague.exists {
+                firstLeague.tap()
+                _ = app.descendants(matching: .any)["league.header"].firstMatch.waitForExistence(timeout: 5)
+                Thread.sleep(forTimeInterval: 1.2)
+                attach(app, name: "35-league-detail")
+                let backButton = app.navigationBars.buttons.element(boundBy: 0)
+                if backButton.waitForExistence(timeout: 3) { backButton.tap() }
+                Thread.sleep(forTimeInterval: 0.8)
+            } else {
+                unreachedSteps.append("no league row in Leagues")
+            }
+        } else {
+            unreachedSteps.append("Leagues segment never appeared in Compete")
+        }
+
+        let seasonSegment = app.buttons["compete.segment.season"]
+        if seasonSegment.waitForExistence(timeout: 3) {
+            seasonSegment.tap()
+            Thread.sleep(forTimeInterval: 0.8)
+            let achievementsRow = app.buttons["season.achievements"]
+            if achievementsRow.waitForExistence(timeout: 5) {
+                if !achievementsRow.isHittable { app.swipeUp() }
+                achievementsRow.tap()
+                _ = app.descendants(matching: .any)["achievements.cell.first_trade"].firstMatch.waitForExistence(timeout: 5)
+                Thread.sleep(forTimeInterval: 1)
+                attach(app, name: "33-achievements")
+                let backButton = app.navigationBars.buttons.element(boundBy: 0)
+                if backButton.waitForExistence(timeout: 3) { backButton.tap() }
+                Thread.sleep(forTimeInterval: 0.8)
+            } else {
+                unreachedSteps.append("no Achievements row on the Season page")
+            }
+        } else {
+            unreachedSteps.append("Season segment never appeared in Compete")
         }
     }
 

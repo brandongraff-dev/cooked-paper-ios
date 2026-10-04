@@ -8,9 +8,11 @@ import SwiftUI
 struct LeverageSheetView: View {
     let mint: String
     let tokenSymbol: String
+    /// The portfolio the position opens in: the main one unless a duel passes its
+    /// own (see `TradePortfolioContext`).
+    var portfolio: TradePortfolioContext = .main
 
     @Environment(\.dismiss) private var dismiss
-    private let portfolioStore = PortfolioStore.shared
     private let configStore = LeverageConfigStore.shared
 
     @State private var direction: LeverageDirection = .long
@@ -25,7 +27,7 @@ struct LeverageSheetView: View {
     /// One id per order the person means to place; reused if a request is retried.
     @State private var clientOrderId = UUID().uuidString
 
-    private var cashUsd: Decimal { portfolioStore.snapshot?.cashUsd ?? 0 }
+    private var cashUsd: Decimal { portfolio.snapshot?.cashUsd ?? 0 }
     private var margin: Decimal { Decimal(string: amountText) ?? 0 }
     private var isBelowMinimum: Bool {
         guard let minimum = configStore.minMarginUsd else { return false }
@@ -153,7 +155,7 @@ struct LeverageSheetView: View {
                 Text("Margin · \(PriceFormat.usd(cashUsd)) available")
                     .font(.caption13Digits)
                     .foregroundStyle(Color.textSecondary)
-                Text("PAPER")
+                Text(portfolio.badge)
                     .font(.caption2.weight(.semibold))
                     .tracking(0.5)
                     .foregroundStyle(Color.textTertiary)
@@ -205,7 +207,7 @@ struct LeverageSheetView: View {
     }
 
     private var canSubmit: Bool {
-        guard let id = SessionStore.shared.activePortfolioId, !id.isEmpty else { return false }
+        guard let id = portfolio.portfolioId, !id.isEmpty else { return false }
         guard margin > 0, margin <= cashUsd, !isBelowMinimum else { return false }
         return quote?.eligible ?? true
     }
@@ -236,7 +238,7 @@ struct LeverageSheetView: View {
 
     private func requestQuote() {
         quoteTask?.cancel()
-        guard margin > 0, !isBelowMinimum, let portfolioId = SessionStore.shared.activePortfolioId else {
+        guard margin > 0, !isBelowMinimum, let portfolioId = portfolio.portfolioId else {
             quote = nil
             return
         }
@@ -259,7 +261,7 @@ struct LeverageSheetView: View {
     }
 
     private func open() async {
-        guard let portfolioId = SessionStore.shared.activePortfolioId else { return }
+        guard let portfolioId = portfolio.portfolioId else { return }
         isExecuting = true
         errorMessage = nil
         var body = OpenPaperLeveragedBody(
@@ -277,7 +279,7 @@ struct LeverageSheetView: View {
             let opened = try await PaperAPI.openLeveraged(portfolioId: portfolioId, body: body)
             Haptics.success()
             withAnimation(Motion.standard) { result = opened }
-            await portfolioStore.refreshAfterTrade()
+            await portfolio.refreshAfterTrade()
         } catch {
             Haptics.error()
             errorMessage = message(for: error)
@@ -287,6 +289,7 @@ struct LeverageSheetView: View {
     }
 
     private func message(for error: Error) -> String {
+        if let duelMessage = portfolio.message(for: error) { return duelMessage }
         if let apiError = error as? APIError {
             if let reason = apiError.reason { return LeverageRefusal.message(for: reason) }
             return apiError.errorDescription ?? "Something went wrong."

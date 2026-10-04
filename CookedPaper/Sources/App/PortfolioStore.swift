@@ -155,5 +155,9 @@ final class PortfolioStore {
         snapshot = nil
         error = nil
         LiveSocket.shared.disconnect()
+        // The account's compete state goes with it.
+        AchievementCenter.shared.signedOut()
+        DuelsStore.shared.signedOut()
+        LeaguesStore.shared.signedOut()
     }
 }
