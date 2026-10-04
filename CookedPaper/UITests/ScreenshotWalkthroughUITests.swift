@@ -119,34 +119,20 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             unreachedSteps.append("onboarding.keep never appeared")
         }
 
-        // No StoreKit Configuration reaches the process under `xcodebuild test`
-        // (see the class doc comment), so the plan list can't load here; this
-        // screenshot shows the personalized header and the no-plans state.
-        let subscribeButton = app.buttons["paywall.subscribeButton"]
-        if subscribeButton.waitForExistence(timeout: 15) {
-            Thread.sleep(forTimeInterval: 1)
-            attach(app, name: "06-paywall")
-        } else {
-            unreachedSteps.append("paywall.subscribeButton never appeared")
-        }
-
-        // "Save your portfolio": signing in from the paywall claims the guest
-        // portfolio. Under the mock the Google button signs straight in (Google's own
-        // sheet can't be driven from a test), and the first sign-in of the run is a
-        // new account, so username setup follows.
-        if app.buttons["paywall.signIn"].waitForExistence(timeout: 5) {
-            app.buttons["paywall.signIn"].tap()
-        } else {
-            unreachedSteps.append("paywall.signIn never appeared")
-        }
-        if app.buttons["signin.google"].waitForExistence(timeout: 5) {
+        // "Save your portfolio": sign-in comes right after the guest portfolio and
+        // before the paywall, and claims the guest portfolio. Under the mock the
+        // Google button signs straight in (Google's own sheet can't be driven from a
+        // test), and the first sign-in of the run is a new account, so username
+        // setup follows.
+        if app.buttons["signin.google"].waitForExistence(timeout: 10) {
             Thread.sleep(forTimeInterval: 0.8)
             attach(app, name: "02-onboarding-signin")
             app.buttons["signin.google"].tap()
         } else {
-            unreachedSteps.append("sign-in sheet never appeared")
+            unreachedSteps.append("sign-in never appeared after the guest portfolio")
         }
 
+        let subscribeButton = app.buttons["paywall.subscribeButton"]
         let profileContinue = app.buttons["profileSetup.continue"]
         if profileContinue.waitForExistence(timeout: 10) {
             Thread.sleep(forTimeInterval: 0.8)
@@ -161,7 +147,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
                 attach(app, name: "02-onboarding-profile-picked")
             }
             profileContinue.tap()
-            // Back on the paywall, now signed in. If saving didn't move on (it
+            // On to the paywall, now signed in. If saving didn't move on (it
             // shouldn't under the mock), skip rather than stall.
             let skip = app.buttons["profileSetup.skip"]
             if !subscribeButton.waitForExistence(timeout: 5), skip.exists {
@@ -169,6 +155,16 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             }
         } else {
             unreachedSteps.append("profile setup never appeared after a new-account sign-in")
+        }
+
+        // No StoreKit Configuration reaches the process under `xcodebuild test`
+        // (see the class doc comment), so the plan list can't load here; this
+        // screenshot shows the personalized header and the no-plans state.
+        if subscribeButton.waitForExistence(timeout: 15) {
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "06-paywall")
+        } else {
+            unreachedSteps.append("paywall.subscribeButton never appeared")
         }
 
         if !unreachedSteps.isEmpty {

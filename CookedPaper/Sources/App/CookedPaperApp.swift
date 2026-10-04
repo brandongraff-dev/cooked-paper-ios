@@ -30,10 +30,12 @@ struct CookedPaperApp: App {
 /// not two: still resolving, subscribed, not subscribed — collapsing the first into
 /// either of the other two would flash the paywall at every paying user on launch.
 ///
-/// Order: onboarding (as a guest) → paywall → sign-in ("Save your portfolio",
-/// which claims the guest portfolio) → the app. The paywall also offers sign-in for
-/// people who already have an account, and a fresh account picks its username
-/// before anything else.
+/// Order: onboarding (as a guest) → sign-in ("Save your portfolio", which claims
+/// the guest portfolio) → paywall → the app. Sign-in comes after the guest has
+/// traded and watched their positions move, but before the purchase, so every
+/// subscription is bought by an account (`appAccountToken` set, entitlement
+/// reconciled by the server, restorable on any device). A fresh account picks its
+/// username before the paywall.
 struct RootView: View {
     let store = SubscriptionStore.shared
     let session = SessionStore.shared
@@ -50,10 +52,9 @@ struct RootView: View {
                 // A sign-in outside onboarding just created the account (onboarding
                 // shows this as its own step instead).
                 ProfileSetupView {}
-            } else if !store.isSubscribed {
-                PaywallView()
             } else if !session.isSignedIn {
-                // Subscribed; the app itself runs as an account.
+                // Before the paywall, so the purchase belongs to an account. Also
+                // reached by someone subscribed on this device but signed out.
                 SignInView(
                     title: session.isGuest ? "Save your portfolio" : "Sign in to Cooked",
                     subtitle: session.isGuest
@@ -62,6 +63,8 @@ struct RootView: View {
                 ) {
                     Task { await PortfolioStore.shared.resetAndRebootstrap() }
                 }
+            } else if !store.isSubscribed {
+                PaywallView()
             } else {
                 AppShellView()
             }

@@ -210,11 +210,12 @@ and none of them touch the paper-trading-only, no-real-money scope.
 ## First run
 
 Balance → practice round → two questions (experience, goal) → pick three coins →
-live portfolio → paywall → "Save your portfolio" sign-in → the app. Everything
-before sign-in runs as a **guest paper session** (`POST /paper/portfolios/starter`
+live portfolio → "Save your portfolio" sign-in → paywall → the app. Sign-in comes
+after the guest has traded but before the purchase, so every subscription belongs to
+an account. Everything before sign-in runs as a **guest paper session** (`POST /paper/portfolios/starter`
 with no `Authorization` mints a 7-day guest token, kept in the Keychain); signing in
 claims it (`POST /paper/portfolios/claim`) so the positions carry over. The first
-screen has "Already have an account? Sign in", and the paywall has "Sign in". After
+screen has "Already have an account? Sign in". After
 the first fill, a soft card asks whether to send price notifications (the system
 prompt only follows a yes). The paywall headline follows the goal answer and shows
 this month's top trader from the public leaderboard when there's a positive one.

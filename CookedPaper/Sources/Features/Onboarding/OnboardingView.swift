@@ -7,8 +7,8 @@ import SwiftUI
 /// move. The paywall that follows is about keeping that portfolio.
 ///
 /// All of that runs as a **guest** (`PortfolioStore.bootstrapGuestIfPossible`):
-/// signing in ("Save your portfolio") comes after the paywall, and claims the guest
-/// portfolio into the account. If the server has guests switched off, the flow falls
+/// signing in ("Save your portfolio") comes after it, before the paywall, and claims
+/// the guest portfolio into the account. If the server has guests switched off, the flow falls
 /// back to signing in (and picking a username) right after the practice round, as
 /// before. Someone who already has an account can sign in from the first screen.
 ///
