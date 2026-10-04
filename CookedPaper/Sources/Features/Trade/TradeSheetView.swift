@@ -16,10 +16,12 @@ struct TradeSheetView: View {
     /// Last known price, only for the "≈ N TOKEN" preview under the amount before a
     /// quote arrives. The order itself is always priced server-side.
     var priceUsd: Decimal? = nil
+    /// The portfolio this ticket trades in: the account's main one unless a duel
+    /// passes its own (see `TradePortfolioContext`).
+    var portfolio: TradePortfolioContext = .main
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.requestReview) private var requestReview
-    private let portfolioStore = PortfolioStore.shared
 
     @State private var amountText = ""
     @State private var sellPercent: Int?
@@ -30,9 +32,9 @@ struct TradeSheetView: View {
     @State private var fillResult: ExecutePaperTradeResponse?
     @State private var quoteTask: Task<Void, Never>?
 
-    private var cashUsd: Decimal { portfolioStore.snapshot?.cashUsd ?? 0 }
+    private var cashUsd: Decimal { portfolio.snapshot?.cashUsd ?? 0 }
     private var position: PaperPosition? {
-        portfolioStore.snapshot?.positions.first { $0.tokenMint == mint }
+        portfolio.snapshot?.positions.first { $0.tokenMint == mint }
     }
 
     var body: some View {
@@ -42,9 +44,10 @@ struct TradeSheetView: View {
                     FillConfirmationView(
                         result: fillResult,
                         symbol: tokenSymbol,
-                        // A sell has a result worth sharing: this token's card.
-                        shareSubjectPath: fillResult.trade.side == .sell
-                            ? SessionStore.shared.activePortfolioId.map { ShareCardSubject.position(portfolioId: $0, mint: mint) }
+                        // A sell has a result worth sharing: this token's card
+                        // (main portfolio only; a duel's result is the duel itself).
+                        shareSubjectPath: fillResult.trade.side == .sell && portfolio.isMain
+                            ? portfolio.portfolioId.map { ShareCardSubject.position(portfolioId: $0, mint: mint) }
                             : nil
                     ) { dismiss() }
                 } else {
@@ -163,7 +166,7 @@ struct TradeSheetView: View {
                  : "\(position.map { PriceFormat.usd($0.valueUsd) } ?? "$0.00") held")
                 .font(.caption13Digits)
                 .foregroundStyle(Color.textSecondary)
-            Text("PAPER")
+            Text(portfolio.badge)
                 .font(.caption2.weight(.semibold))
                 .tracking(0.5)
                 .foregroundStyle(Color.textTertiary)
@@ -211,7 +214,7 @@ struct TradeSheetView: View {
     }
 
     private var canSubmit: Bool {
-        guard let id = SessionStore.shared.activePortfolioId, !id.isEmpty else { return false }
+        guard let id = portfolio.portfolioId, !id.isEmpty else { return false }
         if side == .buy { return Decimal(string: amountText).map { $0 > 0 } ?? false }
         return sellPercent != nil
     }
@@ -220,7 +223,7 @@ struct TradeSheetView: View {
 
     private func requestQuote() {
         quoteTask?.cancel()
-        guard canSubmit, let portfolioId = SessionStore.shared.activePortfolioId else {
+        guard canSubmit, let portfolioId = portfolio.portfolioId else {
             quote = nil
             return
         }
@@ -232,7 +235,7 @@ struct TradeSheetView: View {
             do {
                 quote = try await PaperAPI.quote(portfolioId: portfolioId, body: makeBody())
             } catch let error as APIError {
-                errorMessage = error.errorDescription
+                errorMessage = portfolio.message(for: error) ?? error.errorDescription
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -241,7 +244,7 @@ struct TradeSheetView: View {
     }
 
     private func execute() async {
-        guard let portfolioId = SessionStore.shared.activePortfolioId else { return }
+        guard let portfolioId = portfolio.portfolioId else { return }
         isExecuting = true
         errorMessage = nil
         // What the position cost, captured before the sell changes it.
@@ -250,7 +253,7 @@ struct TradeSheetView: View {
             let result = try await PaperAPI.execute(portfolioId: portfolioId, body: makeBody())
             fillResult = result
             Haptics.success()
-            await portfolioStore.refreshAfterTrade()
+            await portfolio.refreshAfterTrade()
             let soldAtProfit = result.trade.side == .sell
                 && averageCost.map { result.fill.fillPriceUsd > $0 } == true
             if ReviewPrompt.shouldRequest(afterProfit: soldAtProfit) {
@@ -264,7 +267,7 @@ struct TradeSheetView: View {
             await PushRegistrar.shared.requestPermissionIfNeeded()
         } catch let error as APIError {
             Haptics.error()
-            errorMessage = error.errorDescription
+            errorMessage = portfolio.message(for: error) ?? error.errorDescription
         } catch {
             Haptics.error()
             errorMessage = error.localizedDescription

@@ -6,10 +6,12 @@ import SwiftUI
 /// closing all or part of it at the live price.
 struct LeveragedPositionSheet: View {
     let positionId: String
+    /// The portfolio holding the position: the main one unless a duel passes its
+    /// own (see `TradePortfolioContext`).
+    var portfolio: TradePortfolioContext = .main
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.requestReview) private var requestReview
-    private let portfolioStore = PortfolioStore.shared
 
     @State private var closePercent = 100
     @State private var isClosing = false
@@ -17,14 +19,14 @@ struct LeveragedPositionSheet: View {
     @State private var result: PaperLeveragedMutationResponse?
 
     private var position: PaperLeveragedPosition? {
-        portfolioStore.snapshot?.leveragedPositions?.first { $0.id == positionId }
+        portfolio.snapshot?.leveragedPositions?.first { $0.id == positionId }
     }
 
     var body: some View {
         NavigationStack {
             Group {
                 if let result {
-                    LeverageClosedView(result: result) { dismiss() }
+                    LeverageClosedView(result: result, sharePortfolioId: portfolio.isMain ? portfolio.portfolioId : nil) { dismiss() }
                 } else if let position {
                     details(position)
                 } else {
@@ -42,7 +44,7 @@ struct LeveragedPositionSheet: View {
                 // Leverage has no card subject of its own; the portfolio's card
                 // carries its return (percentages only).
                 ToolbarItem(placement: .primaryAction) {
-                    if result == nil, let portfolioId = SessionStore.shared.activePortfolioId {
+                    if result == nil, portfolio.isMain, let portfolioId = portfolio.portfolioId {
                         ShareCardButton(subjectPath: ShareCardSubject.portfolio(portfolioId: portfolioId), compact: true)
                     }
                 }
@@ -132,7 +134,7 @@ struct LeveragedPositionSheet: View {
     }
 
     private func close(_ position: PaperLeveragedPosition) async {
-        guard let portfolioId = SessionStore.shared.activePortfolioId else { return }
+        guard let portfolioId = portfolio.portfolioId else { return }
         isClosing = true
         errorMessage = nil
         do {
@@ -154,18 +156,20 @@ struct LeveragedPositionSheet: View {
             errorMessage = "This position was already closed or liquidated."
         } catch let error as APIError {
             Haptics.error()
-            errorMessage = error.reason.map(LeverageRefusal.message(for:)) ?? error.errorDescription
+            errorMessage = portfolio.message(for: error) ?? error.reason.map(LeverageRefusal.message(for:)) ?? error.errorDescription
         } catch {
             Haptics.error()
             errorMessage = error.localizedDescription
         }
-        await portfolioStore.refreshAfterTrade()
+        await portfolio.refreshAfterTrade()
         isClosing = false
     }
 }
 
 private struct LeverageClosedView: View {
     let result: PaperLeveragedMutationResponse
+    /// The portfolio whose card to offer; nil (a duel) shows no share button.
+    let sharePortfolioId: String?
     let onDone: () -> Void
 
     var body: some View {
@@ -189,7 +193,7 @@ private struct LeverageClosedView: View {
                 StatItem(label: "Cash balance", value: PriceFormat.usd(result.cashUsd)),
             ])
             Spacer()
-            if let portfolioId = SessionStore.shared.activePortfolioId {
+            if let portfolioId = sharePortfolioId {
                 ShareCardButton(subjectPath: ShareCardSubject.portfolio(portfolioId: portfolioId))
                     .buttonStyle(.secondary)
             }
