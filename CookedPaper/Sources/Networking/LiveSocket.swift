@@ -110,6 +110,22 @@ final class LiveSocket {
             self.lastSeenSeq[tick.portfolioId] = tick.seq
             self.armHeartbeatWatchdog(portfolioId: tick.portfolioId, intervalMs: tick.heartbeatIntervalMs)
         }
+        // Compete events go to the account's room, not a portfolio's, so they
+        // arrive on this same connection whichever portfolio it watches.
+        socket.on("paper:achievement") { data, _ in
+            guard let dict = data.first as? [String: Any],
+                  let json = try? JSONSerialization.data(withJSONObject: dict),
+                  let event = try? JSONDecoder().decode(AchievementEvent.self, from: json)
+            else { return }
+            AchievementCenter.shared.receive(event.achievement)
+        }
+        socket.on("paper:duel") { data, _ in
+            guard let dict = data.first as? [String: Any],
+                  let json = try? JSONSerialization.data(withJSONObject: dict),
+                  let event = try? JSONDecoder().decode(DuelEvent.self, from: json)
+            else { return }
+            DuelsStore.shared.apply(event.duel)
+        }
 
         socket.connect()
     }

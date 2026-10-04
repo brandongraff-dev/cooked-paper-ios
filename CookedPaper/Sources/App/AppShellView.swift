@@ -5,9 +5,14 @@ import UIKit
 struct AppShellView: View {
     let portfolioStore = PortfolioStore.shared
     let router = DeepLinkRouter.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     private var deepLinkTarget: DeepLinkTarget? {
-        router.pendingTokenMint.map(DeepLinkTarget.init)
+        if let mint = router.pendingTokenMint { return .token(mint) }
+        if let code = router.pendingDuelInviteCode { return .duelInvite(code) }
+        if let id = router.pendingDuelId { return .duel(id) }
+        if router.showsAchievements { return .achievements }
+        return nil
     }
 
     /// A custom binding rather than `$router.pendingTokenMint` directly: the setter
@@ -58,6 +63,11 @@ struct AppShellView: View {
                 .allowsHitTesting(!isKeyboardVisible)
                 .animation(Motion.standard, value: isKeyboardVisible)
                 .zIndex(2)
+
+            // Unlock celebrations float over every tab and pushed screen.
+            AchievementToastHost()
+                .frame(maxHeight: .infinity, alignment: .top)
+                .zIndex(3)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             isKeyboardVisible = true
@@ -74,11 +84,46 @@ struct AppShellView: View {
         .task {
             await portfolioStore.bootstrapIfNeeded()
         }
+        // Unlocks earned while the app was away are celebrated on the way back in.
+        .task {
+            await AchievementCenter.shared.checkForUnseen()
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            guard newPhase == .active, oldPhase == .background || oldPhase == .inactive else { return }
+            Task { await AchievementCenter.shared.checkForUnseen() }
+        }
         .sheet(item: deepLinkBinding) { target in
-            NavigationStack {
-                TokenDetailView(mint: target.mint)
+            switch target {
+            case .token(let mint):
+                NavigationStack {
+                    TokenDetailView(mint: mint)
+                }
+                .presentationDragIndicator(.visible)
+            case .duelInvite(let code):
+                JoinDuelSheet(inviteCode: code)
+            case .duel(let id):
+                NavigationStack {
+                    DuelDetailView(duelId: id)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") { router.clear() }
+                                    .foregroundStyle(Color.textPrimary)
+                            }
+                        }
+                }
+                .presentationDragIndicator(.visible)
+            case .achievements:
+                NavigationStack {
+                    AchievementsView()
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") { router.clear() }
+                                    .foregroundStyle(Color.textPrimary)
+                            }
+                        }
+                }
+                .presentationDragIndicator(.visible)
             }
-            .presentationDragIndicator(.visible)
         }
     }
 
@@ -87,14 +132,14 @@ struct AppShellView: View {
         switch tab {
         case .discover: DiscoverView()
         case .portfolio: PortfolioView()
-        case .leaderboard: LeaderboardView()
+        case .compete: CompeteView()
         case .settings: SettingsView()
         }
     }
 }
 
 enum AppTab: String, CaseIterable, Identifiable {
-    case discover, portfolio, leaderboard, settings
+    case discover, portfolio, compete, settings
 
     var id: String { rawValue }
 
@@ -102,7 +147,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         switch self {
         case .discover: "Discover"
         case .portfolio: "Portfolio"
-        case .leaderboard: "Leaderboard"
+        case .compete: "Compete"
         case .settings: "Settings"
         }
     }
@@ -111,7 +156,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         switch self {
         case .discover: "safari"
         case .portfolio: "wallet.bifold"
-        case .leaderboard: "trophy"
+        case .compete: "trophy"
         case .settings: "gearshape"
         }
     }
@@ -175,7 +220,19 @@ private struct TabBarBackground: ViewModifier {
     }
 }
 
-private struct DeepLinkTarget: Identifiable {
-    let mint: String
-    var id: String { mint }
+/// What a deep link (or a tapped push) opens over the tabs.
+private enum DeepLinkTarget: Identifiable {
+    case token(String)
+    case duelInvite(String)
+    case duel(String)
+    case achievements
+
+    var id: String {
+        switch self {
+        case .token(let mint): "token-\(mint)"
+        case .duelInvite(let code): "invite-\(code)"
+        case .duel(let id): "duel-\(id)"
+        case .achievements: "achievements"
+        }
+    }
 }

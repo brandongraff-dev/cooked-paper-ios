@@ -2,6 +2,9 @@ import Foundation
 import SwiftUI
 
 struct LeaderboardView: View {
+    /// The navigation title; Compete shows this list under its own "Compete".
+    var title = "Leaderboard"
+
     @State private var window: LeaderboardWindow = .all
     @State private var response: PaperLeaderboardResponse?
     @State private var isLoading = true
@@ -46,7 +49,7 @@ struct LeaderboardView: View {
             }
         }
         .reservesTabBarSpace()
-        .navigationTitle("Leaderboard")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.large)
         .task { await load() }
         .onChange(of: window) { _, _ in
