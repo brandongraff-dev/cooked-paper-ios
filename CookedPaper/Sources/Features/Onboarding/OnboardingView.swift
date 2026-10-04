@@ -770,6 +770,9 @@ private struct PortfolioStep: View {
     var onKeep: () -> Void
 
     @State private var sellTarget: SellTarget?
+    /// The soft notification ask, shown once the first coin fills and only while
+    /// iOS could still prompt.
+    @State private var showsNotifyCard = false
 
     private var isLive: Bool { model.hasFinishedBuying && !model.boughtMints.isEmpty }
 
@@ -798,6 +801,10 @@ private struct PortfolioStep: View {
                     )
                     .padding(.top, Space.s32)
                 }
+                if showsNotifyCard {
+                    notifyCard
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
                 fillList
             }
             .padding(.horizontal, Space.margin)
@@ -825,6 +832,52 @@ private struct PortfolioStep: View {
         .sheet(item: $sellTarget, onDismiss: { Task { await model.refreshLive() } }) { target in
             TradeSheetView(mint: target.mint, side: .sell, tokenSymbol: target.symbol, priceUsd: target.price)
         }
+        .task(id: model.boughtMints.isEmpty) {
+            guard !model.boughtMints.isEmpty, !showsNotifyCard else { return }
+            let canAsk = await PushRegistrar.shared.canAskPermission()
+            withAnimation(Motion.standard) { showsNotifyCard = canAsk }
+        }
+    }
+
+    // MARK: Notifications
+
+    /// Asked here because the coins are now theirs; the system prompt only
+    /// follows a yes. A guest's APNs token is held and sent after sign-in.
+    private var notifyCard: some View {
+        VStack(alignment: .leading, spacing: Space.s12) {
+            HStack(spacing: Space.s12) {
+                Image(systemName: "bell.badge.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.accent)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Get pinged when your coins move")
+                        .font(.rowTitle)
+                        .foregroundStyle(Color.textPrimary)
+                    Text("A heads-up on big moves in what you hold. No spam.")
+                        .font(.rowSubtitle)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack(spacing: Space.s12) {
+                Button("Not now") {
+                    Haptics.tap()
+                    withAnimation(Motion.standard) { showsNotifyCard = false }
+                }
+                .buttonStyle(.secondary)
+                .accessibilityIdentifier("onboarding.notify.no")
+                Button("Yes, notify me") {
+                    Haptics.tap()
+                    withAnimation(Motion.standard) { showsNotifyCard = false }
+                    Task { await PushRegistrar.shared.requestPermissionIfNeeded() }
+                }
+                .buttonStyle(.primary)
+                .accessibilityIdentifier("onboarding.notify.yes")
+            }
+        }
+        .padding(Space.s20)
+        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 
     // MARK: Summary
