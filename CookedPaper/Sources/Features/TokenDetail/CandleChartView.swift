@@ -48,6 +48,9 @@ struct CandleChartView: View {
             let effectiveCount = max(8, min(CGFloat(candles.count), visibleCount * pinchDelta))
             let visible = Array(candles.suffix(Int(effectiveCount)))
             let priceRange = Self.priceRange(of: visible)
+            // A level outside the visible prices would draw (and label) off the
+            // chart, over the header; it simply isn't shown until price nears it.
+            let visibleAlerts = alertLevels.filter { priceRange.contains($0.price) }
             let maPeriod = Self.movingAveragePeriod(for: visible.count)
             let maSeries = maPeriod.map { Self.movingAverageSeries(of: visible, period: $0) } ?? []
             let showMovingAverage = maSeries.contains { $0 != nil }
@@ -69,7 +72,7 @@ struct CandleChartView: View {
                     if showMovingAverage {
                         drawMovingAverage(maSeries, priceRange: priceRange, context: context, size: size)
                     }
-                    for level in alertLevels {
+                    for level in visibleAlerts {
                         let y = Self.yPosition(for: level.price, priceRange: priceRange, height: size.height)
                         drawPriceLine(at: y, color: Color.textSecondary, context: context, size: size)
                     }
@@ -124,7 +127,7 @@ struct CandleChartView: View {
                 // only needs to say which price and which direction it's watching for.
                 // Same near-full-width-frame-then-align trick as the price pills above,
                 // mirrored to `.leading` so a long price string still clears the edge.
-                ForEach(alertLevels) { level in
+                ForEach(visibleAlerts) { level in
                     let y = Self.yPosition(for: level.price, priceRange: priceRange, height: geometry.size.height)
                     AlertLevelLabel(level: level)
                         .frame(width: geometry.size.width - Space.s8 * 2, alignment: .leading)

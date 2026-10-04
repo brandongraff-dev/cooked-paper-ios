@@ -10,6 +10,11 @@ struct DiscoverView: View {
     @State private var searchText = ""
     @State private var searchResults: [TokenSearchResult] = []
     @State private var searchTask: Task<Void, Never>?
+    /// The last search failed (as opposed to finding nothing).
+    @State private var searchError: String?
+    /// The query `searchResults`/`searchError` answer, so "no results" only shows
+    /// once a search for what's typed has actually come back.
+    @State private var answeredQuery: String?
 
     var body: some View {
         ScrollView {
@@ -46,10 +51,13 @@ struct DiscoverView: View {
             searchTask = Task {
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else { return }
-                searchResults = (try? await TokenAPI.search(newValue)) ?? []
+                await runSearch(newValue)
             }
         }
         .task { await load() }
+        // The server caches the feeds for ~60 s; every 30 s catches each update
+        // within half a cache window, without a skeleton or a scroll jump.
+        .autoRefresh(every: 30) { await refreshSilently() }
     }
 
     private var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -63,7 +71,9 @@ struct DiscoverView: View {
             .padding(.horizontal, Space.margin)
             .padding(.top, Space.s16)
         } else if let errorMessage {
-            EmptyStateView(symbol: "wifi.slash", title: "Couldn't load the market", detail: errorMessage)
+            EmptyStateView(symbol: "wifi.slash", title: "Couldn't load the market", detail: errorMessage) {
+                Task { await load() }
+            }
         } else {
             VStack(alignment: .leading, spacing: Space.section) {
                 trendingSection
@@ -154,8 +164,18 @@ struct DiscoverView: View {
 
     // MARK: - Search
 
+    private var trimmedSearch: String { searchText.trimmingCharacters(in: .whitespaces) }
+
     private var searchResultsList: some View {
         LazyVStack(spacing: 0) {
+            if let searchError, answeredQuery == trimmedSearch {
+                SearchMessageRow(symbol: "wifi.slash", title: "Couldn't search right now", detail: searchError) {
+                    Task { await runSearch(searchText) }
+                }
+            } else if searchResults.isEmpty, answeredQuery == trimmedSearch {
+                SearchMessageRow(symbol: "magnifyingglass", title: "No tokens found", detail: "Nothing matches “\(trimmedSearch)”.")
+            }
+
             ForEach(Array(searchResults.enumerated()), id: \.element.id) { index, result in
                 NavigationLink(value: result.mint) {
                     ListRow(title: result.symbol ?? "?", subtitle: result.name) {
@@ -174,6 +194,23 @@ struct DiscoverView: View {
         .padding(.horizontal, Space.margin)
     }
 
+    /// One search round. A failure shows as an error row with a retry, never as an
+    /// empty "no results" list; a search superseded by more typing is dropped.
+    private func runSearch(_ query: String) async {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        do {
+            let results = try await TokenAPI.search(query)
+            guard !Task.isCancelled else { return }
+            searchResults = results
+            searchError = nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            searchResults = []
+            searchError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
+        answeredQuery = trimmed
+    }
+
     private func load() async {
         isLoading = response == nil
         errorMessage = nil
@@ -183,6 +220,50 @@ struct DiscoverView: View {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    /// The auto-refresh: swaps in fresh feeds in place (same row ids, so the list
+    /// keeps its scroll position) and leaves whatever is shown alone on failure.
+    private func refreshSilently() async {
+        guard !isLoading, let fresh = try? await DiscoverAPI.paperDiscover() else { return }
+        response = fresh
+        errorMessage = nil
+    }
+}
+
+/// A search outcome that isn't a result: an error (with retry) or no matches.
+private struct SearchMessageRow: View {
+    let symbol: String
+    let title: String
+    let detail: String
+    var retry: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Metrics.avatarGap) {
+            Image(systemName: symbol)
+                .font(.body)
+                .foregroundStyle(Color.textTertiary)
+                .frame(width: Metrics.avatar, height: Metrics.avatar)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.rowTitle)
+                    .foregroundStyle(Color.textPrimary)
+                Text(detail)
+                    .font(.rowSubtitle)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: Space.s8)
+            if let retry {
+                Button("Retry") {
+                    Haptics.tap()
+                    retry()
+                }
+                .buttonStyle(.compact)
+                .accessibilityIdentifier("discover.search.retry")
+            }
+        }
+        .frame(minHeight: Metrics.rowHeight)
     }
 }
 

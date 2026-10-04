@@ -1,4 +1,5 @@
 import Foundation
+import StoreKit
 import SwiftUI
 
 /// One open leveraged position: live P&L on margin, where it liquidates, and
@@ -7,6 +8,7 @@ struct LeveragedPositionSheet: View {
     let positionId: String
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.requestReview) private var requestReview
     private let portfolioStore = PortfolioStore.shared
 
     @State private var closePercent = 100
@@ -36,6 +38,13 @@ struct LeveragedPositionSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                         .foregroundStyle(Color.textPrimary)
+                }
+                // Leverage has no card subject of its own; the portfolio's card
+                // carries its return (percentages only).
+                ToolbarItem(placement: .primaryAction) {
+                    if result == nil, let portfolioId = SessionStore.shared.activePortfolioId {
+                        ShareCardButton(subjectPath: ShareCardSubject.portfolio(portfolioId: portfolioId), compact: true)
+                    }
                 }
             }
         }
@@ -134,6 +143,11 @@ struct LeveragedPositionSheet: View {
             )
             Haptics.success()
             withAnimation(Motion.standard) { result = closed }
+            if ReviewPrompt.shouldRequest(afterProfit: closed.fill.realizedPnlUsd > 0) {
+                ReviewPrompt.markRequested()
+                try? await Task.sleep(for: .seconds(1.5))
+                requestReview()
+            }
         } catch let error as APIError where error.reason == "position_not_open" {
             // Liquidated (or closed elsewhere) in the meantime — say so plainly.
             Haptics.warning()
@@ -175,6 +189,10 @@ private struct LeverageClosedView: View {
                 StatItem(label: "Cash balance", value: PriceFormat.usd(result.cashUsd)),
             ])
             Spacer()
+            if let portfolioId = SessionStore.shared.activePortfolioId {
+                ShareCardButton(subjectPath: ShareCardSubject.portfolio(portfolioId: portfolioId))
+                    .buttonStyle(.secondary)
+            }
             Button("Done", action: onDone)
                 .buttonStyle(.primary)
         }

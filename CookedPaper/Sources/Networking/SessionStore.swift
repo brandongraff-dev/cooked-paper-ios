@@ -1,8 +1,13 @@
 import Foundation
 import Observation
 
-/// The signed-in account. Everyone signs in (Apple or Google) before trading;
-/// there are no guest sessions. The access token is short-lived; the refresh token
+/// The signed-in account, or a guest paper session before there is one.
+///
+/// New users trade through onboarding and see the paywall as a **guest**: `POST
+/// /paper/portfolios/starter` with no `Authorization` mints a guest token (7-day,
+/// paper routes only) when the server allows guests. Signing in afterwards claims
+/// the guest's portfolio into the account (`PortfolioStore`), so its positions carry
+/// over. Both tokens live in the Keychain. The access token is short-lived; the refresh token
 /// (returned in the body because every request carries `X-Cooked-Client: ios`) lives
 /// in the Keychain and is traded for a new access token on a 401 by `APIClient`.
 @Observable
@@ -11,6 +16,7 @@ final class SessionStore {
     private enum Keys {
         static let token = "session.token"
         static let refreshToken = "session.refreshToken"
+        static let guestToken = "session.guestToken"
         static let portfolioId = "session.portfolioId"
         static let username = "session.username"
         static let displayName = "session.displayName"
@@ -23,6 +29,9 @@ final class SessionStore {
 
     private(set) var token: String?
     private(set) var refreshToken: String?
+    /// A pre-sign-in paper session's bearer token (`StarterPaperPortfolioResponse
+    /// .guestToken`). Kept after sign-in only until the claim succeeds.
+    private(set) var guestToken: String?
     private(set) var activePortfolioId: String?
     private(set) var username: String?
     /// Optional on the account; when nil, screens show `username` instead.
@@ -46,6 +55,7 @@ final class SessionStore {
         }
         token = KeychainStore.get(Keys.token)
         refreshToken = KeychainStore.get(Keys.refreshToken)
+        guestToken = KeychainStore.get(Keys.guestToken)
         activePortfolioId = UserDefaults.standard.string(forKey: Keys.portfolioId)
         username = UserDefaults.standard.string(forKey: Keys.username)
         displayName = UserDefaults.standard.string(forKey: Keys.displayName)
@@ -56,6 +66,23 @@ final class SessionStore {
     }
 
     var isSignedIn: Bool { token != nil }
+
+    /// Trading as a guest: no account yet, but a guest paper session.
+    var isGuest: Bool { token == nil && guestToken != nil }
+
+    /// What a request presents: the account's access token, else the guest token.
+    var bearerToken: String? { token ?? guestToken }
+
+    func adoptGuest(token: String) {
+        guestToken = token
+        KeychainStore.set(token, for: Keys.guestToken)
+    }
+
+    /// The guest session is over: claimed into an account, expired, or refused.
+    func clearGuest() {
+        guestToken = nil
+        KeychainStore.remove(Keys.guestToken)
+    }
 
     /// A sign-in (any method) minted a session.
     func signIn(_ session: SessionResponse, method: String) {
@@ -106,6 +133,7 @@ final class SessionStore {
     func clear() {
         token = nil
         refreshToken = nil
+        guestToken = nil
         activePortfolioId = nil
         username = nil
         displayName = nil
@@ -115,6 +143,7 @@ final class SessionStore {
         needsProfileSetup = false
         KeychainStore.remove(Keys.token)
         KeychainStore.remove(Keys.refreshToken)
+        KeychainStore.remove(Keys.guestToken)
         for key in [
             Keys.portfolioId, Keys.username, Keys.displayName, Keys.avatarSeed,
             Keys.userId, Keys.method, Keys.needsProfileSetup,

@@ -1,8 +1,9 @@
 import Foundation
 import SwiftUI
 
-/// Opens a leveraged paper position: direction, 2x/5x/10x, and the margin to put up.
-/// Everything that matters — entry, size, liquidation price — comes from the
+/// Opens a leveraged paper position: direction, multiple, and the margin to put up.
+/// The multiples, directions and minimum margin come from `GET /paper/leverage/config`
+/// (`LeverageConfigStore`), falling back to long/short at 2x/5x/10x. Everything that matters — entry, size, liquidation price — comes from the
 /// server's quote against the live price; nothing is estimated on the device.
 struct LeverageSheetView: View {
     let mint: String
@@ -10,6 +11,7 @@ struct LeverageSheetView: View {
 
     @Environment(\.dismiss) private var dismiss
     private let portfolioStore = PortfolioStore.shared
+    private let configStore = LeverageConfigStore.shared
 
     @State private var direction: LeverageDirection = .long
     @State private var leverage = 5
@@ -23,10 +25,12 @@ struct LeverageSheetView: View {
     /// One id per order the person means to place; reused if a request is retried.
     @State private var clientOrderId = UUID().uuidString
 
-    static let leverageOptions = [2, 5, 10]
-
     private var cashUsd: Decimal { portfolioStore.snapshot?.cashUsd ?? 0 }
     private var margin: Decimal { Decimal(string: amountText) ?? 0 }
+    private var isBelowMinimum: Bool {
+        guard let minimum = configStore.minMarginUsd else { return false }
+        return margin > 0 && margin < minimum
+    }
 
     var body: some View {
         NavigationStack {
@@ -47,6 +51,10 @@ struct LeverageSheetView: View {
                         .foregroundStyle(Color.textPrimary)
                 }
             }
+        }
+        .task {
+            await configStore.loadIfNeeded()
+            applyConfig()
         }
         .presentationDetents([.large])
         .presentationCornerRadius(Radius.sheet)
@@ -97,7 +105,7 @@ struct LeverageSheetView: View {
 
     private var directionPicker: some View {
         HStack(spacing: Space.s4) {
-            ForEach(LeverageDirection.allCases) { option in
+            ForEach(configStore.directions) { option in
                 Segment(title: option.title, isSelected: direction == option) { direction = option }
                     .accessibilityIdentifier("leverage.direction.\(option.rawValue)")
             }
@@ -108,7 +116,7 @@ struct LeverageSheetView: View {
 
     private var leveragePicker: some View {
         HStack(spacing: Space.s8) {
-            ForEach(Self.leverageOptions, id: \.self) { option in
+            ForEach(configStore.leverageOptions, id: \.self) { option in
                 Button {
                     guard leverage != option else { return }
                     Haptics.selection()
@@ -198,7 +206,7 @@ struct LeverageSheetView: View {
 
     private var canSubmit: Bool {
         guard let id = SessionStore.shared.activePortfolioId, !id.isEmpty else { return false }
-        guard margin > 0, margin <= cashUsd else { return false }
+        guard margin > 0, margin <= cashUsd, !isBelowMinimum else { return false }
         return quote?.eligible ?? true
     }
 
@@ -206,13 +214,29 @@ struct LeverageSheetView: View {
 
     private func inputsChanged() {
         clientOrderId = UUID().uuidString
-        errorMessage = margin > cashUsd && margin > 0 ? "That's more than your paper cash." : nil
+        if margin > cashUsd && margin > 0 {
+            errorMessage = "That's more than your paper cash."
+        } else if isBelowMinimum, let minimum = configStore.minMarginUsd {
+            errorMessage = "The minimum margin is \(PriceFormat.usd(minimum))."
+        } else {
+            errorMessage = nil
+        }
         requestQuote()
+    }
+
+    /// Keeps the selection inside what the server offers once its config arrives.
+    private func applyConfig() {
+        if !configStore.leverageOptions.contains(leverage) {
+            leverage = configStore.defaultLeverage
+        }
+        if !configStore.directions.contains(direction), let first = configStore.directions.first {
+            direction = first
+        }
     }
 
     private func requestQuote() {
         quoteTask?.cancel()
-        guard margin > 0, let portfolioId = SessionStore.shared.activePortfolioId else {
+        guard margin > 0, !isBelowMinimum, let portfolioId = SessionStore.shared.activePortfolioId else {
             quote = nil
             return
         }

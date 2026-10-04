@@ -32,6 +32,13 @@ final class LiveSocket {
     // so the connection is presumed dead and torn down and rebuilt from scratch.
     private var heartbeatWatchdog: Task<Void, Never>?
 
+    /// The access token the current handshake presented, to tell "the token was
+    /// already refreshed elsewhere, just reconnect" from "refresh first".
+    private var handshakeToken: String?
+    /// Bounds auth recovery to one refresh-and-reconnect per refusal streak, so a
+    /// server that keeps refusing can't spin the app through refreshes.
+    private var authRecoveryAttempts = 0
+
     private init() {}
 
     func connectAndSubscribe(portfolioId: String) {
@@ -39,7 +46,7 @@ final class LiveSocket {
         // Demo data has no live feed behind it; the REST snapshot is the whole picture.
         if MockAPI.isEnabled { return }
         #endif
-        guard let token = SessionStore.shared.token else { return }
+        guard let token = SessionStore.shared.bearerToken else { return }
 
         if subscribedPortfolioId == portfolioId, isConnected {
             return
@@ -47,13 +54,14 @@ final class LiveSocket {
 
         disconnect()
         subscribedPortfolioId = portfolioId
+        handshakeToken = token
 
         let manager = SocketManager(
             socketURL: APIConfig.baseURL,
             config: [
                 .log(false),
                 .compress,
-                .extraHeaders(["Authorization": "Bearer \(token)"]),
+                .extraHeaders(SocketAuth.currentHeaders()),
             ]
         )
         self.manager = manager
@@ -63,7 +71,22 @@ final class LiveSocket {
         socket.on(clientEvent: .connect) { [weak self] _, _ in
             guard let self else { return }
             self.isConnected = true
+            self.authRecoveryAttempts = 0
             socket.emit("paper:subscribe", self.subscribePayload(portfolioId: portfolioId))
+        }
+        // The access token lives ~15 minutes; the socket can outlive it. Every
+        // automatic reconnect is a fresh handshake, so it gets the token as of now.
+        socket.on(clientEvent: .reconnectAttempt) { [weak self, weak manager] _, _ in
+            guard let self, let manager else { return }
+            SocketAuth.refreshHeaders(on: manager)
+            self.handshakeToken = SessionStore.shared.bearerToken
+        }
+        // The handshake's token was refused (expired, or rotated out from under a
+        // long-lived socket): refresh through the same path a REST 401 takes, then
+        // reconnect with the new token.
+        socket.on(clientEvent: .error) { [weak self] data, _ in
+            guard let self, SocketAuth.isAuthFailure(data) else { return }
+            self.recoverFromAuthFailure(portfolioId: portfolioId)
         }
         socket.on(clientEvent: .disconnect) { [weak self] _, _ in
             self?.isConnected = false
@@ -101,6 +124,25 @@ final class LiveSocket {
         subscribedPortfolioId = nil
         isConnected = false
         latestTick = nil
+    }
+
+    private func recoverFromAuthFailure(portfolioId: String) {
+        guard authRecoveryAttempts < 1 else { return }
+        authRecoveryAttempts += 1
+        let rejectedToken = handshakeToken
+        Task { [weak self] in
+            // Someone (a REST 401) may already have refreshed since this handshake;
+            // then the new token just needs a new handshake.
+            var refreshed = SessionStore.shared.bearerToken != rejectedToken
+            if !refreshed {
+                refreshed = await APIClient.shared.refreshSession()
+            }
+            guard refreshed, let self, self.subscribedPortfolioId == portfolioId else { return }
+            // `disconnect()` leaves `authRecoveryAttempts` alone, so a second refusal
+            // right after this reconnect doesn't loop; a successful connect resets it.
+            self.disconnect()
+            self.connectAndSubscribe(portfolioId: portfolioId)
+        }
     }
 
     private func subscribePayload(portfolioId: String) -> [String: Any] {

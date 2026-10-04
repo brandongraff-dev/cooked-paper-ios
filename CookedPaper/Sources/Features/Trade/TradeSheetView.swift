@@ -1,4 +1,5 @@
 import Foundation
+import StoreKit
 import SwiftUI
 
 /// The buy/sell ticket. Buy takes a dollar amount (quick-filled from a % of cash,
@@ -17,6 +18,7 @@ struct TradeSheetView: View {
     var priceUsd: Decimal? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.requestReview) private var requestReview
     private let portfolioStore = PortfolioStore.shared
 
     @State private var amountText = ""
@@ -37,7 +39,14 @@ struct TradeSheetView: View {
         NavigationStack {
             Group {
                 if let fillResult {
-                    FillConfirmationView(result: fillResult, symbol: tokenSymbol) { dismiss() }
+                    FillConfirmationView(
+                        result: fillResult,
+                        symbol: tokenSymbol,
+                        // A sell has a result worth sharing: this token's card.
+                        shareSubjectPath: fillResult.trade.side == .sell
+                            ? SessionStore.shared.activePortfolioId.map { ShareCardSubject.position(portfolioId: $0, mint: mint) }
+                            : nil
+                    ) { dismiss() }
                 } else {
                     form
                 }
@@ -235,11 +244,24 @@ struct TradeSheetView: View {
         guard let portfolioId = SessionStore.shared.activePortfolioId else { return }
         isExecuting = true
         errorMessage = nil
+        // What the position cost, captured before the sell changes it.
+        let averageCost = position?.avgCostUsd
         do {
             let result = try await PaperAPI.execute(portfolioId: portfolioId, body: makeBody())
             fillResult = result
             Haptics.success()
             await portfolioStore.refreshAfterTrade()
+            let soldAtProfit = result.trade.side == .sell
+                && averageCost.map { result.fill.fillPriceUsd > $0 } == true
+            if ReviewPrompt.shouldRequest(afterProfit: soldAtProfit) {
+                ReviewPrompt.markRequested()
+                // Let the fill confirmation land first.
+                try? await Task.sleep(for: .seconds(1.5))
+                requestReview()
+            }
+            // A trade is when price alerts start to matter; iOS only ever shows
+            // this prompt once, so in practice it's after the first one.
+            await PushRegistrar.shared.requestPermissionIfNeeded()
         } catch let error as APIError {
             Haptics.error()
             errorMessage = error.errorDescription
@@ -267,6 +289,7 @@ struct TradeSheetView: View {
 private struct FillConfirmationView: View {
     let result: ExecutePaperTradeResponse
     let symbol: String
+    var shareSubjectPath: String? = nil
     let onDone: () -> Void
 
     var body: some View {
@@ -285,6 +308,10 @@ private struct FillConfirmationView: View {
                 StatItem(label: "Cash balance", value: PriceFormat.usd(result.cashUsd)),
             ])
             Spacer()
+            if let shareSubjectPath {
+                ShareCardButton(subjectPath: shareSubjectPath)
+                    .buttonStyle(.secondary)
+            }
             Button("Done", action: onDone)
                 .buttonStyle(.primary)
         }

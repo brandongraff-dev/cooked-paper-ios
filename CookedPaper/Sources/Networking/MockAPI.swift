@@ -42,7 +42,9 @@ nonisolated enum MockAPI {
 
     // MARK: - Routing
 
-    nonisolated static func response(method: String, path: String, query: [String: String], body: Data? = nil) -> (Int, Any) {
+    /// `authorization` is the request's `Authorization` header: a starter call
+    /// without one mints a guest session, as the real server does with guests on.
+    nonisolated static func response(method: String, path: String, query: [String: String], body: Data? = nil, authorization: String? = nil) -> (Int, Any) {
         let parts = path.split(separator: "/").map(String.init)
 
         /// Matches `parts` against a route template like `"tokens/:/profile"`, where
@@ -62,10 +64,19 @@ nonisolated enum MockAPI {
         // positions, and buys/sells that actually change the book.
         if FreshAccount.isEnabled {
             if match("POST", "paper/portfolios/starter") != nil {
+                // Onboarding runs as a guest: no token in, a guest token out.
+                let mintsGuest = authorization == nil
+                let guestToken: Any = mintsGuest ? "demo-guest-token" as Any : NSNull()
+                let guestExpiry: Any = mintsGuest ? iso(daysFromNow: 7) as Any : NSNull()
                 return (200, [
                     "portfolio": FreshAccount.portfolio(), "created": true,
-                    "guestToken": "demo-guest-token", "guestTokenExpiresAt": iso(daysFromNow: 7),
+                    "guestToken": guestToken, "guestTokenExpiresAt": guestExpiry,
                 ] as [String: Any])
+            }
+            // Signing in after onboarding claims the guest's book, so its positions
+            // carry over (the mock keeps one book for the whole run).
+            if match("POST", "paper/portfolios/claim") != nil {
+                return (200, ["claimed": [FreshAccount.portfolio()], "skipped": [] as [Any]] as [String: Any])
             }
             if match("GET", "paper/portfolios/:") != nil { return (200, FreshAccount.snapshot()) }
             if match("GET", "paper/portfolios/:/trades") != nil { return (200, ["trades": [] as [Any]] as [String: Any]) }
@@ -128,9 +139,25 @@ nonisolated enum MockAPI {
         if let c = match("DELETE", "watchlist/:") {
             return (200, ["mint": c[0], "watching": false, "addedAt": NSNull()] as [String: Any])
         }
-        if match("GET", "social/alerts") != nil { return (200, ["alerts": alerts]) }
-        if match("POST", "social/alerts") != nil { return (200, ["alert": alerts[0]]) }
-        if match("DELETE", "social/alerts/:") != nil { return (200, ["alert": alerts[0]]) }
+        if match("GET", "social/alerts") != nil { return (200, ["alerts": MockAlerts.list()]) }
+        if match("POST", "social/alerts") != nil { return MockAlerts.create(body) }
+        if let c = match("PATCH", "social/alerts/:") { return MockAlerts.update(id: c[0], body: body) }
+        if let c = match("DELETE", "social/alerts/:") { return MockAlerts.delete(id: c[0]) }
+        // Share cards: public metadata pointing at a web page that unfurls the PNG.
+        if let c = match("GET", "cards/meta/paper/position/:/:/:") {
+            return (200, cardMeta(path: "paper/position/\(c[0])/\(c[1])/\(c[2])", headline: token(for: c[1]).symbol, returnPct: 22.48))
+        }
+        if let c = match("GET", "cards/meta/paper/portfolio/:/:") {
+            return (200, cardMeta(path: "paper/portfolio/\(c[0])/\(c[1])", headline: "Paper Portfolio", returnPct: 12.49))
+        }
+        // Push devices: accepted and forgotten (screenshot runs never register one).
+        if match("POST", "social/apns-tokens") != nil { return (201, ["ok": true]) }
+        if match("POST", "social/apns-tokens/revoke") != nil { return (200, ["ok": true]) }
+        // Server-validated subscriptions: the demo account has no server-side
+        // entitlement, so the paywall stays a StoreKit (or UITEST_BYPASS_PAYWALL)
+        // decision exactly as before.
+        if match("GET", "billing/apple/entitlement") != nil { return (200, ["entitlement": MockAlerts.inactiveEntitlement]) }
+        if match("POST", "billing/apple/transactions") != nil { return (200, ["entitlement": MockAlerts.inactiveEntitlement]) }
         if match("GET", "auth/me") != nil { return (200, ["user": user]) }
         if match("PATCH", "auth/me") != nil { return MockProfile.update(body) }
         if match("GET", "auth/username-available") != nil {
@@ -451,14 +478,31 @@ nonisolated enum MockAPI {
 
     // MARK: - Alerts & account
 
-    private static var alerts: [[String: Any]] {
+    /// The demo account's starting alert rules (see `MockAlerts`, which owns them
+    /// once the run starts).
+    static var seedAlerts: [[String: Any]] {
         [
             ["id": "a-1", "name": "BONK breakout", "rule": ["kind": "price_crossed", "mint": tokens[0].mint, "direction": "above", "priceUsd": "0.000025"],
-             "channel": "in_app", "isActive": true, "cooldownSeconds": 300, "lastFiredAt": NSNull(), "createdAt": iso(daysFromNow: -2)],
+             "channel": "push", "isActive": true, "cooldownSeconds": 300, "lastFiredAt": NSNull(), "createdAt": iso(daysFromNow: -2)],
             ["id": "a-2", "name": "WIF dip buy", "rule": ["kind": "price_crossed", "mint": tokens[1].mint, "direction": "below", "priceUsd": "1.60"],
-             "channel": "in_app", "isActive": true, "cooldownSeconds": 300, "lastFiredAt": iso(daysFromNow: -1), "createdAt": iso(daysFromNow: -6)],
+             "channel": "push", "isActive": true, "cooldownSeconds": 300, "lastFiredAt": iso(daysFromNow: -1), "createdAt": iso(daysFromNow: -6)],
             ["id": "a-3", "name": "Whale watch", "rule": ["kind": "wallet_trades"],
              "channel": "in_app", "isActive": false, "cooldownSeconds": 600, "lastFiredAt": NSNull(), "createdAt": iso(daysFromNow: -9)],
+        ]
+    }
+
+    private static func cardMeta(path: String, headline: String, returnPct: Double) -> [String: Any] {
+        [
+            "payload": ["returnPct": returnPct, "sampleSize": 3, "window": "all", "verifiedFrom": iso(daysFromNow: -12)] as [String: Any],
+            "model": [
+                "provenance": "paper", "username": MockProfile.current().0, "headline": headline,
+                "headlineKind": path.hasPrefix("paper/position") ? "token" : "portfolio",
+                "returnPct": returnPct, "sampleSize": 3, "sampleUnit": "round trips",
+                "windowLabel": "All time", "coverageLabel": "Since \(iso(daysFromNow: -12))", "secondary": [] as [Any],
+            ] as [String: Any],
+            "imageUrl": "https://api.cooked.trade/cards/png/\(path)",
+            "pageUrl": "https://cooked.trade/s/\(path)",
+            "width": 1200, "height": 630,
         ]
     }
 
@@ -504,7 +548,8 @@ nonisolated final class MockURLProtocol: URLProtocol {
             method: request.httpMethod ?? "GET",
             path: url.path,
             query: query,
-            body: request.httpBody ?? request.httpBodyStream.map(Self.readAll)
+            body: request.httpBody ?? request.httpBodyStream.map(Self.readAll),
+            authorization: request.value(forHTTPHeaderField: "Authorization")
         )
         let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
         let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
@@ -742,6 +787,74 @@ nonisolated enum UsernameRulesMock {
         if candidate.count > 24 { return "Usernames can be at most 24 characters." }
         let ok = candidate.unicodeScalars.allSatisfy { $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "_") }
         return ok ? nil : "Usernames can only use letters, numbers and _."
+    }
+}
+
+/// `/social/alerts` as a tiny stateful store, so creating, pausing and deleting an
+/// alert in a screenshot run shows up in the lists afterwards.
+nonisolated enum MockAlerts {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var alerts: [[String: Any]]?
+
+    static var inactiveEntitlement: [String: Any] {
+        ["active": false, "productId": NSNull(), "expiresAt": NSNull(), "willRenew": NSNull(), "environment": NSNull()] as [String: Any]
+    }
+
+    static func list() -> [[String: Any]] {
+        lock.lock(); defer { lock.unlock() }
+        return current()
+    }
+
+    static func create(_ body: Data?) -> (Int, Any) {
+        guard let body,
+              let request = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let name = request["name"] as? String,
+              let rule = request["rule"] as? [String: Any] else {
+            return (400, ["error": "bad_request", "message": "Malformed alert."])
+        }
+        let alert: [String: Any] = [
+            "id": UUID().uuidString.lowercased(), "name": name, "rule": rule,
+            "channel": request["channel"] as? String ?? "push", "isActive": true,
+            "cooldownSeconds": request["cooldownSeconds"] as? Int ?? 300,
+            "lastFiredAt": NSNull(), "createdAt": MockISO.string(Date()),
+        ]
+        lock.lock(); defer { lock.unlock() }
+        var all = current()
+        all.insert(alert, at: 0)
+        alerts = all
+        return (201, ["alert": alert])
+    }
+
+    static func update(id: String, body: Data?) -> (Int, Any) {
+        let request = body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+        lock.lock(); defer { lock.unlock() }
+        var all = current()
+        guard let index = all.firstIndex(where: { $0["id"] as? String == id }) else {
+            return (404, ["error": "not_found", "message": "No such alert."])
+        }
+        if let isActive = request["isActive"] as? Bool { all[index]["isActive"] = isActive }
+        if let name = request["name"] as? String { all[index]["name"] = name }
+        alerts = all
+        return (200, ["alert": all[index]])
+    }
+
+    static func delete(id: String) -> (Int, Any) {
+        lock.lock(); defer { lock.unlock() }
+        var all = current()
+        guard let index = all.firstIndex(where: { $0["id"] as? String == id }) else {
+            return (404, ["error": "not_found", "message": "No such alert."])
+        }
+        let removed = all.remove(at: index)
+        alerts = all
+        return (200, ["alert": removed])
+    }
+
+    /// Call with `lock` held.
+    private static func current() -> [[String: Any]] {
+        if let alerts { return alerts }
+        let seeded = MockAPI.seedAlerts
+        alerts = seeded
+        return seeded
     }
 }
 

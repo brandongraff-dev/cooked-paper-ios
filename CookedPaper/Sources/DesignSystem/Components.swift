@@ -436,6 +436,8 @@ struct EmptyStateView: View {
     let symbol: String
     let title: String
     let detail: String
+    /// An error state's way out: shows a compact "Try again" button when set.
+    var retry: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: Space.s8) {
@@ -449,6 +451,15 @@ struct EmptyStateView: View {
                 .font(.rowSubtitle)
                 .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
+            if let retry {
+                Button("Try again") {
+                    Haptics.tap()
+                    retry()
+                }
+                .buttonStyle(.compact)
+                .padding(.top, Space.s8)
+                .accessibilityIdentifier("emptyState.retry")
+            }
         }
         .padding(.vertical, Space.s48)
         .padding(.horizontal, Space.s24)

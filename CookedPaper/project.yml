@@ -28,7 +28,7 @@ settings:
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     ENABLE_USER_SCRIPT_SANDBOXING: YES
-    DEVELOPMENT_TEAM: "" # fill in your Apple Developer Team ID
+    DEVELOPMENT_TEAM: "" # owner-provided: your Apple Developer Team ID (see README)
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
 
@@ -73,20 +73,50 @@ targets:
               - $(GOOGLE_REVERSED_CLIENT_ID)
         # The iOS OAuth client id from Google Cloud Console (see build settings below).
         GIDClientID: $(GOOGLE_IOS_CLIENT_ID)
+        # Which API this build talks to (APIConfig.baseURL); set per configuration
+        # below. Anything missing or malformed falls back to production.
+        COOKED_API_BASE_URL: $(COOKED_API_BASE_URL)
+        # XcodeGen's default Info.plist still says armv7, which no iOS 17 device is.
+        UIRequiredDeviceCapabilities:
+          - arm64
+        # Plain-http to localhost / *.local only, so Debug can point at an API on
+        # your Mac. Everything else (including production) stays HTTPS-only.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     entitlements:
       path: Resources/CookedPaper.entitlements
       properties:
         com.apple.developer.applesignin:
           - Default
+        # Push Notifications. Expanded per configuration from APS_ENVIRONMENT below:
+        # "development" (APNs sandbox) for Debug, "production" for Release.
+        aps-environment: $(APS_ENVIRONMENT)
+    attributes:
+      SystemCapabilities:
+        com.apple.Push:
+          enabled: 1
+        com.apple.SignInWithApple:
+          enabled: 1
     settings:
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+          # To run Debug against a local or staging API, change this (e.g.
+          # http://localhost:3000 for an API on the same Mac as the simulator).
+          # Leave the scheme in place; anything malformed falls back to production.
+          COOKED_API_BASE_URL: https://api.cooked.trade
+        Release:
+          APS_ENVIRONMENT: production
+          COOKED_API_BASE_URL: https://api.cooked.trade
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.cooked.paper
         PRODUCT_NAME: CookedPaper
         TARGETED_DEVICE_FAMILY: "1" # iPhone only, matching the RN app's supportsTablet: false
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        # Fill in from Google Cloud Console → Credentials → iOS client (bundle id
-        # app.cooked.paper). Until then the Google button says it isn't configured.
+        # Owner-provided (see README): fill in from Google Cloud Console →
+        # Credentials → iOS client (bundle id app.cooked.paper). Until then the
+        # Google button says it isn't configured.
         GOOGLE_IOS_CLIENT_ID: "REPLACE_ME.apps.googleusercontent.com"
         GOOGLE_REVERSED_CLIENT_ID: "com.googleusercontent.apps.REPLACE_ME"
     dependencies:

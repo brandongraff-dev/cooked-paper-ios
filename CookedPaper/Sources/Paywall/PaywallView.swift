@@ -8,7 +8,16 @@ import SwiftUI
 /// here). Every price, period and trial term shown is read from StoreKit.
 struct PaywallView: View {
     let store = SubscriptionStore.shared
+    let session = SessionStore.shared
     @State private var selectedProductID = ProductID.annual
+    @State private var showsSignIn = false
+    /// The plan waiting on the "want a reminder?" pre-prompt.
+    @State private var pendingProduct: Product?
+    @State private var showsReminderPrompt = false
+    /// "This month's top trader", from the public leaderboard; nil hides it.
+    @State private var topTrader: TopTrader?
+    /// The onboarding goal answer, for the headline.
+    private let goal = TradingGoal.saved
     @State private var isPurchasing = false
     /// Product ids whose introductory offer this Apple ID can still redeem — a trial
     /// is only ever advertised to someone who will actually get it.
@@ -30,6 +39,9 @@ struct PaywallView: View {
                     hero
                     features
                     plans
+                    if let selectedProduct, let offer = trialOffer(selectedProduct) {
+                        trialTimeline(selectedProduct, offer: offer)
+                    }
                 }
                 .padding(.horizontal, Space.s24)
                 .padding(.top, Space.s8)
@@ -54,8 +66,56 @@ struct PaywallView: View {
                 .padding(.horizontal, Space.s24)
                 .padding(.top, Space.s8)
         }
+        .overlay(alignment: .topLeading) {
+            // An existing account (and any subscription the server knows about)
+            // without buying again; a guest's portfolio is claimed into it.
+            if !session.isSignedIn {
+                Button("Sign in") { showsSignIn = true }
+                    .font(.body)
+                    .foregroundStyle(Color.textSecondary)
+                    .padding(.horizontal, Space.s24)
+                    .padding(.top, Space.s8)
+                    .accessibilityIdentifier("paywall.signIn")
+            }
+        }
+        .sheet(isPresented: $showsSignIn) {
+            SignInView(
+                title: "Sign in",
+                subtitle: "Your portfolio and subscription follow your account."
+            ) {
+                showsSignIn = false
+                Task { await PortfolioStore.shared.resetAndRebootstrap() }
+            }
+            .background(Color.appBackground)
+            .presentationDragIndicator(.visible)
+        }
+        // Soft pre-prompt before a trial purchase: the system prompt only follows
+        // a yes, and the reminder is the reason to say yes.
+        .alert("Want a reminder before your trial ends?", isPresented: $showsReminderPrompt) {
+            Button("Remind me") {
+                Task {
+                    await PushRegistrar.shared.requestPermissionIfNeeded()
+                    if let product = pendingProduct { await buy(product) }
+                }
+            }
+            Button("No thanks", role: .cancel) {
+                Task {
+                    if let product = pendingProduct { await buy(product) }
+                }
+            }
+        } message: {
+            Text("We'll send one notification two days before you're billed.")
+        }
         .preferredColorScheme(.dark)
-        .task { await PortfolioStore.shared.bootstrapIfNeeded() }
+        .task {
+            // The positions this paywall is about: the account's, or the guest's
+            // from onboarding (also after a relaunch on this screen).
+            if session.isSignedIn {
+                await PortfolioStore.shared.bootstrapIfNeeded()
+            } else if session.isGuest, PortfolioStore.shared.snapshot == nil {
+                _ = await PortfolioStore.shared.bootstrapGuestIfPossible()
+            }
+        }
         .task(id: store.products.map(\.id)) {
             await refreshTrialEligibility()
             if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.annual }) ?? orderedPlans.first {
@@ -90,7 +150,7 @@ struct PaywallView: View {
             BrandWordmark(height: 34)
                 .padding(.top, Space.s48)
 
-            Text(heldPositions.isEmpty ? "Trade live prices\nwith paper money." : "Keep your\nportfolio.")
+            Text(goal?.paywallHeadline ?? (heldPositions.isEmpty ? "Trade live prices\nwith paper money." : "Keep your\nportfolio."))
                 .font(.system(size: 34, weight: .bold))
                 .tracking(-0.8)
                 .multilineTextAlignment(.center)
@@ -151,13 +211,38 @@ struct PaywallView: View {
         .padding(.top, Space.s4)
     }
 
+    /// The highest multiple the server offers (from its leverage config when this
+    /// session has loaded it), else 10x.
+    private var maxLeverage: Int {
+        LeverageConfigStore.shared.leverageOptions.max() ?? 10
+    }
+
     private var features: some View {
         VStack(alignment: .leading, spacing: Space.s16) {
-            FeatureCheck(text: "Unlimited paper trades on live tokens")
-            FeatureCheck(text: "Your full record: win rate, P&L, every trade")
-            FeatureCheck(text: "A monthly leaderboard to climb")
+            if let topTrader {
+                TopTraderBanner(trader: topTrader)
+            }
+            FeatureCheck(symbol: "chart.xyaxis.line", text: "Live on-chain prices & charts")
+            FeatureCheck(symbol: "bolt.fill", text: "Leverage up to \(maxLeverage)x")
+            FeatureCheck(symbol: "bell.badge.fill", text: "Price alerts on any token")
+            FeatureCheck(symbol: "trophy.fill", text: "Monthly leaderboard")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .task { await loadTopTrader() }
+    }
+
+    /// Social proof that's real or absent: the leaderboard's #1 this month, shown
+    /// only with a positive, measured return.
+    private func loadTopTrader() async {
+        guard topTrader == nil,
+              let board = try? await LeaderboardAPI.paperLeaderboard(window: .all, limit: 1),
+              let leader = board.entries.first,
+              leader.returnPct.unavailable == nil,
+              let pct = leader.returnPct.pct, pct > 0
+        else { return }
+        withAnimation(Motion.standard) {
+            topTrader = TopTrader(username: leader.username, returnPct: pct)
+        }
     }
 
     @ViewBuilder
@@ -244,10 +329,28 @@ struct PaywallView: View {
             return
         }
         Task {
-            isPurchasing = true
-            await store.purchase(product)
-            isPurchasing = false
-            if store.isSubscribed { Haptics.success() }
+            if trialOffer(product) != nil, await PushRegistrar.shared.canAskPermission() {
+                pendingProduct = product
+                showsReminderPrompt = true
+            } else {
+                await buy(product)
+            }
+        }
+    }
+
+    private func buy(_ product: Product) async {
+        let trial = trialOffer(product)
+        pendingProduct = nil
+        isPurchasing = true
+        await store.purchase(product)
+        isPurchasing = false
+        guard store.isSubscribed else { return }
+        Haptics.success()
+        if let trial {
+            await PushRegistrar.shared.scheduleTrialReminder(
+                trialDays: trialDays(trial),
+                renewalPrice: "\(product.displayPrice)/\(unitName(periodUnit(product)))"
+            )
         }
     }
 
@@ -270,6 +373,42 @@ struct PaywallView: View {
         return product.subscription?.introductoryOffer
     }
 
+    /// A trial's length in days (a 1-week trial is 7).
+    private func trialDays(_ offer: Product.SubscriptionOffer) -> Int {
+        let value = offer.period.value
+        switch offer.period.unit {
+        case .day: return value
+        case .week: return value * 7
+        case .month: return value * 30
+        case .year: return value * 365
+        @unknown default: return value
+        }
+    }
+
+    /// Today → reminder → first charge, so the trial's terms are plain up front.
+    private func trialTimeline(_ product: Product, offer: Product.SubscriptionOffer) -> some View {
+        let days = trialDays(offer)
+        return VStack(alignment: .leading, spacing: Space.s16) {
+            Text("How your free trial works")
+                .font(.rowTitle)
+                .foregroundStyle(Color.textPrimary)
+            VStack(alignment: .leading, spacing: 0) {
+                TrialStep(symbol: "lock.open.fill", title: "Today", detail: "Full access to everything.", showsLine: true)
+                TrialStep(symbol: "bell.fill", title: "Day \(max(1, days - 2))", detail: "We remind you that your trial is ending.", showsLine: true)
+                TrialStep(
+                    symbol: "checkmark.seal.fill",
+                    title: "Day \(days)",
+                    detail: "Billed \(product.displayPrice)/\(shortUnit(product)). Cancel anytime before and pay nothing.",
+                    showsLine: false
+                )
+            }
+        }
+        .padding(Space.s20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .accessibilityIdentifier("paywall.trialTimeline")
+    }
+
     /// "3 days" / "1 week" — a trial's length, spelled out.
     private func trialLength(_ offer: Product.SubscriptionOffer) -> String {
         let value = offer.period.value
@@ -281,7 +420,7 @@ struct PaywallView: View {
         if orderedPlans.isEmpty { return "Try again" }
         guard let selectedProduct else { return "Continue" }
         if let offer = trialOffer(selectedProduct) {
-            return "Start my \(offer.period.value)-\(unitName(offer.period.unit)) free trial"
+            return "Start \(trialDays(offer))-day free trial"
         }
         return "Subscribe · \(selectedProduct.displayPrice)/\(unitName(periodUnit(selectedProduct)))"
     }
@@ -368,12 +507,83 @@ struct PaywallView: View {
     }
 }
 
+/// One stop on the trial timeline: an icon on a connecting rail, then what happens.
+private struct TrialStep: View {
+    let symbol: String
+    let title: String
+    let detail: String
+    let showsLine: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Space.s12) {
+            VStack(spacing: 0) {
+                Image(systemName: symbol)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.accentInk)
+                    .frame(width: 28, height: 28)
+                    .background(Color.accent, in: Circle())
+                if showsLine {
+                    Rectangle()
+                        .fill(Color.accent.opacity(0.35))
+                        .frame(width: 2)
+                        .frame(minHeight: Space.s16)
+                }
+            }
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.textPrimary)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.bottom, showsLine ? Space.s12 : 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct TopTrader: Equatable {
+    let username: String
+    let returnPct: Decimal
+}
+
+private struct TopTraderBanner: View {
+    let trader: TopTrader
+
+    var body: some View {
+        HStack(spacing: Space.s12) {
+            Image(systemName: "crown.fill")
+                .font(.body)
+                .foregroundStyle(Color.accent)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                (Text("This month's top trader: ").foregroundStyle(Color.textPrimary)
+                    + Text(PriceFormat.change(trader.returnPct)).foregroundStyle(Color.positive))
+                    .font(.body.weight(.semibold))
+                Text("@\(trader.username) · paper, simulated")
+                    .font(.footnote)
+                    .foregroundStyle(Color.textSecondary)
+            }
+        }
+        .padding(Space.s16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("paywall.topTrader")
+    }
+}
+
 private struct FeatureCheck: View {
+    var symbol = "checkmark"
     let text: String
 
     var body: some View {
         HStack(spacing: Space.s16) {
-            Image(systemName: "checkmark")
+            Image(systemName: symbol)
                 .font(.body.weight(.semibold))
                 .foregroundStyle(Color.accent)
                 .frame(width: 20)

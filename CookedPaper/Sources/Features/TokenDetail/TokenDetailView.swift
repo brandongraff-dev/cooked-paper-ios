@@ -12,11 +12,16 @@ struct TokenDetailView: View {
     @State private var scrubIndex: Int?
     @State private var isLoading = true
     @State private var errorMessage: String?
+    /// The selected range's candles failed to load; the chart area offers a retry.
+    @State private var candlesError: String?
+    @State private var isLoadingCandles = false
     @State private var tradeSide: TradeSide?
     @State private var showsLeverage = false
+    @State private var showsAlerts = false
     /// The person's own buys and sells on this token, drawn on the chart.
     @State private var myTrades: [ChartTradeMarker] = []
     @Environment(\.scenePhase) private var scenePhase
+    private let alertStore = PriceAlertStore.shared
 
     init(mint: String) {
         self.mint = mint
@@ -53,7 +58,38 @@ struct TokenDetailView: View {
     }
 
     private var closes: [Double] {
-        (candles?.candles ?? []).compactMap { $0.map { NSDecimalNumber(decimal: $0.close).doubleValue } }
+        displayedCandles.compactMap { $0.map { NSDecimalNumber(decimal: $0.close).doubleValue } }
+    }
+
+    /// The fetched candles with the live price folded into the newest bucket, so a
+    /// non-LIVE chart moves between its periodic refetches. Only when that bucket is
+    /// the one happening now (a relayed series whose last candle is hours old is left
+    /// alone) and only for a USD series — the tape is in dollars, and a
+    /// quote-denominated candle must never be overwritten with one.
+    private var displayedCandles: [Candle?] {
+        let fetched = candles?.candles ?? []
+        guard range != .live,
+              candles?.denomination == "usd",
+              let live = feed.latestPrice, live > 0,
+              let lastIndex = fetched.lastIndex(where: { $0 != nil }),
+              var last = fetched[lastIndex],
+              let start = Self.parseDate(last.bucketStart)
+        else { return fetched }
+        let elapsed = Date().timeIntervalSince(start)
+        let bucketSeconds = TimeInterval(range.interval.milliseconds) / 1000
+        guard elapsed >= 0, elapsed < bucketSeconds else { return fetched }
+        last.close = live
+        if live > last.high { last.high = live }
+        if live < last.low { last.low = live }
+        var folded = fetched
+        folded[lastIndex] = last
+        return folded
+    }
+
+    /// Restarts the periodic candle refetch whenever the range changes or the app
+    /// comes and goes from the foreground.
+    private var chartRefreshKey: String {
+        "\(range.rawValue)|\(scenePhase == .active)"
     }
 
     var body: some View {
@@ -61,7 +97,9 @@ struct TokenDetailView: View {
             if isLoading {
                 loadingState
             } else if let errorMessage {
-                EmptyStateView(symbol: "wifi.slash", title: "Couldn't load this token", detail: errorMessage)
+                EmptyStateView(symbol: "wifi.slash", title: "Couldn't load this token", detail: errorMessage) {
+                    Task { await load() }
+                }
             } else {
                 content
             }
@@ -82,18 +120,50 @@ struct TokenDetailView: View {
         .sheet(isPresented: $showsLeverage) {
             LeverageSheetView(mint: mint, tokenSymbol: profile?.token.symbol ?? "token")
         }
+        .sheet(isPresented: $showsAlerts) {
+            PriceAlertSheet(
+                mint: mint,
+                symbol: profile?.token.symbol ?? "token",
+                currentPrice: feed.latestPrice ?? profile?.market.priceUsd.value
+            )
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Haptics.tap()
+                    showsAlerts = true
+                } label: {
+                    Image(systemName: alertStore.hasActiveAlert(for: mint) ? "bell.fill" : "bell")
+                        .foregroundStyle(Color.textPrimary)
+                }
+                .accessibilityLabel("Price alerts")
+                .accessibilityIdentifier("tokenDetail.alerts")
+                .disabled(profile == nil)
+            }
+        }
+        .task {
+            if SessionStore.shared.isSignedIn { await alertStore.loadIfNeeded() }
+        }
         .task {
             // The live tape starts alongside the profile, not after it.
             syncFeed()
             await load()
         }
-        .onChange(of: range) { _, _ in
+        .onChange(of: range) { _, newRange in
             scrubIndex = nil
             syncFeed()
-            Task { await loadCandles() }
+            // LIVE draws from the feed, not candles; nothing to fetch or fail.
+            if newRange == .live {
+                candlesError = nil
+            } else {
+                Task { await loadCandles() }
+            }
         }
         .onChange(of: scenePhase) { _, _ in syncFeed() }
         .onDisappear { feed.stop() }
+        // Cancelled on disappear and whenever the key changes, so it only ever runs
+        // while this range is on screen with the app active.
+        .task(id: chartRefreshKey) { await refreshCandlesPeriodically() }
         .task(id: tradesKey) { myTrades = await ChartTradeMarkers.load(mint: mint) }
     }
 
@@ -147,7 +217,7 @@ struct TokenDetailView: View {
             )
         }
 
-        let price = (range == .live ? livePrice : nil) ?? profile?.market.priceUsd.value
+        let price = livePrice ?? profile?.market.priceUsd.value
         let percent: Decimal?
         if range == .day || range == .live {
             percent = profile?.market.change24h.value
@@ -193,9 +263,12 @@ struct TokenDetailView: View {
             .padding(.bottom, Space.s4)
 
             // Re-reads the playhead price ten times a second on LIVE (each trade
-            // lands at its own moment, not when its batch arrived); idle otherwise.
+            // lands at its own moment, not when its batch arrived). Other ranges show
+            // the newest price held, which redraws as the feed delivers.
             TimelineView(.animation(minimumInterval: 0.1, paused: range != .live || Self.stillFrames)) { context in
-                priceLines(livePrice: feed.displayPrice(at: Self.stillFrames ? Date() : context.date))
+                priceLines(livePrice: range == .live
+                    ? feed.displayPrice(at: Self.stillFrames ? Date() : context.date)
+                    : feed.latestPrice)
             }
         }
     }
@@ -235,11 +308,17 @@ struct TokenDetailView: View {
                     style: showsCandles ? .candles : .line,
                     markers: myTrades
                 )
+            } else if let candlesError {
+                ChartRetryView(message: candlesError, isRetrying: isLoadingCandles) {
+                    Task { await loadCandles() }
+                }
             } else if showsCandles {
                 CandleChartView(
-                    candles: candles?.candles ?? [],
+                    candles: displayedCandles,
                     isRelayed: candles?.isRelayed ?? false,
-                    interval: range.interval
+                    interval: range.interval,
+                    // Alert thresholds are dollars; only a USD series can show them.
+                    alertLevels: candles?.denomination == "usd" ? alertStore.chartLevels(for: mint) : []
                 )
             } else if closes.count > 1 {
                 PriceLineChart(values: closes, selectedIndex: $scrubIndex, markers: indexedMarkers)
@@ -360,25 +439,39 @@ struct TokenDetailView: View {
 
     // MARK: - Loading
 
+    /// The profile is what the screen can't do without; candles failing only costs
+    /// the chart, which then offers its own retry.
     private func load() async {
         isLoading = true
         errorMessage = nil
+        let requested = range
+        async let profileFetch = TokenAPI.profile(mint: mint)
+        async let candlesFetch = TokenAPI.candles(mint: mint, interval: requested.interval, limit: requested.limit)
         do {
-            async let profileFetch = TokenAPI.profile(mint: mint)
-            async let candlesFetch = TokenAPI.candles(mint: mint, interval: range.interval, limit: range.limit)
             profile = try await profileFetch
-            candles = try await candlesFetch
         } catch {
             errorMessage = error.localizedDescription
+        }
+        do {
+            let fetched = try await candlesFetch
+            if requested == range {
+                candles = fetched
+                candlesError = nil
+            }
+        } catch {
+            if requested == range && requested != .live {
+                candlesError = error.localizedDescription
+            }
         }
         isLoading = false
         syncFeed()
     }
 
-    /// Runs the live feed only while the LIVE range is showing and the app is in
-    /// the foreground; it resumes from the last seq it saw when either comes back.
+    /// Runs the live feed while this screen is up and the app is in the
+    /// foreground — on every range, since the header price and the newest candle
+    /// follow it too; it resumes from the last seq it saw when the app comes back.
     private func syncFeed() {
-        if range == .live && scenePhase != .background {
+        if scenePhase != .background {
             feed.start()
         } else {
             feed.stop()
@@ -396,8 +489,94 @@ struct TokenDetailView: View {
         isoFormatter.date(from: raw) ?? isoFormatterFractional.date(from: raw)
     }
 
+    /// Refetches the range's candles in place while it's on screen — often enough
+    /// that a candle closing shows up without leaving the screen, rarely enough
+    /// that a month-long view doesn't hammer the API. Silent: a failed refetch
+    /// keeps the chart that's already drawn.
+    private func refreshCandlesPeriodically() async {
+        guard scenePhase == .active, let interval = range.refreshInterval else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: interval)
+            guard !Task.isCancelled else { return }
+            let requested = range
+            guard !isLoading,
+                  let fresh = try? await TokenAPI.candles(mint: mint, interval: requested.interval, limit: requested.limit),
+                  !Task.isCancelled, requested == range
+            else { continue }
+            candles = fresh
+            candlesError = nil
+        }
+    }
+
+    /// A range switch (or its retry). Keeps the previous chart up while loading; a
+    /// failure swaps it for an inline retry. A late answer for a range that's no
+    /// longer selected is dropped.
     private func loadCandles() async {
-        candles = try? await TokenAPI.candles(mint: mint, interval: range.interval, limit: range.limit)
+        let requested = range
+        isLoadingCandles = true
+        defer { isLoadingCandles = false }
+        do {
+            let fetched = try await TokenAPI.candles(mint: mint, interval: requested.interval, limit: requested.limit)
+            guard requested == range else { return }
+            candles = fetched
+            candlesError = nil
+        } catch {
+            guard requested == range else { return }
+            candlesError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+}
+
+/// The chart area's error state: small enough for the 220pt chart frame.
+private struct ChartRetryView: View {
+    let message: String
+    let isRetrying: Bool
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: Space.s8) {
+            Image(systemName: "chart.xyaxis.line")
+                .font(.title3)
+                .foregroundStyle(Color.textTertiary)
+            Text("Couldn't load this chart")
+                .font(.rowTitle)
+                .foregroundStyle(Color.textPrimary)
+            Text(message)
+                .font(.rowSubtitle)
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+            Button {
+                Haptics.tap()
+                retry()
+            } label: {
+                if isRetrying {
+                    ProgressView().tint(Color.inverseText)
+                } else {
+                    Text("Try again")
+                }
+            }
+            .buttonStyle(.compact)
+            .disabled(isRetrying)
+            .padding(.top, Space.s4)
+            .accessibilityIdentifier("tokenDetail.chartRetry")
+        }
+        .padding(.horizontal, Space.margin)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+extension ChartRange {
+    /// How often a non-LIVE range refetches its candles while on screen; nil for
+    /// LIVE, which streams. Roughly a quarter of a bucket for the short ranges.
+    var refreshInterval: Duration? {
+        switch self {
+        case .live: nil
+        case .hour: .seconds(15)
+        case .day: .seconds(30)
+        case .week: .seconds(60)
+        case .month, .all: .seconds(120)
+        }
     }
 }
 

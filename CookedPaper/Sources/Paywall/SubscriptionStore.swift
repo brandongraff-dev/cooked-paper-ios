@@ -9,12 +9,17 @@ enum ProductID {
     static let all = [weekly, monthly, annual]
 }
 
-/// The entire paywall: two auto-renewing subscriptions in one group, StoreKit 2 only
-/// (no server receipt validation for v1 — apps/api has no billing tables at all by
-/// design, per docs/decisions-legal.md, and paper trading itself is free/unlimited
-/// server-side; the subscription exists purely to gate this client). `Transaction
-/// .currentEntitlements` is checked at launch and on every `Transaction.updates`
-/// event, which is what StoreKit calls a "hard" paywall: there is no other door in.
+/// The entire paywall: auto-renewing subscriptions in one group, StoreKit 2 first.
+/// `Transaction.currentEntitlements` is checked at launch and on every
+/// `Transaction.updates` event, which is what StoreKit calls a "hard" paywall.
+///
+/// The server is told too: every verified transaction's signed JWS goes to `POST
+/// /billing/apple/transactions` (after a purchase or renewal, and for current
+/// entitlements on launch/sign-in via `syncWithServer`), and `GET
+/// /billing/apple/entitlement` is read back. The person is subscribed if StoreKit
+/// says so OR the server says active. A server that's unreachable, returns 404
+/// (not deployed yet) or says inactive never takes away what StoreKit grants — a
+/// network error must not lock out someone who paid.
 @Observable
 @MainActor
 final class SubscriptionStore {
@@ -24,6 +29,10 @@ final class SubscriptionStore {
     private(set) var isSubscribed = false
     private(set) var isLoadingProducts = true
     private(set) var purchaseError: String?
+    /// The server's last answer this session; nil until one arrives (and after
+    /// sign-out), which means "StoreKit decides alone".
+    private(set) var serverEntitlement: AppleEntitlement?
+    private var storeKitEntitled = false
 
     private var updatesTask: Task<Void, Never>?
 
@@ -63,7 +72,13 @@ final class SubscriptionStore {
     func purchase(_ product: Product) async {
         purchaseError = nil
         do {
-            let result = try await product.purchase()
+            // Ties the purchase to the account server-side (App Store Server
+            // Notifications carry it), when the account id is a UUID.
+            var options: Set<Product.PurchaseOption> = []
+            if let userId = SessionStore.shared.userId, let accountToken = UUID(uuidString: userId) {
+                options.insert(.appAccountToken(accountToken))
+            }
+            let result = try await product.purchase(options: options)
             switch result {
             case .success(let verification):
                 await handle(verification)
@@ -84,6 +99,7 @@ final class SubscriptionStore {
         do {
             try await AppStore.sync()
             await refreshEntitlement()
+            await syncWithServer()
             if !isSubscribed {
                 purchaseError = "No active subscription found for this Apple ID."
             }
@@ -97,8 +113,59 @@ final class SubscriptionStore {
             purchaseError = "Couldn't verify that purchase with the App Store."
             return
         }
+        let signedTransaction = verification.jwsRepresentation
         await transaction.finish()
         await refreshEntitlement()
+        if ProductID.all.contains(transaction.productID) {
+            await submitToServer([signedTransaction])
+        }
+    }
+
+    // MARK: - Server validation
+
+    /// On launch with a session and after every sign-in: sends each current
+    /// entitlement to the server, then reads its verdict.
+    func syncWithServer() async {
+        await submitToServer(await currentEntitlementJWS())
+    }
+
+    /// After sign-out: the next account's server entitlement is its own.
+    func clearServerEntitlement() {
+        serverEntitlement = nil
+        updateSubscribed()
+    }
+
+    private func submitToServer(_ signedTransactions: [String]) async {
+        guard SessionStore.shared.isSignedIn else { return }
+        var latest: AppleEntitlement?
+        for signedTransaction in signedTransactions {
+            if let entitlement = try? await BillingAPI.submitAppleTransaction(signedTransaction) {
+                latest = entitlement
+            }
+        }
+        if let entitlement = try? await BillingAPI.appleEntitlement() {
+            latest = entitlement
+        }
+        // No answer (offline, 404, 5xx): keep what we had and let StoreKit decide.
+        guard let latest else { return }
+        serverEntitlement = latest
+        updateSubscribed()
+    }
+
+    private func currentEntitlementJWS() async -> [String] {
+        var signed: [String] = []
+        for await entitlement in Transaction.currentEntitlements {
+            guard case .verified(let transaction) = entitlement,
+                  ProductID.all.contains(transaction.productID),
+                  transaction.revocationDate == nil
+            else { continue }
+            signed.append(entitlement.jwsRepresentation)
+        }
+        return signed
+    }
+
+    private func updateSubscribed() {
+        isSubscribed = storeKitEntitled || serverEntitlement?.active == true
     }
 
     private func refreshEntitlement() async {
@@ -114,7 +181,8 @@ final class SubscriptionStore {
         // one, narrow, DEBUG-only escape hatch: only the UI test process ever sets
         // this specific environment variable, so it cannot reach a Release build.
         if ProcessInfo.processInfo.environment["UITEST_BYPASS_PAYWALL"] == "1" {
-            isSubscribed = true
+            storeKitEntitled = true
+            updateSubscribed()
             return
         }
         #endif
@@ -126,6 +194,7 @@ final class SubscriptionStore {
                 subscribed = true
             }
         }
-        isSubscribed = subscribed
+        storeKitEntitled = subscribed
+        updateSubscribed()
     }
 }
