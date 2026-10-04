@@ -44,7 +44,8 @@ CookedPaper/
     Paywall/                StoreKit 2 subscription store + the paywall screen
     Features/               Onboarding, Discover, TokenDetail
                             (chart + trade), Trade, Leverage, Alerts, Portfolio,
-                            Leaderboard, Profile, Settings
+                            Leaderboard, Compete (seasons, achievements, duels),
+                            Profile, Settings
   Resources/                Info.plist, entitlements, Assets.xcassets
   Scripts/                  GenerateIcon.swift — renders the real app icon PNG
   StoreKit/Products.storekit  Local StoreKit Configuration for the two subscriptions
@@ -152,6 +153,32 @@ CookedPaper/
   server refuses token registration (`bad_request`) until an APNs key is configured
   on the deployment, which the app treats as a silent no-op. Guests' tokens are held
   and registered after sign-in.
+
+## Compete: seasons, achievements, duels
+
+The fourth tab is **Compete** (it replaced Leaderboard, which lives on inside it):
+a segmented Season · Duels · Leaderboard screen. Everything is paper money with no
+stakes, and the season and duel screens say "No stakes. Paper money only. Results
+are simulated."
+
+- **Seasons** (`GET /paper/seasons/current`, `/history`, `/:id/results`): this
+  month's tier, rank, return, a live countdown and how far to the next tier (or
+  what it takes to qualify), the tier ladder, the top 10, and past seasons.
+- **Achievements** (`GET /paper/achievements`, `POST /paper/achievements/seen`):
+  a grid in Profile and on the Season page. Unlocks are decided by the server and
+  celebrated with a toast — live from `paper:achievement` on the `/paper` socket,
+  and on every return to the foreground for anything still `seen: false`.
+- **Duels** (`/paper/duels…`): head-to-head with a fresh $1,000 paper portfolio
+  each, by username or an open invite link (`https://cooked.trade/d/<code>`,
+  `cookedpaper://duel/<code>`), for 1h, 24h or 7d. A duel's Trade button opens the
+  normal buy/sell/leverage tickets with `TradePortfolioContext.duel`, so duel
+  trades only ever touch that duel's portfolio. Detail refreshes every ~5 s and on
+  `paper:duel` socket events.
+- Deep links and pushes: `cookedpaper://duel-id/<id>` or a push with `duelId` opens
+  a duel; a push with `achievementId` opens the achievements grid.
+- **Status:** the backend routes are being built to the shared compete spec. Until
+  they're deployed, a 404 hides the feature behind a calm "coming soon" state; the
+  DEBUG mock (`MockCompete`) serves all of it for the UI tests and screenshots.
 
 ## Subscriptions
 
