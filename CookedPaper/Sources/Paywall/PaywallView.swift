@@ -11,6 +11,9 @@ struct PaywallView: View {
     let session = SessionStore.shared
     @State private var selectedProductID = ProductID.annual
     @State private var showsSignIn = false
+    /// The plan waiting on the "want a reminder?" pre-prompt.
+    @State private var pendingProduct: Product?
+    @State private var showsReminderPrompt = false
     @State private var isPurchasing = false
     /// Product ids whose introductory offer this Apple ID can still redeem — a trial
     /// is only ever advertised to someone who will actually get it.
@@ -32,6 +35,9 @@ struct PaywallView: View {
                     hero
                     features
                     plans
+                    if let selectedProduct, let offer = trialOffer(selectedProduct) {
+                        trialTimeline(selectedProduct, offer: offer)
+                    }
                 }
                 .padding(.horizontal, Space.s24)
                 .padding(.top, Space.s8)
@@ -78,6 +84,23 @@ struct PaywallView: View {
             }
             .background(Color.appBackground)
             .presentationDragIndicator(.visible)
+        }
+        // Soft pre-prompt before a trial purchase: the system prompt only follows
+        // a yes, and the reminder is the reason to say yes.
+        .alert("Want a reminder before your trial ends?", isPresented: $showsReminderPrompt) {
+            Button("Remind me") {
+                Task {
+                    await PushRegistrar.shared.requestPermissionIfNeeded()
+                    if let product = pendingProduct { await buy(product) }
+                }
+            }
+            Button("No thanks", role: .cancel) {
+                Task {
+                    if let product = pendingProduct { await buy(product) }
+                }
+            }
+        } message: {
+            Text("We'll send one notification two days before you're billed.")
         }
         .preferredColorScheme(.dark)
         .task {
@@ -277,10 +300,28 @@ struct PaywallView: View {
             return
         }
         Task {
-            isPurchasing = true
-            await store.purchase(product)
-            isPurchasing = false
-            if store.isSubscribed { Haptics.success() }
+            if trialOffer(product) != nil, await PushRegistrar.shared.canAskPermission() {
+                pendingProduct = product
+                showsReminderPrompt = true
+            } else {
+                await buy(product)
+            }
+        }
+    }
+
+    private func buy(_ product: Product) async {
+        let trial = trialOffer(product)
+        pendingProduct = nil
+        isPurchasing = true
+        await store.purchase(product)
+        isPurchasing = false
+        guard store.isSubscribed else { return }
+        Haptics.success()
+        if let trial {
+            await PushRegistrar.shared.scheduleTrialReminder(
+                trialDays: trialDays(trial),
+                renewalPrice: "\(product.displayPrice)/\(unitName(periodUnit(product)))"
+            )
         }
     }
 
@@ -303,6 +344,42 @@ struct PaywallView: View {
         return product.subscription?.introductoryOffer
     }
 
+    /// A trial's length in days (a 1-week trial is 7).
+    private func trialDays(_ offer: Product.SubscriptionOffer) -> Int {
+        let value = offer.period.value
+        switch offer.period.unit {
+        case .day: return value
+        case .week: return value * 7
+        case .month: return value * 30
+        case .year: return value * 365
+        @unknown default: return value
+        }
+    }
+
+    /// Today → reminder → first charge, so the trial's terms are plain up front.
+    private func trialTimeline(_ product: Product, offer: Product.SubscriptionOffer) -> some View {
+        let days = trialDays(offer)
+        return VStack(alignment: .leading, spacing: Space.s16) {
+            Text("How your free trial works")
+                .font(.rowTitle)
+                .foregroundStyle(Color.textPrimary)
+            VStack(alignment: .leading, spacing: 0) {
+                TrialStep(symbol: "lock.open.fill", title: "Today", detail: "Full access to everything.", showsLine: true)
+                TrialStep(symbol: "bell.fill", title: "Day \(max(1, days - 2))", detail: "We remind you that your trial is ending.", showsLine: true)
+                TrialStep(
+                    symbol: "checkmark.seal.fill",
+                    title: "Day \(days)",
+                    detail: "Billed \(product.displayPrice)/\(shortUnit(product)). Cancel anytime before and pay nothing.",
+                    showsLine: false
+                )
+            }
+        }
+        .padding(Space.s20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .accessibilityIdentifier("paywall.trialTimeline")
+    }
+
     /// "3 days" / "1 week" — a trial's length, spelled out.
     private func trialLength(_ offer: Product.SubscriptionOffer) -> String {
         let value = offer.period.value
@@ -314,7 +391,7 @@ struct PaywallView: View {
         if orderedPlans.isEmpty { return "Try again" }
         guard let selectedProduct else { return "Continue" }
         if let offer = trialOffer(selectedProduct) {
-            return "Start my \(offer.period.value)-\(unitName(offer.period.unit)) free trial"
+            return "Start \(trialDays(offer))-day free trial"
         }
         return "Subscribe · \(selectedProduct.displayPrice)/\(unitName(periodUnit(selectedProduct)))"
     }
@@ -398,6 +475,44 @@ struct PaywallView: View {
             return "Free for \(trialLength(offer)), then \(selectedProduct.displayPrice) every \(unit) until you cancel. Cancel before the trial ends and you won't be charged."
         }
         return "\(selectedProduct.displayPrice) today, then every \(unit) until you cancel. Cancel anytime in Settings."
+    }
+}
+
+/// One stop on the trial timeline: an icon on a connecting rail, then what happens.
+private struct TrialStep: View {
+    let symbol: String
+    let title: String
+    let detail: String
+    let showsLine: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Space.s12) {
+            VStack(spacing: 0) {
+                Image(systemName: symbol)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.accentInk)
+                    .frame(width: 28, height: 28)
+                    .background(Color.accent, in: Circle())
+                if showsLine {
+                    Rectangle()
+                        .fill(Color.accent.opacity(0.35))
+                        .frame(width: 2)
+                        .frame(minHeight: Space.s16)
+                }
+            }
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.textPrimary)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.bottom, showsLine ? Space.s12 : 0)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

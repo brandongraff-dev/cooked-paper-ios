@@ -84,6 +84,36 @@ final class PushRegistrar {
         return settings.authorizationStatus == .denied
     }
 
+    /// True only while iOS would still show its prompt — the moment for a soft
+    /// "want a reminder?" ask first.
+    func canAskPermission() async -> Bool {
+        guard !Self.isDisabled else { return false }
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        return settings.authorizationStatus == .notDetermined
+    }
+
+    // MARK: - Local reminders
+
+    static let trialReminderID = "trial.reminder"
+
+    /// One local notification two days before a free trial converts (day 5 of a
+    /// 7-day trial), when notifications are allowed. Replaces any earlier one.
+    func scheduleTrialReminder(trialDays: Int, renewalPrice: String) async {
+        guard !Self.isDisabled, trialDays > 0 else { return }
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        guard Self.isAllowed(settings.authorizationStatus) else { return }
+        let daysBefore = min(2, max(0, trialDays - 1))
+        let fireAfter = TimeInterval(trialDays - daysBefore) * 86_400
+        let content = UNMutableNotificationContent()
+        content.title = daysBefore == 1 ? "Your free trial ends tomorrow" : "Your free trial ends in \(daysBefore) days"
+        content.body = "After that it's \(renewalPrice). Cancel anytime in Settings → Apple ID → Subscriptions."
+        content.sound = .default
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(60, fireAfter), repeats: false)
+        let request = UNNotificationRequest(identifier: Self.trialReminderID, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [Self.trialReminderID])
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+
     private static func isAllowed(_ status: UNAuthorizationStatus) -> Bool {
         switch status {
         case .authorized, .provisional, .ephemeral: true
