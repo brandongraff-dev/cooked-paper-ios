@@ -143,6 +143,13 @@ nonisolated enum MockAPI {
         if match("POST", "social/alerts") != nil { return MockAlerts.create(body) }
         if let c = match("PATCH", "social/alerts/:") { return MockAlerts.update(id: c[0], body: body) }
         if let c = match("DELETE", "social/alerts/:") { return MockAlerts.delete(id: c[0]) }
+        // Share cards: public metadata pointing at a web page that unfurls the PNG.
+        if let c = match("GET", "cards/meta/paper/position/:/:/:") {
+            return (200, cardMeta(path: "paper/position/\(c[0])/\(c[1])/\(c[2])", headline: token(for: c[1]).symbol, returnPct: 22.48))
+        }
+        if let c = match("GET", "cards/meta/paper/portfolio/:/:") {
+            return (200, cardMeta(path: "paper/portfolio/\(c[0])/\(c[1])", headline: "Paper Portfolio", returnPct: 12.49))
+        }
         // Push devices: accepted and forgotten (screenshot runs never register one).
         if match("POST", "social/apns-tokens") != nil { return (201, ["ok": true]) }
         if match("POST", "social/apns-tokens/revoke") != nil { return (200, ["ok": true]) }
@@ -481,6 +488,21 @@ nonisolated enum MockAPI {
              "channel": "push", "isActive": true, "cooldownSeconds": 300, "lastFiredAt": iso(daysFromNow: -1), "createdAt": iso(daysFromNow: -6)],
             ["id": "a-3", "name": "Whale watch", "rule": ["kind": "wallet_trades"],
              "channel": "in_app", "isActive": false, "cooldownSeconds": 600, "lastFiredAt": NSNull(), "createdAt": iso(daysFromNow: -9)],
+        ]
+    }
+
+    private static func cardMeta(path: String, headline: String, returnPct: Double) -> [String: Any] {
+        [
+            "payload": ["returnPct": returnPct, "sampleSize": 3, "window": "all", "verifiedFrom": iso(daysFromNow: -12)] as [String: Any],
+            "model": [
+                "provenance": "paper", "username": MockProfile.current().0, "headline": headline,
+                "headlineKind": path.hasPrefix("paper/position") ? "token" : "portfolio",
+                "returnPct": returnPct, "sampleSize": 3, "sampleUnit": "round trips",
+                "windowLabel": "All time", "coverageLabel": "Since \(iso(daysFromNow: -12))", "secondary": [] as [Any],
+            ] as [String: Any],
+            "imageUrl": "https://api.cooked.trade/cards/png/\(path)",
+            "pageUrl": "https://cooked.trade/s/\(path)",
+            "width": 1200, "height": 630,
         ]
     }
 

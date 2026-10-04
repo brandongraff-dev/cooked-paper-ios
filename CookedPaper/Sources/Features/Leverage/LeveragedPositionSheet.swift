@@ -39,6 +39,13 @@ struct LeveragedPositionSheet: View {
                     Button("Close") { dismiss() }
                         .foregroundStyle(Color.textPrimary)
                 }
+                // Leverage has no card subject of its own; the portfolio's card
+                // carries its return (percentages only).
+                ToolbarItem(placement: .primaryAction) {
+                    if result == nil, let portfolioId = SessionStore.shared.activePortfolioId {
+                        ShareCardButton(subjectPath: ShareCardSubject.portfolio(portfolioId: portfolioId), compact: true)
+                    }
+                }
             }
         }
         .presentationDetents([.large])
@@ -182,6 +189,10 @@ private struct LeverageClosedView: View {
                 StatItem(label: "Cash balance", value: PriceFormat.usd(result.cashUsd)),
             ])
             Spacer()
+            if let portfolioId = SessionStore.shared.activePortfolioId {
+                ShareCardButton(subjectPath: ShareCardSubject.portfolio(portfolioId: portfolioId))
+                    .buttonStyle(.secondary)
+            }
             Button("Done", action: onDone)
                 .buttonStyle(.primary)
         }

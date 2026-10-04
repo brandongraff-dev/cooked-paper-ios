@@ -39,7 +39,14 @@ struct TradeSheetView: View {
         NavigationStack {
             Group {
                 if let fillResult {
-                    FillConfirmationView(result: fillResult, symbol: tokenSymbol) { dismiss() }
+                    FillConfirmationView(
+                        result: fillResult,
+                        symbol: tokenSymbol,
+                        // A sell has a result worth sharing: this token's card.
+                        shareSubjectPath: fillResult.trade.side == .sell
+                            ? SessionStore.shared.activePortfolioId.map { ShareCardSubject.position(portfolioId: $0, mint: mint) }
+                            : nil
+                    ) { dismiss() }
                 } else {
                     form
                 }
@@ -282,6 +289,7 @@ struct TradeSheetView: View {
 private struct FillConfirmationView: View {
     let result: ExecutePaperTradeResponse
     let symbol: String
+    var shareSubjectPath: String? = nil
     let onDone: () -> Void
 
     var body: some View {
@@ -300,6 +308,10 @@ private struct FillConfirmationView: View {
                 StatItem(label: "Cash balance", value: PriceFormat.usd(result.cashUsd)),
             ])
             Spacer()
+            if let shareSubjectPath {
+                ShareCardButton(subjectPath: shareSubjectPath)
+                    .buttonStyle(.secondary)
+            }
             Button("Done", action: onDone)
                 .buttonStyle(.primary)
         }
