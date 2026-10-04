@@ -46,7 +46,7 @@ final class LiveSocket {
         // Demo data has no live feed behind it; the REST snapshot is the whole picture.
         if MockAPI.isEnabled { return }
         #endif
-        guard let token = SessionStore.shared.token else { return }
+        guard let token = SessionStore.shared.bearerToken else { return }
 
         if subscribedPortfolioId == portfolioId, isConnected {
             return
@@ -79,7 +79,7 @@ final class LiveSocket {
         socket.on(clientEvent: .reconnectAttempt) { [weak self, weak manager] _, _ in
             guard let self, let manager else { return }
             SocketAuth.refreshHeaders(on: manager)
-            self.handshakeToken = SessionStore.shared.token
+            self.handshakeToken = SessionStore.shared.bearerToken
         }
         // The handshake's token was refused (expired, or rotated out from under a
         // long-lived socket): refresh through the same path a REST 401 takes, then
@@ -133,7 +133,7 @@ final class LiveSocket {
         Task { [weak self] in
             // Someone (a REST 401) may already have refreshed since this handshake;
             // then the new token just needs a new handshake.
-            var refreshed = SessionStore.shared.token != rejectedToken
+            var refreshed = SessionStore.shared.bearerToken != rejectedToken
             if !refreshed {
                 refreshed = await APIClient.shared.refreshSession()
             }

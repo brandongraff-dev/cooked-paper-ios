@@ -1,13 +1,30 @@
 import Foundation
 
-/// Every call here is `auth: 'paper'` server-side and runs as the signed-in account.
+/// Every call here is `auth: 'paper'` server-side and runs as the signed-in account,
+/// or as the guest paper session before sign-in (`SessionStore.bearerToken`).
 enum PaperAPI {
-    /// Idempotent bootstrap: the account's oldest active portfolio, or a fresh
-    /// starter one ($10,000) the first time.
+    /// Idempotent bootstrap: the caller's oldest active portfolio, or a fresh
+    /// starter one ($10,000) the first time. Called with no token at all, it mints
+    /// a guest session (`guestToken`) — when the server has guests enabled; with
+    /// them off it answers 401.
     static func starter() async throws -> StarterPaperPortfolioResponse {
         try await APIClient.shared.send(
             Endpoint(path: "/paper/portfolios/starter", method: "POST"),
             as: StarterPaperPortfolioResponse.self
+        )
+    }
+
+    /// Moves the guest session's portfolios into the signed-in account. A 401 here
+    /// can mean the *guest* token expired, so it must not sign the account out.
+    static func claimGuest(guestToken: String) async throws -> ClaimGuestPaperPortfoliosResponse {
+        try await APIClient.shared.send(
+            Endpoint(
+                path: "/paper/portfolios/claim",
+                method: "POST",
+                body: APIClient.shared.encode(ClaimGuestPaperPortfoliosBody(guestToken: guestToken)),
+                signsOutOnUnauthorized: false
+            ),
+            as: ClaimGuestPaperPortfoliosResponse.self
         )
     }
 

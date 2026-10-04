@@ -29,6 +29,11 @@ struct CookedPaperApp: App {
 /// launch (StoreKit's `Transaction.currentEntitlements`), so there are three states,
 /// not two: still resolving, subscribed, not subscribed — collapsing the first into
 /// either of the other two would flash the paywall at every paying user on launch.
+///
+/// Order: onboarding (as a guest) → paywall → sign-in ("Save your portfolio",
+/// which claims the guest portfolio) → the app. The paywall also offers sign-in for
+/// people who already have an account, and a fresh account picks its username
+/// before anything else.
 struct RootView: View {
     let store = SubscriptionStore.shared
     let session = SessionStore.shared
@@ -41,19 +46,24 @@ struct RootView: View {
                 LaunchScreen()
             } else if !hasSeenOnboarding && !store.isSubscribed {
                 OnboardingView(onFinished: { hasSeenOnboarding = true })
-            } else if !session.isSignedIn {
-                // Everyone trades as a signed-in account; there are no guests.
-                SignInView {
-                    Task { await PortfolioStore.shared.resetAndRebootstrap() }
-                }
-            } else if session.needsProfileSetup {
+            } else if session.isSignedIn && session.needsProfileSetup {
                 // A sign-in outside onboarding just created the account (onboarding
                 // shows this as its own step instead).
                 ProfileSetupView {}
-            } else if store.isSubscribed {
-                AppShellView()
-            } else {
+            } else if !store.isSubscribed {
                 PaywallView()
+            } else if !session.isSignedIn {
+                // Subscribed; the app itself runs as an account.
+                SignInView(
+                    title: session.isGuest ? "Save your portfolio" : "Sign in to Cooked",
+                    subtitle: session.isGuest
+                        ? "Sign in so your positions are saved to your account, on any device."
+                        : "Trade live prices with paper money. Your portfolio is saved to your account."
+                ) {
+                    Task { await PortfolioStore.shared.resetAndRebootstrap() }
+                }
+            } else {
+                AppShellView()
             }
         }
         .animation(Motion.standard, value: store.isSubscribed)

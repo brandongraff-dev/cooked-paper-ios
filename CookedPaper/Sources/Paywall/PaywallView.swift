@@ -8,7 +8,9 @@ import SwiftUI
 /// here). Every price, period and trial term shown is read from StoreKit.
 struct PaywallView: View {
     let store = SubscriptionStore.shared
+    let session = SessionStore.shared
     @State private var selectedProductID = ProductID.annual
+    @State private var showsSignIn = false
     @State private var isPurchasing = false
     /// Product ids whose introductory offer this Apple ID can still redeem — a trial
     /// is only ever advertised to someone who will actually get it.
@@ -54,8 +56,39 @@ struct PaywallView: View {
                 .padding(.horizontal, Space.s24)
                 .padding(.top, Space.s8)
         }
+        .overlay(alignment: .topLeading) {
+            // An existing account (and any subscription the server knows about)
+            // without buying again; a guest's portfolio is claimed into it.
+            if !session.isSignedIn {
+                Button("Sign in") { showsSignIn = true }
+                    .font(.body)
+                    .foregroundStyle(Color.textSecondary)
+                    .padding(.horizontal, Space.s24)
+                    .padding(.top, Space.s8)
+                    .accessibilityIdentifier("paywall.signIn")
+            }
+        }
+        .sheet(isPresented: $showsSignIn) {
+            SignInView(
+                title: "Sign in",
+                subtitle: "Your portfolio and subscription follow your account."
+            ) {
+                showsSignIn = false
+                Task { await PortfolioStore.shared.resetAndRebootstrap() }
+            }
+            .background(Color.appBackground)
+            .presentationDragIndicator(.visible)
+        }
         .preferredColorScheme(.dark)
-        .task { await PortfolioStore.shared.bootstrapIfNeeded() }
+        .task {
+            // The positions this paywall is about: the account's, or the guest's
+            // from onboarding (also after a relaunch on this screen).
+            if session.isSignedIn {
+                await PortfolioStore.shared.bootstrapIfNeeded()
+            } else if session.isGuest, PortfolioStore.shared.snapshot == nil {
+                _ = await PortfolioStore.shared.bootstrapGuestIfPossible()
+            }
+        }
         .task(id: store.products.map(\.id)) {
             await refreshTrialEligibility()
             if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.annual }) ?? orderedPlans.first {

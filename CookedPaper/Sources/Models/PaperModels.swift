@@ -51,8 +51,21 @@ struct PaperPortfolio: Decodable, Identifiable, Hashable {
 struct StarterPaperPortfolioResponse: Decodable {
     let portfolio: PaperPortfolio
     let created: Bool
+    /// Present only when this call minted a guest session (no `Authorization`).
     let guestToken: String?
     let guestTokenExpiresAt: String?
+}
+
+/// `POST /paper/portfolios/claim`.
+struct ClaimGuestPaperPortfoliosBody: Encodable {
+    let guestToken: String
+}
+
+/// `skipped` are the guest's portfolios left behind because the account was at its
+/// active-portfolio limit.
+struct ClaimGuestPaperPortfoliosResponse: Decodable {
+    let claimed: [PaperPortfolio]
+    let skipped: [PaperPortfolio]
 }
 
 // MARK: - Positions & round trips

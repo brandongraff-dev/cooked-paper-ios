@@ -35,6 +35,9 @@ struct Endpoint {
     var body: Data? = nil
     /// Off only for the sign-in calls themselves, made before a session exists.
     var attachToken: Bool = true
+    /// Off for calls whose 401 can be about something other than the account's
+    /// session (claiming a guest token that has expired), so they never sign out.
+    var signsOutOnUnauthorized: Bool = true
 }
 
 /// A success body this app deliberately never reads past "it was 2xx".
@@ -89,7 +92,7 @@ final class APIClient {
                 return try await send(endpoint, as: type, retryingOnAuthFailure: false)
             }
         }
-        if http.statusCode == 401, endpoint.attachToken, SessionStore.shared.isSignedIn {
+        if http.statusCode == 401, endpoint.attachToken, endpoint.signsOutOnUnauthorized, SessionStore.shared.isSignedIn {
             // The refresh token is gone or revoked: the session is over. Sending the
             // person back to sign-in beats a screen of silent failures.
             SessionStore.shared.clear()
@@ -161,7 +164,8 @@ final class APIClient {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
         request.httpBody = endpoint.body
-        if endpoint.attachToken, let token = SessionStore.shared.token {
+        // The account's token, or the guest paper session's before sign-in.
+        if endpoint.attachToken, let token = SessionStore.shared.bearerToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 

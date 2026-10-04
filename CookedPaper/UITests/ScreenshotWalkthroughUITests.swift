@@ -79,47 +79,21 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             unreachedSteps.append("practice round never appeared")
         }
 
-        // Sign-in: everyone signs in before trading. Under the mock the Google
-        // button signs straight in (Google's own sheet can't be driven from a test).
-        if app.buttons["signin.google"].waitForExistence(timeout: 5) {
-            Thread.sleep(forTimeInterval: 0.8)
-            attach(app, name: "02-onboarding-signin")
-            app.buttons["signin.google"].tap()
-        } else {
-            unreachedSteps.append("sign-in step never appeared")
-        }
-
-        // A brand-new account picks a username (the mock's first sign-in of the run
-        // says `isNewAccount`). Swap the generated handle for a chosen one so the
-        // live availability check shows, then save it.
-        let profileContinue = app.buttons["profileSetup.continue"]
-        if profileContinue.waitForExistence(timeout: 10) {
-            Thread.sleep(forTimeInterval: 0.8)
-            attach(app, name: "02-onboarding-profile")
-            let usernameField = app.textFields["profile.username"]
-            if usernameField.waitForExistence(timeout: 3) {
-                // Tap the right edge so the cursor lands after the generated handle.
-                usernameField.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
-                usernameField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 24))
-                usernameField.typeText("wifmaxi")
-                Thread.sleep(forTimeInterval: 1.2) // debounce + availability check
-                attach(app, name: "02-onboarding-profile-picked")
-            }
-            profileContinue.tap()
-            // If saving didn't move on (it shouldn't fail under the mock), skip
-            // rather than stall the rest of the walkthrough.
-            let skip = app.buttons["profileSetup.skip"]
-            if !app.buttons["onboarding.answer.little"].waitForExistence(timeout: 5), skip.exists {
-                skip.tap()
-            }
-        } else {
-            unreachedSteps.append("profile setup never appeared after a new-account sign-in")
-        }
-
+        // Onboarding runs as a guest now: straight from the practice round to the
+        // questions, with sign-in after the paywall.
         if app.buttons["onboarding.answer.little"].waitForExistence(timeout: 10) {
             Thread.sleep(forTimeInterval: 0.6)
             attach(app, name: "02-onboarding-experience")
             _ = tapIfPresent("onboarding.answer.little")
+        } else {
+            unreachedSteps.append("experience question never appeared")
+        }
+
+        if app.buttons["onboarding.goal.learn"].waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.4)
+            _ = tapIfPresent("onboarding.goal.learn")
+        } else {
+            unreachedSteps.append("goal question never appeared")
         }
 
         if app.buttons["onboarding.coin.0"].waitForExistence(timeout: 10) {
@@ -154,6 +128,47 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             attach(app, name: "06-paywall")
         } else {
             unreachedSteps.append("paywall.subscribeButton never appeared")
+        }
+
+        // "Save your portfolio": signing in from the paywall claims the guest
+        // portfolio. Under the mock the Google button signs straight in (Google's own
+        // sheet can't be driven from a test), and the first sign-in of the run is a
+        // new account, so username setup follows.
+        if app.buttons["paywall.signIn"].waitForExistence(timeout: 5) {
+            app.buttons["paywall.signIn"].tap()
+        } else {
+            unreachedSteps.append("paywall.signIn never appeared")
+        }
+        if app.buttons["signin.google"].waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.8)
+            attach(app, name: "02-onboarding-signin")
+            app.buttons["signin.google"].tap()
+        } else {
+            unreachedSteps.append("sign-in sheet never appeared")
+        }
+
+        let profileContinue = app.buttons["profileSetup.continue"]
+        if profileContinue.waitForExistence(timeout: 10) {
+            Thread.sleep(forTimeInterval: 0.8)
+            attach(app, name: "02-onboarding-profile")
+            let usernameField = app.textFields["profile.username"]
+            if usernameField.waitForExistence(timeout: 3) {
+                // Tap the right edge so the cursor lands after the generated handle.
+                usernameField.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+                usernameField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 24))
+                usernameField.typeText("wifmaxi")
+                Thread.sleep(forTimeInterval: 1.2) // debounce + availability check
+                attach(app, name: "02-onboarding-profile-picked")
+            }
+            profileContinue.tap()
+            // Back on the paywall, now signed in. If saving didn't move on (it
+            // shouldn't under the mock), skip rather than stall.
+            let skip = app.buttons["profileSetup.skip"]
+            if !subscribeButton.waitForExistence(timeout: 5), skip.exists {
+                skip.tap()
+            }
+        } else {
+            unreachedSteps.append("profile setup never appeared after a new-account sign-in")
         }
 
         if !unreachedSteps.isEmpty {

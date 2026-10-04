@@ -2,10 +2,15 @@ import Foundation
 import SwiftUI
 
 /// First run, before the paywall: a new user sees their $10,000 paper balance,
-/// plays a practice round, signs in (and, for a brand-new account, picks a
-/// username), answers one question, picks up to three coins,
+/// plays a practice round, answers two questions, picks up to three coins,
 /// and buys them for real (paper trades filled at the live price on the server). Then they watch those positions
 /// move. The paywall that follows is about keeping that portfolio.
+///
+/// All of that runs as a **guest** (`PortfolioStore.bootstrapGuestIfPossible`):
+/// signing in ("Save your portfolio") comes after the paywall, and claims the guest
+/// portfolio into the account. If the server has guests switched off, the flow falls
+/// back to signing in (and picking a username) right after the practice round, as
+/// before. Someone who already has an account can sign in from the first screen.
 ///
 /// `RootView` owns the `hasSeenOnboarding` flag; this view only reports completion.
 struct OnboardingView: View {
@@ -14,6 +19,11 @@ struct OnboardingView: View {
     @State private var model = OnboardingModel()
     @State private var step: OnboardingStep = .balance
     @State private var isMovingForward = true
+    /// The guest session started while the practice round plays, so it's ready by
+    /// the time the coin list needs a portfolio.
+    @State private var guestStart: Task<Bool, Never>?
+    @State private var isStartingGuest = false
+    @State private var showsSignIn = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,10 +34,10 @@ struct OnboardingView: View {
             ZStack {
                 switch step {
                 case .balance:
-                    BalanceStep { go(to: .practice) }
+                    BalanceStep(onSignIn: { showsSignIn = true }) { go(to: .practice) }
                 case .practice:
                     PracticeRoundStep {
-                        go(to: SessionStore.shared.isSignedIn ? stepAfterSignIn : .signIn)
+                        Task { await leavePractice() }
                     }
                 case .signIn:
                     SignInView(
@@ -42,6 +52,12 @@ struct OnboardingView: View {
                 case .experience:
                     ExperienceStep { answer in
                         model.experience = answer
+                        go(to: .goal)
+                    }
+                case .goal:
+                    GoalStep { goal in
+                        model.goal = goal
+                        TradingGoal.saved = goal
                         go(to: .pick)
                     }
                 case .pick:
@@ -64,15 +80,85 @@ struct OnboardingView: View {
         }
         .background(Color.appBackground)
         .preferredColorScheme(.dark)
+        .overlay {
+            if isStartingGuest {
+                ProgressView()
+                    .tint(Color.textSecondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.appBackground.opacity(0.4))
+            }
+        }
         .task {
-            // The account's paper portfolio this flow trades in — the same one the
-            // app keeps after the paywall. Signed-out people get it after the
-            // sign-in step instead.
+            // The paper portfolio this flow trades in — the same one the app keeps
+            // after the paywall: the account's when signed in, else a guest one
+            // (started once the practice round begins).
             if SessionStore.shared.isSignedIn {
                 await PortfolioStore.shared.bootstrapIfNeeded()
             }
             await model.loadTokens()
         }
+        .onChange(of: step) { _, newStep in
+            if newStep == .practice { startGuestIfNeeded() }
+        }
+        // "Already have an account?": a returning person skips the rest of
+        // onboarding; the paywall (or the app, if they're subscribed) follows.
+        .sheet(isPresented: $showsSignIn) {
+            SignInView(
+                title: "Welcome back",
+                subtitle: "Sign in to pick up your portfolio where you left it."
+            ) {
+                showsSignIn = false
+                // Nothing worth claiming has been traded yet; don't spend one of the
+                // account's portfolio slots on an empty guest one.
+                SessionStore.shared.clearGuest()
+                Task { await PortfolioStore.shared.resetAndRebootstrap() }
+                onFinished()
+            }
+            .background(Color.appBackground)
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    private func startGuestIfNeeded() {
+        guard guestStart == nil, !SessionStore.shared.isSignedIn else { return }
+        guestStart = Task { await PortfolioStore.shared.bootstrapGuestIfPossible() }
+    }
+
+    /// After the practice round: on as a guest when the server allows it, else sign
+    /// in first (the pre-guest flow).
+    private func leavePractice() async {
+        if SessionStore.shared.isSignedIn {
+            go(to: stepAfterSignIn)
+            return
+        }
+        startGuestIfNeeded()
+        isStartingGuest = true
+        var ready = await guestStart?.value ?? false
+        if !ready {
+            // A network blip shouldn't force sign-in; one more try unless the
+            // server said no outright.
+            guestStart = nil
+            if PortfolioStore.shared.guestsRefused != true {
+                startGuestIfNeeded()
+                ready = await guestStart?.value ?? false
+            }
+        }
+        isStartingGuest = false
+        go(to: ready ? .experience : .signIn)
+    }
+
+    /// The steps this run actually walks through: a guest never sees sign-in or
+    /// username setup inside onboarding.
+    private var flowSteps: [OnboardingStep] {
+        let skipsSignIn = (!SessionStore.shared.isSignedIn && PortfolioStore.shared.guestsRefused != true)
+            || SessionStore.shared.isGuest
+        return skipsSignIn
+            ? OnboardingStep.allCases.filter { $0 != .signIn && $0 != .profile }
+            : OnboardingStep.allCases
+    }
+
+    private var stepIndex: Int {
+        flowSteps.firstIndex(of: step) ?? step.rawValue
     }
 
     /// A sign-in that just created the account picks a username first.
@@ -81,13 +167,15 @@ struct OnboardingView: View {
     }
 
     private var canGoBack: Bool {
-        step == .experience || step == .pick
+        step == .goal || step == .pick
     }
 
     private var header: some View {
         HStack(spacing: Space.s12) {
             Button {
-                guard let previous = OnboardingStep(rawValue: step.rawValue - 1) else { return }
+                let steps = flowSteps
+                guard let index = steps.firstIndex(of: step), index > 0 else { return }
+                let previous = steps[index - 1]
                 Haptics.selection()
                 isMovingForward = false
                 withAnimation(Motion.standard) { step = previous }
@@ -103,15 +191,15 @@ struct OnboardingView: View {
             .accessibilityLabel("Back")
 
             HStack(spacing: Space.s8) {
-                ForEach(OnboardingStep.allCases, id: \.self) { candidate in
+                ForEach(Array(flowSteps.enumerated()), id: \.element) { index, _ in
                     Capsule()
-                        .fill(candidate.rawValue <= step.rawValue ? Color.accent : Color.appFill)
+                        .fill(index <= stepIndex ? Color.accent : Color.appFill)
                         .frame(height: 4)
                 }
             }
             .animation(Motion.standard, value: step)
             .accessibilityElement()
-            .accessibilityLabel("Step \(step.rawValue + 1) of \(OnboardingStep.allCases.count)")
+            .accessibilityLabel("Step \(stepIndex + 1) of \(flowSteps.count)")
 
             // Balances the back button so the bar stays centered.
             Color.clear.frame(width: 32, height: 32)
@@ -126,7 +214,7 @@ struct OnboardingView: View {
 }
 
 enum OnboardingStep: Int, CaseIterable {
-    case balance, practice, signIn, profile, experience, pick, portfolio
+    case balance, practice, signIn, profile, experience, goal, pick, portfolio
 }
 
 // MARK: - Model
@@ -151,6 +239,52 @@ enum TradingExperience: String, CaseIterable {
     }
 }
 
+/// The second onboarding question. Shapes the paywall's headline.
+enum TradingGoal: String, CaseIterable {
+    case learn, test, compete
+
+    var title: String {
+        switch self {
+        case .learn: "Learn before using real money"
+        case .test: "Test strategies"
+        case .compete: "Compete with friends"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .learn: "Make the beginner mistakes here, for free."
+        case .test: "See what actually works before it costs you."
+        case .compete: "Climb the monthly leaderboard."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .learn: "graduationcap"
+        case .test: "flask"
+        case .compete: "trophy"
+        }
+    }
+
+    /// The paywall's headline for someone with this goal.
+    var paywallHeadline: String {
+        switch self {
+        case .learn: "Learn the market\nwithout the losses."
+        case .test: "Test every strategy\nrisk-free."
+        case .compete: "Beat your friends\non the leaderboard."
+        }
+    }
+
+    private static let defaultsKey = "onboarding.goal"
+
+    /// The answer from onboarding, kept for the paywall.
+    static var saved: TradingGoal? {
+        get { UserDefaults.standard.string(forKey: defaultsKey).flatMap(TradingGoal.init(rawValue:)) }
+        set { UserDefaults.standard.set(newValue?.rawValue, forKey: defaultsKey) }
+    }
+}
+
 enum FillState {
     case waiting
     case filling
@@ -166,6 +300,8 @@ final class OnboardingModel {
     static let amountPerCoin: Decimal = 1_000
 
     var experience: TradingExperience = .never
+    /// Why they're here (`TradingGoal.saved` keeps it for the paywall's headline).
+    var goal: TradingGoal?
     private(set) var tokens: [PaperDiscoverEntry] = []
     private(set) var isLoadingTokens = true
     private(set) var tokensError: String?
@@ -238,7 +374,8 @@ final class OnboardingModel {
         for mint in picked { fills[mint] = .waiting }
 
         if SessionStore.shared.activePortfolioId == nil {
-            await PortfolioStore.shared.bootstrapIfNeeded()
+            // The account's portfolio, or a guest one before sign-in.
+            _ = await PortfolioStore.shared.bootstrapGuestIfPossible()
         }
 
         for mint in picked {
@@ -313,6 +450,7 @@ final class OnboardingModel {
 // MARK: - Step 1: balance
 
 private struct BalanceStep: View {
+    var onSignIn: () -> Void
     var onContinue: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -350,11 +488,24 @@ private struct BalanceStep: View {
         }
         .scrollIndicators(.hidden)
         .safeAreaInset(edge: .bottom) {
-            Button("Try a practice round", action: onContinue)
-                .buttonStyle(.accent)
-                .accessibilityIdentifier("onboarding.balance.continue")
-                .padding(.horizontal, Space.margin)
-                .padding(.bottom, Space.s8)
+            VStack(spacing: Space.s12) {
+                Button("Try a practice round", action: onContinue)
+                    .buttonStyle(.accent)
+                    .accessibilityIdentifier("onboarding.balance.continue")
+                Button {
+                    Haptics.tap()
+                    onSignIn()
+                } label: {
+                    (Text("Already have an account? ").foregroundStyle(Color.textSecondary)
+                        + Text("Sign in").foregroundStyle(Color.textPrimary).bold())
+                        .font(.rowSubtitle)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.pressable)
+                .accessibilityIdentifier("onboarding.signIn")
+            }
+            .padding(.horizontal, Space.margin)
+            .padding(.bottom, Space.s8)
         }
         .task {
             // Counts up through real intermediate values with an ease-out, ~1.2s.
@@ -372,6 +523,59 @@ private struct BalanceStep: View {
             }
             balance = 10_000
         }
+    }
+}
+
+// MARK: - Goal
+
+private struct GoalStep: View {
+    var onAnswer: (TradingGoal) -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Space.s32) {
+                StepHeadline(
+                    title: "What brings you\nhere?",
+                    detail: "Pick the one that fits best."
+                )
+                .padding(.top, Space.s32)
+
+                VStack(spacing: Space.s12) {
+                    ForEach(TradingGoal.allCases, id: \.self) { goal in
+                        Button {
+                            onAnswer(goal)
+                        } label: {
+                            HStack(spacing: Space.s16) {
+                                Image(systemName: goal.symbol)
+                                    .font(.title3)
+                                    .foregroundStyle(Color.accent)
+                                    .frame(width: 28)
+                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: Space.s4) {
+                                    Text(goal.title)
+                                        .font(.title3.weight(.semibold))
+                                        .foregroundStyle(Color.textPrimary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Text(goal.detail)
+                                        .font(.rowSubtitle)
+                                        .foregroundStyle(Color.textSecondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(Color.textTertiary)
+                            }
+                            .padding(Space.s20)
+                            .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                        }
+                        .buttonStyle(.pressable)
+                        .accessibilityIdentifier("onboarding.goal.\(goal.rawValue)")
+                    }
+                }
+            }
+            .padding(.horizontal, Space.margin)
+        }
+        .scrollIndicators(.hidden)
     }
 }
 

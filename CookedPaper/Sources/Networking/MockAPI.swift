@@ -42,7 +42,9 @@ nonisolated enum MockAPI {
 
     // MARK: - Routing
 
-    nonisolated static func response(method: String, path: String, query: [String: String], body: Data? = nil) -> (Int, Any) {
+    /// `authorization` is the request's `Authorization` header: a starter call
+    /// without one mints a guest session, as the real server does with guests on.
+    nonisolated static func response(method: String, path: String, query: [String: String], body: Data? = nil, authorization: String? = nil) -> (Int, Any) {
         let parts = path.split(separator: "/").map(String.init)
 
         /// Matches `parts` against a route template like `"tokens/:/profile"`, where
@@ -62,10 +64,19 @@ nonisolated enum MockAPI {
         // positions, and buys/sells that actually change the book.
         if FreshAccount.isEnabled {
             if match("POST", "paper/portfolios/starter") != nil {
+                // Onboarding runs as a guest: no token in, a guest token out.
+                let mintsGuest = authorization == nil
+                let guestToken: Any = mintsGuest ? "demo-guest-token" as Any : NSNull()
+                let guestExpiry: Any = mintsGuest ? iso(daysFromNow: 7) as Any : NSNull()
                 return (200, [
                     "portfolio": FreshAccount.portfolio(), "created": true,
-                    "guestToken": "demo-guest-token", "guestTokenExpiresAt": iso(daysFromNow: 7),
+                    "guestToken": guestToken, "guestTokenExpiresAt": guestExpiry,
                 ] as [String: Any])
+            }
+            // Signing in after onboarding claims the guest's book, so its positions
+            // carry over (the mock keeps one book for the whole run).
+            if match("POST", "paper/portfolios/claim") != nil {
+                return (200, ["claimed": [FreshAccount.portfolio()], "skipped": [] as [Any]] as [String: Any])
             }
             if match("GET", "paper/portfolios/:") != nil { return (200, FreshAccount.snapshot()) }
             if match("GET", "paper/portfolios/:/trades") != nil { return (200, ["trades": [] as [Any]] as [String: Any]) }
@@ -515,7 +526,8 @@ nonisolated final class MockURLProtocol: URLProtocol {
             method: request.httpMethod ?? "GET",
             path: url.path,
             query: query,
-            body: request.httpBody ?? request.httpBodyStream.map(Self.readAll)
+            body: request.httpBody ?? request.httpBodyStream.map(Self.readAll),
+            authorization: request.value(forHTTPHeaderField: "Authorization")
         )
         let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
         let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!

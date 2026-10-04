@@ -13,9 +13,10 @@ import SocketIO
 /// on every `.reconnectAttempt`) is enough for a reconnect ~15 minutes later to
 /// present the access token `APIClient` has refreshed since.
 enum SocketAuth {
-    /// The headers for a handshake made right now: the current access token, if any.
+    /// The headers for a handshake made right now: the current access token, or the
+    /// guest paper token before sign-in (`/paper` accepts both), if any.
     static func currentHeaders() -> [String: String] {
-        guard let token = SessionStore.shared.token else { return [:] }
+        guard let token = SessionStore.shared.bearerToken else { return [:] }
         return ["Authorization": "Bearer \(token)"]
     }
 
