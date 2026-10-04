@@ -1,4 +1,5 @@
 import Foundation
+import StoreKit
 import SwiftUI
 
 /// One open leveraged position: live P&L on margin, where it liquidates, and
@@ -7,6 +8,7 @@ struct LeveragedPositionSheet: View {
     let positionId: String
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.requestReview) private var requestReview
     private let portfolioStore = PortfolioStore.shared
 
     @State private var closePercent = 100
@@ -134,6 +136,11 @@ struct LeveragedPositionSheet: View {
             )
             Haptics.success()
             withAnimation(Motion.standard) { result = closed }
+            if ReviewPrompt.shouldRequest(afterProfit: closed.fill.realizedPnlUsd > 0) {
+                ReviewPrompt.markRequested()
+                try? await Task.sleep(for: .seconds(1.5))
+                requestReview()
+            }
         } catch let error as APIError where error.reason == "position_not_open" {
             // Liquidated (or closed elsewhere) in the meantime — say so plainly.
             Haptics.warning()
