@@ -30,6 +30,8 @@ struct TradeSheetView: View {
     @State private var isExecuting = false
     @State private var errorMessage: String?
     @State private var fillResult: ExecutePaperTradeResponse?
+    /// The position's average cost just before a sell, for the trade card's entry.
+    @State private var soldAverageCost: Decimal?
     @State private var quoteTask: Task<Void, Never>?
 
     private var cashUsd: Decimal { portfolio.snapshot?.cashUsd ?? 0 }
@@ -44,6 +46,8 @@ struct TradeSheetView: View {
                     FillConfirmationView(
                         result: fillResult,
                         symbol: tokenSymbol,
+                        // A sell with a known entry gets the on-device image card.
+                        shareCard: shareCard(for: fillResult),
                         // A sell has a result worth sharing: this token's card
                         // (main portfolio only; a duel's result is the duel itself).
                         shareSubjectPath: fillResult.trade.side == .sell && portfolio.isMain
@@ -251,6 +255,7 @@ struct TradeSheetView: View {
         let averageCost = position?.avgCostUsd
         do {
             let result = try await PaperAPI.execute(portfolioId: portfolioId, body: makeBody())
+            soldAverageCost = side == .sell ? averageCost : nil
             fillResult = result
             Haptics.success()
             await portfolio.refreshAfterTrade()
@@ -275,6 +280,19 @@ struct TradeSheetView: View {
         isExecuting = false
     }
 
+    /// The trade card for a sell: entry at the average cost before the sell, exit
+    /// at the fill. Nil for a buy, or when the entry wasn't known.
+    private func shareCard(for result: ExecutePaperTradeResponse) -> TradeShareCardModel? {
+        guard result.trade.side == .sell, let entry = soldAverageCost else { return nil }
+        return TradeShareCardModel(
+            mint: mint,
+            symbol: tokenSymbol,
+            entryPriceUsd: entry,
+            currentPriceUsd: result.fill.fillPriceUsd,
+            isClosed: true
+        )
+    }
+
     private func makeBody() -> ExecutePaperTradeBody {
         var body = ExecutePaperTradeBody(tokenMint: mint, side: side)
         if side == .buy {
@@ -292,6 +310,7 @@ struct TradeSheetView: View {
 private struct FillConfirmationView: View {
     let result: ExecutePaperTradeResponse
     let symbol: String
+    var shareCard: TradeShareCardModel? = nil
     var shareSubjectPath: String? = nil
     let onDone: () -> Void
 
@@ -311,7 +330,11 @@ private struct FillConfirmationView: View {
                 StatItem(label: "Cash balance", value: PriceFormat.usd(result.cashUsd)),
             ])
             Spacer()
-            if let shareSubjectPath {
+            if let shareCard {
+                TradeShareButton(model: shareCard)
+                    .buttonStyle(.secondary)
+            } else if let shareSubjectPath {
+                // No entry price to draw a card from: fall back to the server's link card.
                 ShareCardButton(subjectPath: shareSubjectPath)
                     .buttonStyle(.secondary)
             }
