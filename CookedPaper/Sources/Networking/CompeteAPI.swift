@@ -182,6 +182,33 @@ enum LeaguesAPI {
     }
 }
 
+/// The Daily Call: one featured token per UTC day, called higher or lower than
+/// its open. Bearer like the rest of Compete; a 404 means the server doesn't have
+/// it yet and the card hides itself.
+enum DailyCallAPI {
+    static func today() async throws -> DailyCallTodayResponse {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/daily-call"),
+            as: DailyCallTodayResponse.self
+        )
+    }
+
+    /// One call per day, final once made.
+    static func call(_ side: DailyCallSide) async throws -> DailyCallTodayResponse {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/daily-call", method: "POST", body: APIClient.shared.encode(DailyCallBody(side: side.rawValue))),
+            as: DailyCallTodayResponse.self
+        )
+    }
+
+    static func stats() async throws -> DailyCallStats {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/daily-call/stats"),
+            as: DailyCallStats.self
+        )
+    }
+}
+
 extension Error {
     /// The route answered 404 — for the compete endpoints, usually "this server
     /// doesn't have the feature yet".
@@ -233,6 +260,9 @@ enum CompeteErrorText {
         case "duel_exists": return "You already have an invite waiting with this player."
         case "user_not_found": return "No one goes by that username. Check the spelling."
         case "invite_invalid": return "This invite has expired or someone already took it."
+        case "daily_call_locked": return "Calls are locked for today. A new Daily Call opens at 00:00 UTC."
+        case "daily_call_exists": return "You've already made today's call. Calls are final."
+        case "daily_call_unavailable": return "Today's Daily Call isn't ready yet. Try again in a minute."
         default: return nil
         }
     }
