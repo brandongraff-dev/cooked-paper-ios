@@ -229,11 +229,14 @@ and schedules a local reminder two days before the trial converts.
   `Sources/DesignSystem/DesignSystem.swift`) instead of bundling the font files. Swap
   in the real TTFs under a new `Resources/Fonts` if exact brand parity matters more
   than the dependency.
-- **The Terms of Use this app links to are marked "Draft: not reviewed by counsel
-  and not in force"** as of this writing
-  (`apps/web/app/legal/terms/page.tsx`). Apple Guideline 3.1.2 requires a functional
-  link to real terms before a paid subscription can ship — confirm that document's
-  status has flipped before submitting for review.
+- **Legal documents.** The app links to `https://cooked.trade/legal/terms` and
+  `/legal/privacy` (`Sources/App/LegalLinks.swift`), which are in force (v1.0, paper-only,
+  operator ZEVRON LLC). The sign-in screen states that continuing with Apple or Google is
+  acceptance and confirms the user is 18+. Before submitting: the LLC must show as active
+  on Sunbiz, `support@cooked.trade` must be a live mailbox, App Store Connect's privacy
+  policy URL must be the one above, the App Store age rating must be 17+ (or higher) to
+  match the 18+ term, and `Resources/PrivacyInfo.xcprivacy` / the App Privacy answers
+  should list push token and purchase history, which the Privacy Policy discloses.
 - **App Store Server Notifications** go to `POST /billing/apple/notifications`;
   set that URL in App Store Connect so the server learns about renewals and refunds
   without the device.

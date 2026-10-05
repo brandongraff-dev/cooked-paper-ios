@@ -301,8 +301,8 @@ struct PaywallView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: Space.s32) {
-                Link("Terms", destination: LegalLinks.terms)
-                Link("Privacy", destination: LegalLinks.privacy)
+                Link("Terms of Service", destination: LegalLinks.terms)
+                Link("Privacy Policy", destination: LegalLinks.privacy)
             }
             .font(.footnote)
             .foregroundStyle(Color.textSecondary)

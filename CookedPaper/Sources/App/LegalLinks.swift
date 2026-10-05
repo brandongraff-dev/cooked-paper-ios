@@ -1,15 +1,14 @@
 import Foundation
 
-/// Apple Guideline 3.1.2 requires the paywall to carry a functional link to both
-/// documents. `/terms` and `/privacy` are the app-store-listing-stable redirects
-/// `apps/web` itself keeps for this exact purpose (see `apps/web/app/terms/page.tsx`).
+/// The two documents every account agrees to. Apple Guideline 3.1.2 also requires the
+/// paywall to carry a functional link to each.
 ///
-/// IMPORTANT — as of this writing `apps/web/app/legal/terms/page.tsx` sets its own
-/// page title to "Draft: not reviewed by counsel and not in force." Submitting this
-/// app for review while that is true is a real compliance gap, not a placeholder to
-/// silently ignore — confirm the document's `status` has flipped to in-force before
-/// shipping a build with real billing enabled.
+/// These point straight at the canonical pages on the website (`apps/web`,
+/// `/legal/terms` and `/legal/privacy`) rather than at the `/terms` and `/privacy`
+/// redirects, so there is no hop to fail and the address a reviewer sees is the one
+/// the document lives at. Use the same two URLs in App Store Connect (Privacy Policy
+/// URL, and the Terms of Use link in the app description if a custom EULA is used).
 enum LegalLinks {
-    static let terms = URL(string: "https://app.cooked.trade/terms")!
-    static let privacy = URL(string: "https://app.cooked.trade/privacy")!
+    static let terms = URL(string: "https://cooked.trade/legal/terms")!
+    static let privacy = URL(string: "https://cooked.trade/legal/privacy")!
 }

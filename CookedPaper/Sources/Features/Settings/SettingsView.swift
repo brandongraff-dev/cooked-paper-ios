@@ -51,7 +51,7 @@ struct SettingsView: View {
 
             Section {
                 Link(destination: LegalLinks.terms) {
-                    SettingsRow(symbol: "doc.text", title: "Terms of Use", trailingSymbol: "arrow.up.right")
+                    SettingsRow(symbol: "doc.text", title: "Terms of Service", trailingSymbol: "arrow.up.right")
                 }
                 Link(destination: LegalLinks.privacy) {
                     SettingsRow(symbol: "hand.raised", title: "Privacy Policy", trailingSymbol: "arrow.up.right")

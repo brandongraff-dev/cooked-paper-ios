@@ -88,20 +88,32 @@ struct SignInView: View {
         .task { await auth.loadAppleNonce() }
     }
 
+    /// Continuing with Apple or Google is the acceptance, so the line says exactly that,
+    /// sits directly under the buttons that do it, and is readable rather than fine print.
     private var legal: some View {
-        VStack(spacing: Space.s4) {
-            Text("By continuing you agree to the Terms and Privacy Policy.")
-                .font(.caption13)
-                .foregroundStyle(Color.textTertiary)
-            HStack(spacing: Space.s16) {
-                Link("Terms", destination: LegalLinks.terms)
-                Link("Privacy", destination: LegalLinks.privacy)
-            }
+        Text(Self.agreement)
             .font(.caption13)
             .foregroundStyle(Color.textSecondary)
+            .tint(Color.textPrimary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Space.s24)
+            .accessibilityIdentifier("signin.agreement")
+    }
+
+    private static var agreement: AttributedString {
+        func link(_ title: String, _ url: URL) -> AttributedString {
+            var part = AttributedString(title)
+            part.link = url
+            part.underlineStyle = .single
+            return part
         }
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, Space.s24)
+        var text = AttributedString("By continuing with Apple or Google, you agree to our ")
+        text += link("Terms of Service", LegalLinks.terms)
+        text += AttributedString(" and ")
+        text += link("Privacy Policy", LegalLinks.privacy)
+        text += AttributedString(", and confirm you are 18 or older.")
+        return text
     }
 }
 
