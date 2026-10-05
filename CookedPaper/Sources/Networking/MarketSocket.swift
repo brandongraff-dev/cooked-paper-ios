@@ -75,7 +75,7 @@ final class MarketSocket {
         // now and again before every automatic reconnect, never kept from here.
         let manager = SocketManager(
             socketURL: APIConfig.baseURL,
-            config: [.log(false), .compress, .reconnectWait(1), .reconnectWaitMax(5), .extraHeaders(SocketAuth.currentHeaders())]
+            config: [.log(false), .compress, .path(SocketAuth.realtimePath), .reconnectWait(1), .reconnectWaitMax(5), .extraHeaders(SocketAuth.currentHeaders())]
         )
         self.manager = manager
         let socket = manager.socket(forNamespace: "/market")
