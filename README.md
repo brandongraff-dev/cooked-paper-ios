@@ -116,6 +116,10 @@ CookedPaper/
     audiences. Until then the Google button says it isn't configured.
   - **Apple** needs the Sign in with Apple capability on the App ID
     (`app.cooked.paper`); the entitlement is already in `project.yml`.
+- **One iPhone per account.** Signing in on a new iPhone ends the account's
+  session on the old one (the API's `session_evicted`, from `apps/api/src/auth/sessions.ts`).
+  The old phone's next request sends it to sign-in with a note saying another iPhone
+  signed in. The website is not counted, so the web and one phone work together.
 - **No dark patterns**, on purpose, matching `apps/api/src/paper/onboarding.ts`'s own
   stated design: no streaks, no countdowns, no fake urgency, no score. The backend
   structurally can't produce that data; the client doesn't invent it either.

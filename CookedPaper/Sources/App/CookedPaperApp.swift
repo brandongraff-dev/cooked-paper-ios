@@ -59,7 +59,8 @@ struct RootView: View {
                     title: session.isGuest ? "Save your portfolio" : "Sign in to Cooked",
                     subtitle: session.isGuest
                         ? "Sign in so your positions are saved to your account, on any device."
-                        : "Trade live prices with paper money. Your portfolio is saved to your account."
+                        : session.signOutNotice
+                            ?? "Trade live prices with paper money. Your portfolio is saved to your account."
                 ) {
                     Task { await PortfolioStore.shared.resetAndRebootstrap() }
                 }
