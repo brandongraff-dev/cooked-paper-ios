@@ -12,8 +12,11 @@ struct DuelShareCardModel: Hashable {
     let theirReturnPct: Decimal?
     let outcome: DuelOutcome
     let durationLabel: String
-    /// "cooked.trade/d/<code>", nil without an invite code.
+    /// "cooked.trade/d/<code>", nil without an invite code. Drawn on the card.
     let link: String?
+    /// "https://cooked.trade/d/<code>", nil without an invite code. Shared in the
+    /// message.
+    let shareURL: String?
 
     /// Nil until the duel has a result and an opponent.
     init?(duel: Duel) {
@@ -51,6 +54,7 @@ struct DuelShareCardModel: Hashable {
         self.outcome = outcome
         self.durationLabel = durationLabel
         link = ShareCardFormat.duelLink(code: inviteCode)
+        shareURL = ShareCardFormat.duelURL(code: inviteCode)
     }
 
     var shareTitle: String { "@\(myUsername) vs @\(theirUsername) on Cooked" }
@@ -62,7 +66,7 @@ struct DuelShareCardModel: Hashable {
         case .lost: line = "Lost my paper duel vs @\(theirUsername)"
         case .draw: line = "Drew my paper duel vs @\(theirUsername)"
         }
-        let link = link.map { " Duel me: \($0)" } ?? " cooked.trade"
+        let link = shareURL.map { " Duel me: \($0)" } ?? " cooked.trade"
         return "\(line): \(ShareCardFormat.pnl(myReturnPct)) to \(ShareCardFormat.pnl(theirReturnPct)). Paper money, no stakes.\(link)"
     }
 }

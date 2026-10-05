@@ -50,6 +50,11 @@ struct ShareCardFormatTests {
         #expect(ShareCardFormat.duelLink(code: "") == nil)
     }
 
+    @Test func duelURLIsTheHttpsInviteLink() {
+        #expect(ShareCardFormat.duelURL(code: "K7QX2M") == "https://cooked.trade/d/K7QX2M")
+        #expect(ShareCardFormat.duelURL(code: " ") == nil)
+    }
+
     @Test func verdictWords() {
         #expect(ShareCardFormat.verdict(.won) == "WIN")
         #expect(ShareCardFormat.verdict(.lost) == "LOSS")

@@ -91,11 +91,24 @@ targets:
         # Push Notifications. Expanded per configuration from APS_ENVIRONMENT below:
         # "development" (APNs sandbox) for Debug, "production" for Release.
         aps-environment: $(APS_ENVIRONMENT)
+        # Universal links: https://cooked.trade/d/<code> and /l/<code> (duel and
+        # league invites) open the app instead of Safari and arrive in
+        # DeepLinkRouter through .onOpenURL. iOS verifies each host against
+        # https://<host>/.well-known/apple-app-site-association, served by the web
+        # app (apps/web in cooked.trade) once APPLE_TEAM_ID is set there. Both hosts
+        # are listed because the apex redirects to www and Apple checks each
+        # separately (and does not follow redirects for that file).
+        com.apple.developer.associated-domains:
+          - applinks:cooked.trade
+          - applinks:www.cooked.trade
     attributes:
       SystemCapabilities:
         com.apple.Push:
           enabled: 1
         com.apple.SignInWithApple:
+          enabled: 1
+        # Associated Domains (Xcode still keys this capability by its old name).
+        com.apple.SafariKeychain:
           enabled: 1
     settings:
       configs:

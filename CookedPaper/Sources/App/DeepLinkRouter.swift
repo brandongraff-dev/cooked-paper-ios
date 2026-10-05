@@ -1,21 +1,71 @@
 import Foundation
 import Observation
 
-/// The app's deep links, handed off from `CookedPaperApp`'s `.onOpenURL` (and from
-/// tapped pushes via `AppDelegate`) and consumed by `AppShellView`'s sheet:
+/// One parsed deep link: what `DeepLinkRouter.handle` opens. Kept apart from the
+/// router so the URL parsing is testable without touching the shared router.
 ///
 /// - `cookedpaper://token/<mint>` — a token's detail.
 /// - `cookedpaper://duel/<code>` — an open duel invite: a confirm sheet, then
-///   `POST /paper/duels/join`. `https://cooked.trade/d/<code>` is the same invite.
+///   `POST /paper/duels/join`.
 /// - `cookedpaper://duel-id/<id>` — one of the account's duels.
 /// - `cookedpaper://league/<code>` — a friend-league invite: a join sheet with the
-///   code filled in. `https://cooked.trade/l/<code>` is the same invite.
+///   code filled in.
 /// - `cookedpaper://league-id/<id>` — one of the account's leagues.
 /// - `cookedpaper://achievements` — the achievements grid.
+/// - `https://cooked.trade/d/<code>` and `https://cooked.trade/l/<code>` (also on
+///   `www.`) — the web invite links, the same invites as `duel/<code>` and
+///   `league/<code>`. They reach the app as universal links (the Associated Domains
+///   entitlement in project.yml, matched by the site's
+///   `/.well-known/apple-app-site-association`), which SwiftUI delivers through
+///   `.onOpenURL` like the custom scheme.
 ///
-/// Foundation parses the two-segment form with the kind landing in `.host` and
-/// "/<value>" in `.path`, so extraction reads those rather than
+/// Foundation parses the two-segment custom-scheme form with the kind landing in
+/// `.host` and "/<value>" in `.path`, so extraction reads those rather than
 /// `.pathComponents[0]`.
+enum DeepLink: Equatable {
+    case token(mint: String)
+    case duelInvite(code: String)
+    case duel(id: String)
+    case leagueInvite(code: String)
+    case league(id: String)
+    case achievements
+
+    /// The hosts serving the web invite pages (the apex redirects to www).
+    static let webHosts: Set<String> = ["cooked.trade", "www.cooked.trade"]
+
+    /// Nil for anything the app doesn't open.
+    static func parse(_ url: URL) -> DeepLink? {
+        let scheme = url.scheme?.lowercased()
+        let host = url.host?.lowercased()
+        let parts = url.pathComponents.filter { $0 != "/" }
+
+        if scheme == "https" {
+            guard let host = host, webHosts.contains(host) else { return nil }
+            guard parts.count == 2, !parts[1].isEmpty else { return nil }
+            switch parts[0] {
+            case "d": return .duelInvite(code: parts[1])
+            case "l": return .leagueInvite(code: parts[1])
+            default: return nil
+            }
+        }
+
+        guard scheme == "cookedpaper" else { return nil }
+        let value = parts.first ?? ""
+        switch host ?? "" {
+        case "token": return value.isEmpty ? nil : .token(mint: value)
+        case "duel": return value.isEmpty ? nil : .duelInvite(code: value)
+        case "duel-id": return value.isEmpty ? nil : .duel(id: value)
+        case "league": return value.isEmpty ? nil : .leagueInvite(code: value)
+        case "league-id": return value.isEmpty ? nil : .league(id: value)
+        case "achievements": return .achievements
+        default: return nil
+        }
+    }
+}
+
+/// The app's deep links (see `DeepLink`), handed off from `CookedPaperApp`'s
+/// `.onOpenURL` (and from tapped pushes via `AppDelegate`) and consumed by
+/// `AppShellView`'s sheet.
 @Observable
 @MainActor
 final class DeepLinkRouter {
@@ -31,43 +81,21 @@ final class DeepLinkRouter {
     private init() {}
 
     func handle(_ url: URL) {
-        let scheme = url.scheme?.lowercased()
-        let host = url.host?.lowercased()
-        let value = url.pathComponents.first(where: { $0 != "/" })
-
-        // The web invite link, should it ever be opened by the app.
-        if scheme == "https", host == "cooked.trade" || host == "www.cooked.trade" {
-            let parts = url.pathComponents.filter { $0 != "/" }
-            if parts.count == 2, parts[0] == "d", !parts[1].isEmpty {
-                open(duelInviteCode: parts[1])
-            } else if parts.count == 2, parts[0] == "l", !parts[1].isEmpty {
-                open(leagueInviteCode: parts[1])
-            }
-            return
-        }
-
-        guard scheme == "cookedpaper" else { return }
-        switch host ?? "" {
-        case "token":
-            guard let mint = value, !mint.isEmpty else { return }
+        guard let link = DeepLink.parse(url) else { return }
+        switch link {
+        case .token(let mint):
             clear()
             pendingTokenMint = mint
-        case "duel":
-            guard let code = value, !code.isEmpty else { return }
+        case .duelInvite(let code):
             open(duelInviteCode: code)
-        case "duel-id":
-            guard let id = value, !id.isEmpty else { return }
+        case .duel(let id):
             openDuel(id: id)
-        case "league":
-            guard let code = value, !code.isEmpty else { return }
+        case .leagueInvite(let code):
             open(leagueInviteCode: code)
-        case "league-id":
-            guard let id = value, !id.isEmpty else { return }
+        case .league(let id):
             openLeague(id: id)
-        case "achievements":
+        case .achievements:
             openAchievements()
-        default:
-            return
         }
     }
 
