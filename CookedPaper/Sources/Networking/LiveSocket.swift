@@ -61,6 +61,7 @@ final class LiveSocket {
             config: [
                 .log(false),
                 .compress,
+                .path(SocketAuth.realtimePath),
                 .extraHeaders(SocketAuth.currentHeaders()),
             ]
         )

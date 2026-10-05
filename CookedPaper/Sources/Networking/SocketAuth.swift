@@ -13,6 +13,11 @@ import SocketIO
 /// on every `.reconnectAttempt`) is enough for a reconnect ~15 minutes later to
 /// present the access token `APIClient` has refreshed since.
 enum SocketAuth {
+    /// The Engine.IO path both sockets connect on. The API mounts Socket.IO at
+    /// `/trading/ws` (apps/api `REALTIME_PATH`), not the library default
+    /// `/socket.io/`, which 404s.
+    static let realtimePath = "/trading/ws/"
+
     /// The headers for a handshake made right now: the current access token, or the
     /// guest paper token before sign-in (`/paper` accepts both), if any.
     static func currentHeaders() -> [String: String] {
