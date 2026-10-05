@@ -141,6 +141,10 @@ struct DailyCallCardContent: View {
                     .foregroundStyle(Color.textSecondary)
             }
             Spacer(minLength: Space.s8)
+            // The streak card: flame, streak, today's token and your call.
+            DailyCallShareButton(response: response, compact: true)
+                .buttonStyle(.plain)
+                .padding(.trailing, Space.s4)
             StreakFlame(current: response.streak.current, best: response.streak.best)
         }
     }

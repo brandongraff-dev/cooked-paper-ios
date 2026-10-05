@@ -213,20 +213,25 @@ struct DuelDetailView: View {
                 .disabled(isActing)
             }
         case .finished:
-            if duel.them != nil {
-                Button {
-                    Haptics.tap()
-                    act { [id = duel.id] in try await DuelsAPI.rematch(id: id) }
-                } label: {
-                    if isActing {
-                        ProgressView().tint(Color.inverseText)
-                    } else {
-                        Label("Rematch", systemImage: "arrow.clockwise")
+            VStack(spacing: Space.s12) {
+                if duel.them != nil {
+                    Button {
+                        Haptics.tap()
+                        act { [id = duel.id] in try await DuelsAPI.rematch(id: id) }
+                    } label: {
+                        if isActing {
+                            ProgressView().tint(Color.inverseText)
+                        } else {
+                            Label("Rematch", systemImage: "arrow.clockwise")
+                        }
                     }
+                    .buttonStyle(.primary)
+                    .disabled(isActing)
+                    .accessibilityIdentifier("duel.rematch")
                 }
-                .buttonStyle(.primary)
-                .disabled(isActing)
-                .accessibilityIdentifier("duel.rematch")
+                // The result as an image: you vs them, both returns, WIN/LOSS.
+                DuelShareButton(duel: duel)
+                    .buttonStyle(.secondary)
             }
         case .declined, .cancelled, .expired, .unknown:
             EmptyView()

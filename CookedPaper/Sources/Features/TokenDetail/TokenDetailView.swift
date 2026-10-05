@@ -183,7 +183,11 @@ struct TokenDetailView: View {
 
                 if let position {
                     VStack(alignment: .leading, spacing: Space.headerGap) {
-                        SectionHeader(title: "Your position")
+                        HStack(alignment: .center, spacing: Space.s12) {
+                            SectionHeader(title: "Your position")
+                            TradeShareButton(model: TradeShareCardModel(position: position))
+                                .buttonStyle(.compact)
+                        }
                         StatGrid(items: positionStats(position))
                     }
                 }

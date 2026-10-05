@@ -258,6 +258,13 @@ A profitable sell or leveraged close asks for an App Store review (at most once 
 server-rendered P&L card (`/cards/meta/…`, percentages only), hidden when the card
 endpoint doesn't answer.
 
+Share cards are also drawn on device (`DesignSystem/ShareCardRenderer.swift`):
+`ImageRenderer` turns a 360×450pt SwiftUI card into a 1080×1350 PNG that `ShareLink`
+shares with a line ending in cooked.trade. No endpoint: only the token logo is
+fetched. Trade card (Token Detail's "Your position", and a sell's confirmation in
+place of the link card), duel result card (a finished duel), and Daily Call streak
+card (the icon in the Daily Call header).
+
 ## Live data
 
 - Token charts: LIVE streams trade by trade from the `/market` socket (1 s REST
