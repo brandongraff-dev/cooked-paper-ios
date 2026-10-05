@@ -24,6 +24,7 @@ final class SessionStore {
         static let needsProfileSetup = "session.needsProfileSetup"
         static let userId = "session.userId"
         static let method = "session.method"
+        static let accountCreatedAt = "session.accountCreatedAt"
         static let legacyIsGuest = "session.isGuest"
     }
 
@@ -43,6 +44,9 @@ final class SessionStore {
     /// The sign-in that created this account hasn't been through
     /// `ProfileSetupView` yet. Persisted, so quitting mid-setup still shows it once.
     private(set) var needsProfileSetup = false
+    /// When the account was created (`PublicUser.createdAt`); starts the free
+    /// tier's full-access days. Nil until a sign-in or `/auth/me` reports it.
+    private(set) var accountCreatedAt: Date?
     /// Why the app signed this person out, when it wasn't them tapping Sign out —
     /// shown on the sign-in screen. Not persisted: it explains this one sign-out.
     private(set) var signOutNotice: String?
@@ -71,6 +75,7 @@ final class SessionStore {
         needsProfileSetup = UserDefaults.standard.bool(forKey: Keys.needsProfileSetup)
         userId = UserDefaults.standard.string(forKey: Keys.userId)
         method = UserDefaults.standard.string(forKey: Keys.method)
+        accountCreatedAt = UserDefaults.standard.object(forKey: Keys.accountCreatedAt) as? Date
     }
 
     var isSignedIn: Bool { token != nil }
@@ -114,6 +119,10 @@ final class SessionStore {
         UserDefaults.standard.set(user.username, forKey: Keys.username)
         UserDefaults.standard.set(displayName, forKey: Keys.displayName)
         UserDefaults.standard.set(avatarSeed, forKey: Keys.avatarSeed)
+        if let created = user.createdAt.flatMap(CompeteDate.parse) {
+            accountCreatedAt = created
+            UserDefaults.standard.set(created, forKey: Keys.accountCreatedAt)
+        }
     }
 
     /// `ProfileSetupView` saved or was skipped; it doesn't come back.
@@ -152,12 +161,13 @@ final class SessionStore {
         userId = nil
         method = nil
         needsProfileSetup = false
+        accountCreatedAt = nil
         KeychainStore.remove(Keys.token)
         KeychainStore.remove(Keys.refreshToken)
         KeychainStore.remove(Keys.guestToken)
         for key in [
             Keys.portfolioId, Keys.username, Keys.displayName, Keys.avatarSeed,
-            Keys.userId, Keys.method, Keys.needsProfileSetup,
+            Keys.userId, Keys.method, Keys.needsProfileSetup, Keys.accountCreatedAt,
         ] {
             UserDefaults.standard.removeObject(forKey: key)
         }

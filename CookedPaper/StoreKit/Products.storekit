@@ -11,7 +11,23 @@
   },
   "identifier": "5A6F1B10-0000-4000-8000-000000000001",
   "nonRenewingSubscriptions": [],
-  "products": [],
+  "products": [
+    {
+      "displayPrice": "99.99",
+      "familyShareable": false,
+      "internalID": "3438972696",
+      "localizations": [
+        {
+          "description": "Every Pro feature, paid once. No renewals.",
+          "displayName": "Founding Member",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "app.cooked.paper.founding",
+      "referenceName": "Founding Member",
+      "type": "NonConsumable"
+    }
+  ],
   "settings": {
     "_applicationInternalID": "0",
     "_developerTeamID": "0000000000",
@@ -98,7 +114,7 @@
         {
           "adHocOffers": [],
           "codeOffers": [],
-          "displayPrice": "29.99",
+          "displayPrice": "59.99",
           "familyShareable": false,
           "groupNumber": 1,
           "internalID": "5A6F1B10-0000-4000-8000-000000000012",

@@ -31,7 +31,8 @@ struct CookedPaperApp: App {
 /// either of the other two would flash the paywall at every paying user on launch.
 ///
 /// Order: onboarding (as a guest) → sign-in ("Save your portfolio", which claims
-/// the guest portfolio) → paywall → the app. Sign-in comes after the guest has
+/// the guest portfolio) → paywall, once, closable → the app. Closing it starts the
+/// free tier (`FreeTier`): full access for three days, then three trades a day. Sign-in comes after the guest has
 /// traded and watched their positions move, but before the purchase, so every
 /// subscription is bought by an account (`appAccountToken` set, entitlement
 /// reconciled by the server, restorable on any device). A fresh account picks its
@@ -41,6 +42,9 @@ struct RootView: View {
     let session = SessionStore.shared
     let network = NetworkMonitor.shared
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    /// The post-sign-in paywall was closed with "Start free"; it doesn't come back
+    /// on its own. Limits and Pro features bring it back with their own reason.
+    @AppStorage("hasClosedOnboardingPaywall") private var hasClosedOnboardingPaywall = false
 
     var body: some View {
         Group {
@@ -64,13 +68,14 @@ struct RootView: View {
                 ) {
                     Task { await PortfolioStore.shared.resetAndRebootstrap() }
                 }
-            } else if !store.isSubscribed {
-                PaywallView()
+            } else if !store.isSubscribed && !hasClosedOnboardingPaywall {
+                PaywallView(reason: .onboarding) { hasClosedOnboardingPaywall = true }
             } else {
                 AppShellView()
             }
         }
         .animation(Motion.standard, value: store.isSubscribed)
+        .animation(Motion.standard, value: hasClosedOnboardingPaywall)
         .animation(Motion.standard, value: session.isSignedIn)
         .animation(Motion.standard, value: session.needsProfileSetup)
         .overlay(alignment: .top) {

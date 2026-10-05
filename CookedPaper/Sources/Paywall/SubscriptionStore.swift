@@ -6,7 +6,11 @@ enum ProductID {
     static let monthly = "app.cooked.paper.monthly"
     static let annual = "app.cooked.paper.annual"
     static let weekly = "app.cooked.paper.weekly"
-    static let all = [weekly, monthly, annual]
+    /// Founding Member: a one-time (non-consumable) purchase that unlocks Pro with
+    /// no renewals. Not Family Shareable, so it can't be passed around either.
+    static let founding = "app.cooked.paper.founding"
+    static let subscriptions = [weekly, monthly, annual]
+    static let all = subscriptions + [founding]
 }
 
 /// The entire paywall: auto-renewing subscriptions in one group, StoreKit 2 first.
@@ -57,6 +61,7 @@ final class SubscriptionStore {
     var monthlyProduct: Product? { products.first { $0.id == ProductID.monthly } }
     var annualProduct: Product? { products.first { $0.id == ProductID.annual } }
     var weeklyProduct: Product? { products.first { $0.id == ProductID.weekly } }
+    var foundingProduct: Product? { products.first { $0.id == ProductID.founding } }
 
     func loadProducts() async {
         isLoadingProducts = true
@@ -116,7 +121,9 @@ final class SubscriptionStore {
         let signedTransaction = verification.jwsRepresentation
         await transaction.finish()
         await refreshEntitlement()
-        if ProductID.all.contains(transaction.productID) {
+        // The server reconciles subscriptions only; Founding Member is a one-time
+        // purchase StoreKit alone vouches for.
+        if ProductID.subscriptions.contains(transaction.productID) {
             await submitToServer([signedTransaction])
         }
     }
@@ -156,7 +163,7 @@ final class SubscriptionStore {
         var signed: [String] = []
         for await entitlement in Transaction.currentEntitlements {
             guard case .verified(let transaction) = entitlement,
-                  ProductID.all.contains(transaction.productID),
+                  ProductID.subscriptions.contains(transaction.productID),
                   transaction.revocationDate == nil
             else { continue }
             signed.append(entitlement.jwsRepresentation)

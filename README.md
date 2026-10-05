@@ -1,7 +1,7 @@
 # Cooked Paper (iOS)
 
-A native SwiftUI, paper-trading-only companion to Cooked, hard-paywalled at **$7.99/mo**
-or **$29.99/yr**. Built against the same `apps/api` backend as `apps/web` and
+A native SwiftUI, paper-trading-only companion to Cooked. Free to start, with Pro at
+**$7.99/mo**, **$59.99/yr** or a one-time **Founding Member** purchase (see "Subscriptions"). Built against the same `apps/api` backend as `apps/web` and
 `apps/mobile`. The subscription is enforced on-device via StoreKit 2, with the
 server consulted as a second opinion once its Apple billing routes are deployed
 (see "Subscriptions" below).
@@ -199,6 +199,31 @@ are simulated."
   DEBUG mock (`MockCompete`) serves all of it for the UI tests and screenshots.
 
 ## Subscriptions
+
+**Free tier** (`Sources/Paywall/FreeTier.swift`). The paywall shows once after sign-in
+and can be closed ("Start free"). A free account gets full access for its first 3 days
+(counted from the account's `createdAt`), then 3 buys a day in its main portfolio.
+Selling is never limited, and duel trades don't count. Today's count comes from the
+portfolio's trade history on the server, so reinstalling doesn't reset it. Leverage
+and price alerts are Pro-only (`ProGate`). The paywall comes back, with its own
+headline, when the day's buys run out, once when full access ends, after a profitable
+sell on the free tier, and when a Pro feature is opened.
+
+The limit is enforced in the app only, like the subscription. The API has no paywall
+by design (`packages/billing/src/entitlements.ts` in the main repo), so a modified
+client could trade without limits. Enforcing it server-side means deliberately
+changing that guard.
+
+**Founding Member** (`app.cooked.paper.founding`) is a non-consumable, not Family
+Shareable, that unlocks Pro with no renewals. The paywall labels it "FIRST 500".
+Apple can't cap a product's sales, so **remove it from sale in App Store Connect once
+500 have sold**, or the label stops being true. The server's Apple billing routes
+reconcile subscriptions only; StoreKit alone vouches for this purchase. What
+"Pro, paid once" covers once live trading launches should be checked with counsel
+before launch.
+
+**Prices are set in App Store Connect**, not here. `StoreKit/Products.storekit` (local
+testing only) has annual at $59.99 and Founding Member at $99.99 to match.
 
 StoreKit 2 decides on the device as before. In addition, every verified
 transaction's signed JWS is sent to `POST /billing/apple/transactions`
