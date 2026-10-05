@@ -6,6 +6,7 @@ struct PortfolioView: View {
     private let live = LiveSocket.shared
     @State private var scrubIndex: Int?
     @State private var selectedLeveraged: LeveragedSelection?
+    @State private var showsCookedMeter = false
 
     var body: some View {
         Group {
@@ -28,6 +29,9 @@ struct PortfolioView: View {
         .sheet(item: $selectedLeveraged) { selection in
             LeveragedPositionSheet(positionId: selection.id)
         }
+        .sheet(isPresented: $showsCookedMeter) {
+            CookedMeterSheet(reading: cookedMeterReading(portfolioStore.snapshot))
+        }
     }
 
     private func content(_ snapshot: PaperSnapshotResponse) -> some View {
@@ -38,6 +42,9 @@ struct PortfolioView: View {
                 VStack(alignment: .leading, spacing: Space.headerGap) {
                     SectionHeader(title: "Stats")
                     StatGrid(items: stats(snapshot))
+                    CookedMeterCard(reading: cookedMeterReading(snapshot)) {
+                        showsCookedMeter = true
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: Space.headerGap) {
@@ -161,6 +168,12 @@ struct PortfolioView: View {
             StatItem(label: "Win rate", value: stats.winRatePct.pct.map { "\($0.formatted(.number.precision(.fractionLength(0))))%" } ?? "—"),
             StatItem(label: "Trades", value: "\(stats.tradeCount)"),
         ]
+    }
+
+    /// The Cooked meter, worked out on the device from the snapshot alone.
+    private func cookedMeterReading(_ snapshot: PaperSnapshotResponse?) -> CookedMeter.Reading {
+        guard let snapshot else { return CookedMeter.reading(CookedMeter.Input(equityUsd: 0)) }
+        return CookedMeter.reading(CookedMeter.Input(snapshot: snapshot))
     }
 
     private var skeleton: some View {

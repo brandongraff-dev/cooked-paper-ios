@@ -220,6 +220,17 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         visitSearch(app, unreachedSteps: &unreachedSteps)
         visitFirstDiscoverRow(app, unreachedSteps: &unreachedSteps)
         visitTab(app, label: "Portfolio", screenshotName: "09-portfolio", unreachedSteps: &unreachedSteps)
+        // Best effort: the Cooked meter sheet is a bonus screenshot, so a card that
+        // isn't on screen yet is skipped rather than counted as a failure.
+        let cookedMeter = app.buttons["portfolio.cookedMeter"]
+        if cookedMeter.waitForExistence(timeout: 3), cookedMeter.isHittable {
+            cookedMeter.tap()
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "09b-cooked-meter")
+            let close = app.buttons["cookedMeter.close"]
+            if close.waitForExistence(timeout: 3) { close.tap() } else { app.swipeDown() }
+            Thread.sleep(forTimeInterval: 0.8)
+        }
         app.swipeUp()
         Thread.sleep(forTimeInterval: 0.6)
         attach(app, name: "10-portfolio-scrolled")
