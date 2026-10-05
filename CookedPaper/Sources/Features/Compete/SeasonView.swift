@@ -18,6 +18,9 @@ struct SeasonView: View {
             DailyCallCard()
                 .padding(.horizontal, Space.margin)
                 .padding(.top, Space.s8)
+            CrowdRecordCard()
+                .padding(.horizontal, Space.margin)
+                .padding(.top, Space.s16)
             Group {
                 if isLoading {
                     skeleton

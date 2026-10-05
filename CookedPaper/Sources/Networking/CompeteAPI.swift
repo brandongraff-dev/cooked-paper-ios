@@ -207,6 +207,14 @@ enum DailyCallAPI {
             as: DailyCallStats.self
         )
     }
+
+    /// Public: the same record for everyone.
+    static func crowdRecord() async throws -> DailyCallCrowdRecord {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/daily-call/crowd-record"),
+            as: DailyCallCrowdRecord.self
+        )
+    }
 }
 
 extension Error {

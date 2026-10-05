@@ -643,6 +643,32 @@ struct DailyCallStats: Decodable {
     let history: [DailyCallHistoryItem]
 }
 
+/// One settled day in the crowd record.
+struct DailyCallCrowdDay: Decodable, Identifiable, Hashable {
+    let id: String
+    let symbol: String?
+    let result: String
+    let crowdSide: String
+    @DecimalString var crowdPct: Decimal
+    let sampleSize: Int
+    let crowdRight: Bool
+}
+
+/// `GET /paper/daily-call/crowd-record`: how often the majority called it right.
+/// Push, void and tied days are left out by the server.
+struct DailyCallCrowdRecord: Decodable {
+    let windowDays: Int
+    let sampleSize: Int
+    let crowdRight: Int
+    let crowdWrong: Int
+    @OptionalDecimalString var crowdRightPct: Decimal?
+    /// Days in a row the crowd has been right (positive) or wrong (negative).
+    let currentRun: Int
+    /// Newest first.
+    let days: [DailyCallCrowdDay]
+    let disclaimer: String?
+}
+
 struct DailyCallBody: Encodable {
     let side: String
 }
