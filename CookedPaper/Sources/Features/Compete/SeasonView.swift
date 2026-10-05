@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compete → Season: this month's standing (tier, rank, return, how far to the
+/// Compete → Season: today's Daily Call card on top, then this month's standing (tier, rank, return, how far to the
 /// next tier, or what it takes to qualify), the tier ladder, the top 10, and links
 /// to achievements and past seasons. A season is a UTC calendar month ranked on the
 /// main portfolio's return; duels never count toward it.
@@ -13,6 +13,11 @@ struct SeasonView: View {
 
     var body: some View {
         ScrollView {
+            // The Daily Call leads the Compete tab; it hides itself if the server
+            // doesn't have it yet.
+            DailyCallCard()
+                .padding(.horizontal, Space.margin)
+                .padding(.top, Space.s8)
             Group {
                 if isLoading {
                     skeleton
@@ -34,7 +39,7 @@ struct SeasonView: View {
                     }
                 }
             }
-            .padding(.top, Space.s8)
+            .padding(.top, Space.s24)
             .padding(.bottom, Space.section)
         }
         .scrollIndicators(.hidden)

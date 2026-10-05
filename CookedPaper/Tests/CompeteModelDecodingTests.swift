@@ -156,4 +156,51 @@ struct CompeteModelDecodingTests {
         #expect(LeagueRules.inviteCode(from: "https://cooked.trade/l/Q7m2Lx9a") == "Q7m2Lx9a")
         #expect(LeagueRules.inviteCode(from: "cookedpaper://league/Q7m2Lx9a") == "Q7m2Lx9a")
     }
+    @Test func decodesTheDailyCall() throws {
+        let json = Data(
+            """
+            { "call": { "id": "2026-10-04",
+                "token": { "chain": "solana", "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+                           "symbol": "WIF", "name": "dogwifhat", "logoUri": null,
+                           "safety": { "state": "unevaluated", "reason": "never_scored", "checks": [],
+                                       "missingCritical": [], "score": null, "scoreVersion": null, "computedAt": null } },
+                "status": "open", "openPriceUsd": "1.8423", "openedAt": "2026-10-04T00:00:04.000Z",
+                "locksAt": "2026-10-04T20:00:00.000Z", "endsAt": "2026-10-05T00:00:00.000Z",
+                "closePriceUsd": null, "settledAt": null, "result": null,
+                "community": { "higher": 62, "lower": 38, "sampleSize": 100, "higherPct": "62.0", "lowerPct": "38.0" },
+                "me": { "side": "higher", "calledAt": "2026-10-04T09:12:44.000Z", "outcome": null } },
+              "livePriceUsd": "1.9011", "livePriceAt": "2026-10-04T12:00:01.000Z",
+              "previous": null, "streak": { "current": 2, "best": 5 },
+              "disclaimer": "Paper game: simulated prices, no stakes, no prizes." }
+            """.utf8
+        )
+        let decoded = try JSONDecoder().decode(DailyCallTodayResponse.self, from: json)
+        let call = try #require(decoded.call)
+        #expect(call.isOpen)
+        #expect(call.openPriceUsd == Decimal(string: "1.8423"))
+        #expect(call.lockDate != nil)
+        #expect(call.token.displaySymbol == "$WIF")
+        #expect(call.me?.sideKind == .higher)
+        #expect(call.community?.higherShare == 0.62)
+        #expect(decoded.livePriceUsd == Decimal(string: "1.9011"))
+        #expect(decoded.previous == nil)
+        #expect(decoded.streak.best == 5)
+    }
+
+    @Test func decodesDailyCallStats() throws {
+        let json = Data(
+            """
+            { "played": 12, "correct": 8, "incorrect": 3, "pushes": 1, "currentStreak": 2, "bestStreak": 5,
+              "history": [ { "id": "2026-10-03",
+                "token": { "chain": "solana", "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+                           "symbol": "BONK", "name": "Bonk", "logoUri": null },
+                "result": "higher", "openPriceUsd": "0.0000213", "closePriceUsd": "0.0000231",
+                "side": null, "outcome": null } ] }
+            """.utf8
+        )
+        let decoded = try JSONDecoder().decode(DailyCallStats.self, from: json)
+        #expect(decoded.bestStreak == 5)
+        #expect(decoded.history.first?.side == nil)
+        #expect(decoded.history.first?.closePriceUsd == Decimal(string: "0.0000231"))
+    }
 }

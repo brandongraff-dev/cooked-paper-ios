@@ -523,3 +523,126 @@ enum CompeteDate {
         return String(format: "%d:%02d", minutes, secs)
     }
 }
+
+// MARK: - Daily Call
+
+/// `higher` / `lower`. Raw strings on the wire; anything else is ignored.
+enum DailyCallSide: String, Codable, CaseIterable {
+    case higher, lower
+
+    var title: String {
+        switch self {
+        case .higher: "Higher"
+        case .lower: "Lower"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .higher: "arrow.up"
+        case .lower: "arrow.down"
+        }
+    }
+}
+
+struct DailyCallToken: Decodable, Hashable {
+    let chain: String
+    let mint: String
+    let symbol: String?
+    let name: String?
+    let logoUri: String?
+
+    var displaySymbol: String { symbol.map { "$" + $0 } ?? String(mint.prefix(6)) }
+    var logoURL: URL? { logoUri.flatMap(URL.init(string:)) }
+}
+
+/// Your call on a day. `outcome` is `correct` / `incorrect` / `push` / `void`,
+/// nil until the day settles.
+struct DailyCallPick: Decodable, Hashable {
+    let side: String
+    let calledAt: String
+    let outcome: String?
+
+    var sideKind: DailyCallSide? { DailyCallSide(rawValue: side) }
+}
+
+/// How everyone called it; the server sends it only once you've called or the
+/// day has locked.
+struct DailyCallCommunity: Decodable, Hashable {
+    let higher: Int
+    let lower: Int
+    let sampleSize: Int
+    @OptionalDecimalString var higherPct: Decimal?
+    @OptionalDecimalString var lowerPct: Decimal?
+
+    /// 0...1, the share that called higher (0.5 when nobody has called).
+    var higherShare: Double {
+        guard sampleSize > 0 else { return 0.5 }
+        return Double(higher) / Double(sampleSize)
+    }
+}
+
+/// One UTC day's call. `status` is `open` / `locked` / `settled`; `result` is
+/// `higher` / `lower` / `push` / `void` once settled.
+struct DailyCall: Decodable, Hashable, Identifiable {
+    /// `"2026-10-04"`.
+    let id: String
+    let token: DailyCallToken
+    let status: String
+    @DecimalString var openPriceUsd: Decimal
+    let openedAt: String
+    let locksAt: String
+    let endsAt: String
+    @OptionalDecimalString var closePriceUsd: Decimal?
+    let settledAt: String?
+    let result: String?
+    let community: DailyCallCommunity?
+    let me: DailyCallPick?
+
+    var lockDate: Date? { CompeteDate.parse(locksAt) }
+    var endDate: Date? { CompeteDate.parse(endsAt) }
+    var isOpen: Bool { status == "open" }
+    var isSettled: Bool { status == "settled" }
+}
+
+struct DailyCallStreak: Decodable, Hashable {
+    let current: Int
+    let best: Int
+}
+
+/// `GET /paper/daily-call` and `POST /paper/daily-call`.
+struct DailyCallTodayResponse: Decodable {
+    /// Nil only when the server couldn't price a token to open the day.
+    let call: DailyCall?
+    @OptionalDecimalString var livePriceUsd: Decimal?
+    let livePriceAt: String?
+    /// Yesterday's call, for the result state.
+    let previous: DailyCall?
+    let streak: DailyCallStreak
+    let disclaimer: String?
+}
+
+struct DailyCallHistoryItem: Decodable, Identifiable, Hashable {
+    let id: String
+    let token: DailyCallToken
+    let result: String?
+    @DecimalString var openPriceUsd: Decimal
+    @OptionalDecimalString var closePriceUsd: Decimal?
+    let side: String?
+    let outcome: String?
+}
+
+/// `GET /paper/daily-call/stats`.
+struct DailyCallStats: Decodable {
+    let played: Int
+    let correct: Int
+    let incorrect: Int
+    let pushes: Int
+    let currentStreak: Int
+    let bestStreak: Int
+    let history: [DailyCallHistoryItem]
+}
+
+struct DailyCallBody: Encodable {
+    let side: String
+}

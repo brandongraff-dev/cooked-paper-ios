@@ -3,16 +3,19 @@ import Foundation
 
 /// DEBUG-only fixtures for seasons, achievements and duels (see `MockAPI` for why
 /// the mock exists). The demo account sits at #42 of 1,310 (Head Chef) this
-/// season, has 9 of 22 achievements with one not yet seen (so the unlock toast
+/// season, has 10 of 26 achievements with one not yet seen (so the unlock toast
 /// plays at launch), has one active duel, one incoming invite, one open invite
 /// link and two finished duels, and is in two friend leagues (owns one with 7
 /// members, 2 not yet qualified; joined another). Duel and league actions change
-/// that state for the rest of the run.
+/// that state for the rest of the run. Today's Daily Call is open on WIF (no call
+/// yet, a 3-day streak); yesterday's BONK call settled correct. Making a call
+/// sticks for the rest of the run.
 nonisolated enum MockCompete {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var duels: [[String: Any]]?
     nonisolated(unsafe) private static var seen: Set<String> = []
     nonisolated(unsafe) private static var counter = 0
+    nonisolated(unsafe) private static var dailyPick: (side: String, at: Date)?
 
     static let names = ["degenwizard", "solsniper", "paperhands_og", "moonboi", "rugsurvivor", "chartooor", "bagholder", "wenlambo", "gmgn", "cookedcat", "fomo_fren", "diamondpaws"]
 
@@ -50,6 +53,11 @@ nonisolated enum MockCompete {
             return (200, ["duel": duel])
         case ("POST", let rest) where rest.count == 3 && rest[0] == "duels":
             return act(id: rest[1], verb: rest[2])
+
+        // Daily Call
+        case ("GET", ["daily-call"]): return (200, dailyToday())
+        case ("POST", ["daily-call"]): return makeDailyCall(json["side"] as? String ?? "")
+        case ("GET", ["daily-call", "stats"]): return (200, dailyStats())
 
         // Leagues
         case ("GET", ["leagues"]): return (200, ["leagues": leagueList()])
@@ -203,17 +211,21 @@ nonisolated enum MockCompete {
         Entry(id: "season_michelin", title: "Michelin Star", description: "Finish a season in the top 1%", tier: "legendary", icon: "trophy.fill"),
         Entry(id: "league_founder", title: "Host", description: "Start a league that reaches 3 members", tier: "bronze", icon: "person.3.fill"),
         Entry(id: "league_champion", title: "League Champion", description: "Finish a season #1 in a league of 5+", tier: "gold", icon: "crown.fill"),
+        Entry(id: "daily_first_call", title: "Make the Call", description: "Make your first Daily Call", tier: "bronze", icon: "megaphone"),
+        Entry(id: "daily_streak_3", title: "Reading the Room", description: "3 correct Daily Calls in a row", tier: "bronze", icon: "calendar.badge.checkmark"),
+        Entry(id: "daily_streak_7", title: "Seven Straight", description: "7 correct Daily Calls in a row", tier: "silver", icon: "flame.circle"),
+        Entry(id: "daily_streak_30", title: "Oracle", description: "30 correct Daily Calls in a row", tier: "legendary", icon: "eye.circle.fill"),
     ]
 
     /// Unlocked ids, newest first, with how many days ago. `hot_streak` is the
     /// one the demo account hasn't seen yet.
     private static let unlocked: [(id: String, daysAgo: Double)] = [
-        ("hot_streak", 0.02), ("duel_first_win", 1.5), ("season_head_chef", 3), ("season_finisher", 3.1),
+        ("hot_streak", 0.02), ("daily_streak_3", 0.9), ("duel_first_win", 1.5), ("season_head_chef", 3), ("season_finisher", 3.1),
         ("league_founder", 5), ("high_roller", 6), ("first_leverage", 9), ("first_profit", 11), ("first_trade", 12),
     ]
 
     private static let progress: [String: (Int, Int)] = [
-        "duel_streak_3": (2, 3), "duel_10_wins": (3, 10), "diversified": (3, 5), "double_up": (0, 1),
+        "duel_streak_3": (2, 3), "duel_10_wins": (3, 10), "daily_streak_7": (3, 7), "daily_streak_30": (3, 30), "diversified": (3, 5), "double_up": (0, 1),
     ]
 
     private static func achievements() -> [String: Any] {
@@ -241,6 +253,139 @@ nonisolated enum MockCompete {
             rows.append(item(entry, unlockedAt: nil))
         }
         return ["achievements": rows, "unlockedCount": unlocked.count, "total": catalog.count]
+    }
+
+    // MARK: - Daily Call
+
+    private static func dailyDec(_ value: Double) -> String { String(format: "%.10g", value) }
+
+    private static func dayStart(daysAgo: Int) -> Date {
+        let calendar = utcCalendar()
+        let today = calendar.startOfDay(for: Date())
+        return calendar.date(byAdding: .day, value: -daysAgo, to: today) ?? today
+    }
+
+    private static func dayId(daysAgo: Int) -> String {
+        let parts = utcCalendar().dateComponents([.year, .month, .day], from: dayStart(daysAgo: daysAgo))
+        return String(format: "%04d-%02d-%02d", parts.year ?? 2026, parts.month ?? 1, parts.day ?? 1)
+    }
+
+    private static func dailyToken(_ t: MockAPI.DemoToken) -> [String: Any] {
+        [
+            "chain": "solana", "mint": t.mint, "symbol": t.symbol, "name": t.name,
+            "logoUri": MockAPI.logos[t.mint].map { $0 as Any } ?? NSNull(),
+            "safety": [
+                "state": "unevaluated", "reason": "never_scored", "checks": [] as [Any],
+                "missingCritical": ["mint_authority_revoked", "freeze_authority_revoked", "lp_locked_or_burned"],
+                "score": NSNull(), "scoreVersion": NSNull(), "computedAt": NSNull(),
+            ] as [String: Any],
+        ]
+    }
+
+    /// The day's token cycles through the demo list so it changes daily.
+    private static func dailyDemoToken(daysAgo: Int) -> MockAPI.DemoToken {
+        let day = Int(dayStart(daysAgo: daysAgo).timeIntervalSince1970 / 86_400)
+        let pool = Array(MockAPI.tokens.prefix(4))
+        return pool[((day % pool.count) + pool.count) % pool.count]
+    }
+
+    private static func community(higher: Int, lower: Int) -> [String: Any] {
+        let total = higher + lower
+        func pct(_ n: Int) -> Any {
+            total == 0 ? NSNull() as Any : String(format: "%.1f", Double(n) * 100 / Double(total))
+        }
+        return ["higher": higher, "lower": lower, "sampleSize": total, "higherPct": pct(higher), "lowerPct": pct(lower)]
+    }
+
+    private static func dailyCallObject(daysAgo: Int, pick: (side: String, at: Date)?) -> [String: Any] {
+        let start = dayStart(daysAgo: daysAgo)
+        let locks = start.addingTimeInterval(20 * 3_600)
+        let ends = start.addingTimeInterval(86_400)
+        let token = dailyDemoToken(daysAgo: daysAgo)
+        let open = MockAPI.livePrice(token, at: start)
+        let settled = daysAgo > 0
+        let now = Date()
+        let status = settled ? "settled" : (now >= locks ? "locked" : "open")
+        let close: Any = settled ? dailyDec((Double(open) ?? 1) * 1.042) as Any : NSNull()
+        let result: Any = settled ? "higher" as Any : NSNull()
+        var higher = 1_284
+        var lower = 911
+        if let pick, !settled {
+            if pick.side == "higher" { higher += 1 } else { lower += 1 }
+        }
+        let revealed = pick != nil || status != "open"
+        let me: Any = pick.map { made -> Any in
+            [
+                "side": made.side, "calledAt": MockISO.string(made.at),
+                "outcome": settled ? (made.side == "higher" ? "correct" : "incorrect") as Any : NSNull(),
+            ] as [String: Any]
+        } ?? NSNull()
+        return [
+            "id": dayId(daysAgo: daysAgo), "token": dailyToken(token), "status": status,
+            "openPriceUsd": open, "openedAt": MockISO.string(start.addingTimeInterval(4)),
+            "locksAt": MockISO.string(locks), "endsAt": MockISO.string(ends),
+            "closePriceUsd": close,
+            "settledAt": settled ? MockISO.string(ends.addingTimeInterval(31)) as Any : NSNull(),
+            "result": result,
+            "community": revealed ? community(higher: higher, lower: lower) as Any : NSNull(),
+            "me": me,
+        ]
+    }
+
+    private static func dailyToday() -> [String: Any] {
+        lock.lock()
+        let pick = dailyPick
+        lock.unlock()
+        let token = dailyDemoToken(daysAgo: 0)
+        let yesterday = (side: "higher", at: dayStart(daysAgo: 1).addingTimeInterval(9 * 3_600))
+        return [
+            "call": dailyCallObject(daysAgo: 0, pick: pick),
+            "livePriceUsd": MockAPI.livePrice(token),
+            "livePriceAt": MockISO.string(Date()),
+            "previous": dailyCallObject(daysAgo: 1, pick: yesterday),
+            "streak": ["current": 3, "best": 5],
+            "disclaimer": "Paper game: simulated prices, no stakes, no prizes.",
+        ]
+    }
+
+    private static func makeDailyCall(_ side: String) -> (Int, Any) {
+        guard side == "higher" || side == "lower" else {
+            return (400, ["error": "bad_request", "message": "side must be higher or lower."])
+        }
+        let locks = dayStart(daysAgo: 0).addingTimeInterval(20 * 3_600)
+        if Date() >= locks {
+            return (409, ["error": "daily_call_locked", "message": "Calls for today have locked."])
+        }
+        lock.lock()
+        if dailyPick != nil {
+            lock.unlock()
+            return (409, ["error": "daily_call_exists", "message": "You already made today's call."])
+        }
+        dailyPick = (side, Date())
+        lock.unlock()
+        return (201, dailyToday())
+    }
+
+    private static func dailyStats() -> [String: Any] {
+        let sides = ["higher", "higher", "higher", "higher", NSNull(), "higher", "lower"] as [Any]
+        let history: [[String: Any]] = (1...7).map { (daysAgo: Int) -> [String: Any] in
+            let token = dailyDemoToken(daysAgo: daysAgo)
+            let open = MockAPI.livePrice(token, at: dayStart(daysAgo: daysAgo))
+            let up = daysAgo != 4
+            let side = sides[daysAgo - 1]
+            let outcome: Any = (side as? String).map { s -> Any in (s == "higher") == up ? "correct" : "incorrect" } ?? NSNull()
+            return [
+                "id": dayId(daysAgo: daysAgo), "token": dailyToken(token),
+                "result": up ? "higher" : "lower",
+                "openPriceUsd": open,
+                "closePriceUsd": dailyDec((Double(open) ?? 1) * (up ? 1.042 : 0.97)),
+                "side": side, "outcome": outcome,
+            ]
+        }
+        return [
+            "played": 6, "correct": 4, "incorrect": 2, "pushes": 0,
+            "currentStreak": 3, "bestStreak": 5, "history": history,
+        ]
     }
 
     // MARK: - Duels

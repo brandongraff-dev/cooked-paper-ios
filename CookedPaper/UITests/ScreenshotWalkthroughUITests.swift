@@ -329,7 +329,12 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.8)
             let achievementsRow = app.buttons["season.achievements"]
             if achievementsRow.waitForExistence(timeout: 5) {
-                if !achievementsRow.isHittable { app.swipeUp() }
+                // The Daily Call card sits above the season, so the row can be two screens down.
+                var swipes = 0
+                while !achievementsRow.isHittable && swipes < 3 {
+                    app.swipeUp()
+                    swipes += 1
+                }
                 achievementsRow.tap()
                 _ = app.descendants(matching: .any)["achievements.cell.first_trade"].firstMatch.waitForExistence(timeout: 5)
                 Thread.sleep(forTimeInterval: 1)
