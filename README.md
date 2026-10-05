@@ -67,10 +67,16 @@ CookedPaper/
      repo: set it to your Team ID (or set it in Xcode's Signing & Capabilities tab).
      CI doesn't need it — it builds with `CODE_SIGNING_ALLOWED=NO`.
    - Bundle id is `app.cooked.paper`, matching the `app.cooked.mobile` convention the
-     Expo app already uses. Enable **Sign in with Apple** and **Push Notifications**
-     on the App ID. The `aps-environment` entitlement comes from the
-     `APS_ENVIRONMENT` build setting: `development` for Debug, `production` for
-     Release.
+     Expo app already uses. Enable **Sign in with Apple**, **Push Notifications**
+     and **Associated Domains** on the App ID. The `aps-environment` entitlement
+     comes from the `APS_ENVIRONMENT` build setting: `development` for Debug,
+     `production` for Release.
+   - Universal links (`https://cooked.trade/d/<code>`, `/l/<code>` opening the app)
+     use the `applinks:cooked.trade` / `applinks:www.cooked.trade` entitlement in
+     `project.yml`. iOS only honours them once the web app serves
+     `/.well-known/apple-app-site-association` for this Team ID: set
+     `APPLE_TEAM_ID` (and `IOS_BUNDLE_ID` if it ever differs from
+     `app.cooked.paper`) on the web's Vercel project.
 3. **App Store Connect — subscriptions**
    - Create a subscription group ("Cooked Paper Pro") with two auto-renewable
      subscriptions: `app.cooked.paper.monthly` ($7.99/mo) and
@@ -179,8 +185,10 @@ are simulated."
   the same season return. Create, join with a code, standings (ranked, then not yet
   qualified), invite sharing; the owner can rename, rotate the code, remove members
   and delete; members can leave.
-- Deep links and pushes: `cookedpaper://duel-id/<id>` or a push with `duelId` opens
-  a duel; `leagueId` opens a league; a push with `achievementId` opens the
+- Deep links and pushes: `https://cooked.trade/d/<code>` and `/l/<code>` open the
+  duel / league invite as universal links (same as `cookedpaper://duel/<code>` and
+  `cookedpaper://league/<code>`); `cookedpaper://duel-id/<id>` or a push with
+  `duelId` opens a duel; `leagueId` opens a league; a push with `achievementId` opens the
   achievements grid.
 - **Status:** the backend routes are being built to the shared compete spec. Until
   they're deployed, a 404 hides the feature behind a calm "coming soon" state; the
@@ -214,7 +222,8 @@ and schedules a local reminder two days before the trial converts.
   account? Sign in" on the first screen avoids this.
 - **Owner-provided values:** `DEVELOPMENT_TEAM`, `GOOGLE_IOS_CLIENT_ID` /
   `GOOGLE_REVERSED_CLIENT_ID` (see First-time setup), plus the App ID capabilities
-  (Sign in with Apple, Push Notifications) and an APNs key on the backend.
+  (Sign in with Apple, Push Notifications, Associated Domains), an APNs key on the
+  backend, and `APPLE_TEAM_ID` on the web app for universal links.
 - **Numerals use SF Mono, not IBM Plex Mono.** The web/Expo apps both set prices in
   IBM Plex Mono; this port uses the system monospaced design (`.monospacedDigit()` in
   `Sources/DesignSystem/DesignSystem.swift`) instead of bundling the font files. Swap

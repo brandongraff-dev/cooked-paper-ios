@@ -75,6 +75,13 @@ enum ShareCardFormat {
         return "cooked.trade/d/\(trimmed)"
     }
 
+    /// "https://cooked.trade/d/<code>" for share text, nil without a code. The
+    /// card shows the shorter `duelLink`; the message carries the full https URL so
+    /// it is tappable everywhere and opens the app as a universal link.
+    static func duelURL(code: String?) -> String? {
+        duelLink(code: code).map { "https://\($0)" }
+    }
+
     /// WIN / LOSS / DRAW.
     static func verdict(_ outcome: DuelOutcome) -> String {
         switch outcome {
