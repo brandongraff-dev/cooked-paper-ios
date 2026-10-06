@@ -287,8 +287,9 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
                 row.tap()
                 Thread.sleep(forTimeInterval: 1.5)
                 attach(app, name: "41-trader-positions")
-                app.swipeDown()
-                Thread.sleep(forTimeInterval: 0.8)
+                let done = app.buttons["Done"].firstMatch
+                if done.waitForExistence(timeout: 3) { done.tap() } else { app.swipeDown() }
+                Thread.sleep(forTimeInterval: 1.2)
             } else {
                 unreached.append("no leaderboard row")
             }
@@ -301,7 +302,12 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             XCTFail("Season segment never appeared")
             return
         }
-        seasonSegment.tap()
+        // The sheet above can still be animating away; retry until Season shows.
+        let seasonHeader = app.descendants(matching: .any)["season.header"].firstMatch
+        for _ in 0..<3 where !app.buttons["season.challenges"].exists {
+            seasonSegment.tap()
+            if seasonHeader.waitForExistence(timeout: 5) { break }
+        }
         Thread.sleep(forTimeInterval: 1.2)
         attach(app, name: "42-season-new-cards")
 
