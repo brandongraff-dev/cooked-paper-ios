@@ -22,6 +22,7 @@ extension Color {
     static let tileGray = Color(rgb: 0x6B6B73)
 }
 
+@MainActor
 extension LinearGradient {
     /// Blue into violet: the paywall's CTA, the PRO badge, the brand moments.
     static var brand: LinearGradient {
