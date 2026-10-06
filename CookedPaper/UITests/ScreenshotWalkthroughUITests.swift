@@ -310,11 +310,33 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         }
         Thread.sleep(forTimeInterval: 1.2)
         attach(app, name: "42-season-new-cards")
+        // The game-mode grid sits below the Daily Call cards.
+        let grid = app.descendants(matching: .any)["season.challenges"].firstMatch
+        var gridSwipes = 0
+        while !(grid.exists && grid.isHittable) && gridSwipes < 4 {
+            app.swipeUp()
+            gridSwipes += 1
+        }
+        Thread.sleep(forTimeInterval: 1)
+        attach(app, name: "42b-season-play-grid")
 
         if openFromSeason(app, id: "season.challenges", unreached: &unreached) {
             _ = app.buttons["challenge.start.10k"].waitForExistence(timeout: 5)
             Thread.sleep(forTimeInterval: 1)
             attach(app, name: "43-challenges")
+            // The demo account has a challenge running; abandon it to see the tiers.
+            let abandon = app.buttons["Abandon challenge"].firstMatch
+            if abandon.waitForExistence(timeout: 3) {
+                if !abandon.isHittable { app.swipeUp() }
+                abandon.tap()
+                let confirm = app.buttons["Abandon"].firstMatch
+                if confirm.waitForExistence(timeout: 3) { confirm.tap() }
+                if app.buttons["challenge.start.10k"].waitForExistence(timeout: 5) {
+                    app.swipeDown()
+                    Thread.sleep(forTimeInterval: 1)
+                    attach(app, name: "43b-challenge-tiers")
+                }
+            }
             goBack(app)
         }
 
