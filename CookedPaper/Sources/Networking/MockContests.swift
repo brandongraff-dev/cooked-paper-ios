@@ -20,9 +20,49 @@ nonisolated enum MockContests {
         case ("POST", let rest) where rest.count == 3 && rest[0] == "challenges" && rest[2] == "abandon":
             lock.lock(); challengeActive = false; lock.unlock()
             return (200, ["challenge": challenge(tier: "50k", status: "abandoned", returnPct: "2.48")])
+        case ("GET", ["rooms"]):
+            return (200, ["live": [room(status: "live")], "upcoming": [room(status: "scheduled", title: "Fed decision day")], "mine": [] as [Any]])
+        case ("POST", ["rooms"]):
+            return (201, ["room": roomDetail(kind: "host", title: json["title"] as? String ?? "My stream")])
+        case ("POST", ["rooms", "join"]):
+            return (200, ["room": roomDetail(kind: "host", title: "Friday stream")])
+        case ("GET", let rest) where rest.count == 2 && rest[0] == "rooms":
+            return (200, ["room": roomDetail(kind: "event", title: "CPI day: the 8:30 print")])
+        case ("POST", let rest) where rest.count == 3 && rest[0] == "rooms" && rest[2] == "join":
+            return (200, ["room": roomDetail(kind: "event", title: "CPI day: the 8:30 print")])
         default:
             return nil
         }
+    }
+
+    private static func room(status: String, title: String = "CPI day: the 8:30 print", kind: String = "event") -> [String: Any] {
+        let live = status == "live"
+        return [
+            "id": "room-\(status)", "kind": kind, "title": title, "host": NSNull(),
+            "startingBalanceUsd": "10000.00",
+            "startsAt": MockAPI.iso(daysFromNow: live ? -0.01 : 2),
+            "endsAt": MockAPI.iso(daysFromNow: live ? 0.03 : 2.04),
+            "status": status, "participantCount": live ? 214 : 0, "joined": false, "inviteCode": NSNull(),
+        ]
+    }
+
+    private static func roomDetail(kind: String, title: String) -> [String: Any] {
+        let names = ["degenwizard", "you", "solsniper", "paperhands_og", "moonboi"]
+        let returns = ["12.40", "6.10", "3.02", "-1.25", "-8.80"]
+        var detail = room(status: "live", title: title, kind: kind)
+        detail["joined"] = true
+        if kind == "host" {
+            detail["host"] = ["username": "degenwizard"]
+            detail["inviteCode"] = "Fr1dAyS7"
+        }
+        detail["standings"] = names.enumerated().map { i, name in
+            ["rank": i + 1, "username": name, "isHost": kind == "host" && i == 0, "isYou": name == "you", "returnPct": returns[i]] as [String: Any]
+        }
+        detail["me"] = ["rank": 2, "returnPct": "6.10", "portfolioId": "room-portfolio"] as [String: Any]
+        detail["beatingHost"] = kind == "host" ? 0 : NSNull()
+        detail["sampleSize"] = names.count
+        detail["disclaimer"] = "Paper room: simulated prices, no stakes, no prizes."
+        return detail
     }
 
     private static func challenge(tier: String, status: String, returnPct: String, daysAgo: Double = 6) -> [String: Any] {

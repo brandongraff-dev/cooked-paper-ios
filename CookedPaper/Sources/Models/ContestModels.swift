@@ -78,3 +78,87 @@ struct ChallengeResponse: Decodable {
 struct CreateChallengeBody: Encodable {
     let tier: String
 }
+
+// MARK: - Rooms
+
+struct RoomSummary: Decodable, Identifiable, Hashable {
+    struct Host: Decodable, Hashable { let username: String }
+
+    let id: String
+    /// event (scheduled by Cooked, open to all) or host (a streamer's, by code)
+    let kind: String
+    let title: String
+    let host: Host?
+    @DecimalString var startingBalanceUsd: Decimal
+    let startsAt: String
+    let endsAt: String
+    /// scheduled, live, finished
+    let status: String
+    let participantCount: Int
+    let joined: Bool
+    let inviteCode: String?
+
+    var startDate: Date? { CompeteDate.parse(startsAt) }
+    var endDate: Date? { CompeteDate.parse(endsAt) }
+    var isLive: Bool { status == "live" }
+    var isFinished: Bool { status == "finished" }
+}
+
+struct RoomStanding: Decodable, Identifiable, Hashable {
+    var id: Int { rank }
+    let rank: Int
+    let username: String
+    let isHost: Bool
+    let isYou: Bool
+    @OptionalDecimalString var returnPct: Decimal?
+}
+
+struct RoomDetail: Decodable {
+    struct Me: Decodable {
+        let rank: Int?
+        @OptionalDecimalString var returnPct: Decimal?
+        let portfolioId: String?
+    }
+
+    let id: String
+    let kind: String
+    let title: String
+    let host: RoomSummary.Host?
+    @DecimalString var startingBalanceUsd: Decimal
+    let startsAt: String
+    let endsAt: String
+    let status: String
+    let participantCount: Int
+    let joined: Bool
+    let inviteCode: String?
+    let standings: [RoomStanding]
+    let me: Me?
+    let beatingHost: Int?
+    let sampleSize: Int
+    let disclaimer: String?
+
+    var startDate: Date? { CompeteDate.parse(startsAt) }
+    var endDate: Date? { CompeteDate.parse(endsAt) }
+    var isLive: Bool { status == "live" }
+    var isFinished: Bool { status == "finished" }
+}
+
+struct RoomListResponse: Decodable {
+    let live: [RoomSummary]
+    let upcoming: [RoomSummary]
+    let mine: [RoomSummary]
+}
+
+struct RoomResponse: Decodable {
+    let room: RoomDetail
+}
+
+struct CreateRoomBody: Encodable {
+    let title: String
+    let startsAt: String
+    let durationMinutes: Int
+}
+
+struct JoinRoomBody: Encodable {
+    let inviteCode: String
+}

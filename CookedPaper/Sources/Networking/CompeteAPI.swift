@@ -238,6 +238,40 @@ enum ChallengeAPI {
     }
 }
 
+/// Rooms: market event rooms and host rooms (Beat the Streamer). Bearer.
+enum RoomAPI {
+    static func list() async throws -> RoomListResponse {
+        try await APIClient.shared.send(Endpoint(path: "/paper/rooms"), as: RoomListResponse.self)
+    }
+
+    static func get(id: String) async throws -> RoomDetail {
+        try await APIClient.shared.send(Endpoint(path: "/paper/rooms/\(id)"), as: RoomResponse.self).room
+    }
+
+    static func join(id: String) async throws -> RoomDetail {
+        try await APIClient.shared.send(Endpoint(path: "/paper/rooms/\(id)/join", method: "POST"), as: RoomResponse.self).room
+    }
+
+    static func join(code: String) async throws -> RoomDetail {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/rooms/join", method: "POST", body: APIClient.shared.encode(JoinRoomBody(inviteCode: code))),
+            as: RoomResponse.self
+        ).room
+    }
+
+    static func create(title: String, startsAt: Date, durationMinutes: Int) async throws -> RoomDetail {
+        let body = CreateRoomBody(
+            title: title,
+            startsAt: ISO8601DateFormatter().string(from: startsAt),
+            durationMinutes: durationMinutes
+        )
+        return try await APIClient.shared.send(
+            Endpoint(path: "/paper/rooms", method: "POST", body: APIClient.shared.encode(body)),
+            as: RoomResponse.self
+        ).room
+    }
+}
+
 extension Error {
     /// The route answered 404 — for the compete endpoints, usually "this server
     /// doesn't have the feature yet".

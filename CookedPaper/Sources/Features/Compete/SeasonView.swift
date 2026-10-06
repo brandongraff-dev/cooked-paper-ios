@@ -46,6 +46,31 @@ struct SeasonView: View {
             .padding(.horizontal, Space.margin)
             .padding(.top, Space.s16)
             .accessibilityIdentifier("season.challenges")
+            NavigationLink(value: CompeteRoute.rooms) {
+                HStack(spacing: Space.s12) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.title2)
+                        .foregroundStyle(Color.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Live Rooms")
+                            .font(.rowTitle)
+                            .foregroundStyle(Color.textPrimary)
+                        Text("Trade CPI and Fed days with everyone, or host a room for your stream.")
+                            .font(.rowSubtitle)
+                            .foregroundStyle(Color.textSecondary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(Color.textTertiary)
+                }
+                .padding(Space.s16)
+                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            }
+            .buttonStyle(.pressable)
+            .padding(.horizontal, Space.margin)
+            .padding(.top, Space.s12)
+            .accessibilityIdentifier("season.rooms")
             Group {
                 if isLoading {
                     skeleton
