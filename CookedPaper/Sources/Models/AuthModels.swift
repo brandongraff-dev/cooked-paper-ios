@@ -7,7 +7,7 @@ struct PublicUser: Decodable {
     /// Null for accounts that never linked a wallet — every account in this app.
     let walletAddress: String?
     let foundingMember: Bool?
-    /// Seeds the gradient behind the avatar monogram (`ProfileAvatar`). Optional
+    /// Seeds the color behind the avatar monogram (`ProfileAvatar`). Optional
     /// here, and below, so an older server's user still decodes.
     let avatarSeed: String?
     /// ISO8601; "Joined <Month Year>" on the profile.

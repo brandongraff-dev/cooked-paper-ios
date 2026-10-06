@@ -8,7 +8,7 @@ import UIKit
 // MARK: - Palette
 
 extension Color {
-    /// Second brand color, paired with `accent` in the brand gradient.
+    /// Second brand color.
     static let accentViolet = Color(rgb: 0x8B7BFF)
 
     // Icon tile colors (iOS-style squircles). Never green or red: those mean up and down.

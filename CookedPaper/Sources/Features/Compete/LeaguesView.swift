@@ -159,7 +159,7 @@ private struct LeagueRow: View {
     }
 }
 
-/// A league's badge: the same seeded gradient people get, keyed on the league id.
+/// A league's badge: the same seeded color people get, keyed on the league id.
 struct LeagueAvatar: View {
     let name: String
     let seed: String
