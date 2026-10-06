@@ -111,6 +111,9 @@ nonisolated enum MockAPI {
         if match("POST", "paper/portfolios/:/trades") != nil { return (200, executeResponse(body)) }
         if match("POST", "paper/portfolios/:/reset") != nil { return (200, [:] as [String: Any]) }
         if match("GET", "paper/discover") != nil { return (200, discover) }
+        if match("GET", "paper/recap") != nil {
+            return (200, recap(month: query["month"] ?? "2026-10"))
+        }
         if let c = match("GET", "paper/leaderboard/portfolios/:/positions") {
             return (200, traderPositions(portfolioId: c[0]))
         }
@@ -483,6 +486,24 @@ nonisolated enum MockAPI {
             "returnPct": ["pct": returnPct, "sampleSize": roundTrips, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
             "roundTripCount": roundTrips, "resetCount": rank % 3 == 0 ? 1 : 0, "createdAt": iso(daysFromNow: -20),
             "isBot": username == "the_monkey",
+        ]
+    }
+
+    private static func recap(month: String) -> [String: Any] {
+        let wif = tokens[1], bonk = tokens[0]
+        return [
+            "month": month, "provenance": "PAPER · SIMULATED",
+            "returnPct": ["pct": "12.40", "sampleSize": 14, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
+            "tradeCount": 31, "roundTripCount": 14,
+            "winRatePct": ["pct": "57.1", "sampleSize": 14, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
+            "bestTrade": ["tokenMint": wif.mint, "symbol": wif.symbol, "returnPct": "48.20"],
+            "worstTrade": ["tokenMint": bonk.mint, "symbol": bonk.symbol, "returnPct": "-21.05"],
+            "mostTraded": ["tokenMint": wif.mint, "symbol": wif.symbol, "tradeCount": 9] as [String: Any],
+            "avgHoldMinutes": 214,
+            "personality": ["id": "sniper", "title": "The Sniper", "description": "Picks spots carefully and is right most of the time."],
+            "monkey": ["returnPct": "3.20", "beatMonkey": true] as [String: Any],
+            "dailyCall": ["played": 18, "correct": 11],
+            "computedAt": iso(daysFromNow: 0),
         ]
     }
 

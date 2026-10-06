@@ -90,6 +90,12 @@ struct SeasonView: View {
                     .accessibilityIdentifier("season.achievements")
                     RowSeparator(leadingInset: 24 + Space.s12)
                 }
+                NavigationLink(value: CompeteRoute.recap) {
+                    LinkRow(symbol: "sparkles.rectangle.stack", title: "Your monthly recap", detail: nil)
+                }
+                .buttonStyle(.pressable)
+                .accessibilityIdentifier("season.recap")
+                RowSeparator(leadingInset: 24 + Space.s12)
                 NavigationLink(value: CompeteRoute.seasonHistory) {
                     LinkRow(symbol: "clock.arrow.circlepath", title: "Past seasons", detail: nil)
                 }

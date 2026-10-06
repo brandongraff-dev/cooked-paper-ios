@@ -38,6 +38,46 @@ struct PaperLeaderboardEntry: Decodable, Identifiable {
     var isHouseBot: Bool { isBot == true }
 }
 
+/// `GET /paper/recap`: one month of your main portfolio, percentages only.
+struct PaperRecap: Decodable {
+    struct Trade: Decodable, Hashable {
+        let tokenMint: String
+        let symbol: String?
+        @DecimalString var returnPct: Decimal
+    }
+    struct MostTraded: Decodable, Hashable {
+        let tokenMint: String
+        let symbol: String?
+        let tradeCount: Int
+    }
+    struct Personality: Decodable, Hashable {
+        let id: String
+        let title: String
+        let description: String
+    }
+    struct Monkey: Decodable, Hashable {
+        @DecimalString var returnPct: Decimal
+        let beatMonkey: Bool?
+    }
+    struct DailyCall: Decodable, Hashable {
+        let played: Int
+        let correct: Int
+    }
+
+    let month: String
+    let returnPct: MeasuredPct
+    let tradeCount: Int
+    let roundTripCount: Int
+    let winRatePct: MeasuredPct
+    let bestTrade: Trade?
+    let worstTrade: Trade?
+    let mostTraded: MostTraded?
+    let avgHoldMinutes: Int?
+    let personality: Personality
+    let monkey: Monkey?
+    let dailyCall: DailyCall
+}
+
 /// One open position of a ranked trader: shares and returns only, never amounts.
 struct PaperTraderPosition: Decodable, Identifiable {
     var id: String { tokenMint }
