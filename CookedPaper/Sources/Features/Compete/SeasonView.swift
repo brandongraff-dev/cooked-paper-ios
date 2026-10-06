@@ -395,36 +395,46 @@ private struct PlayGrid: View {
     ]
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: Space.s12), GridItem(.flexible(), spacing: Space.s12)], spacing: Space.s12) {
-            ForEach(modes) { mode in
-                NavigationLink(value: mode.route) {
-                    VStack(alignment: .leading, spacing: Space.s4) {
-                        HStack(alignment: .top) {
-                            IconTile(symbol: mode.symbol, color: mode.color, size: 40)
-                            Spacer(minLength: 0)
-                        }
-                        ModeArt(mode: mode.id, color: mode.color)
-                            .frame(height: 34)
-                            .padding(.vertical, Space.s8)
-                        Text(mode.title)
-                            .font(.rowTitle)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(1)
-                        Text(mode.caption)
-                            .font(.caption13)
-                            .foregroundStyle(Color.textSecondary)
-                            .lineLimit(1)
+        // A plain Grid, not LazyVGrid: the tiles sit below the fold, and a lazy grid
+        // wouldn't build them (or expose them to VoiceOver and UI tests) until scrolled to.
+        Grid(horizontalSpacing: Space.s12, verticalSpacing: Space.s12) {
+            ForEach([0, 2], id: \.self) { start in
+                GridRow {
+                    ForEach(modes[start..<start + 2]) { mode in
+                        tile(mode)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Space.s16)
-                    .glassCard(tint: mode.color)
                 }
-                .buttonStyle(.pressable)
-                .accessibilityLabel(mode.title)
-                .accessibilityHint(mode.detail)
-                .accessibilityIdentifier(mode.id)
             }
         }
+    }
+
+    private func tile(_ mode: Mode) -> some View {
+        NavigationLink(value: mode.route) {
+            VStack(alignment: .leading, spacing: Space.s4) {
+                HStack(alignment: .top) {
+                    IconTile(symbol: mode.symbol, color: mode.color, size: 40)
+                    Spacer(minLength: 0)
+                }
+                ModeArt(mode: mode.id, color: mode.color)
+                    .frame(height: 34)
+                    .padding(.vertical, Space.s8)
+                Text(mode.title)
+                    .font(.rowTitle)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+                Text(mode.caption)
+                    .font(.caption13)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Space.s16)
+            .glassCard(tint: mode.color)
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel(mode.title)
+        .accessibilityHint(mode.detail)
+        .accessibilityIdentifier(mode.id)
     }
 }
 

@@ -414,11 +414,17 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
     @MainActor
     private func openFromSeason(_ app: XCUIApplication, id: String, unreached: inout [String]) -> Bool {
         let entry = app.descendants(matching: .any)[id].firstMatch
-        guard entry.waitForExistence(timeout: 5) else {
+        var swipes = 0
+        // Scroll it into being if it is below the fold.
+        while !entry.waitForExistence(timeout: 2) && swipes < 4 {
+            app.swipeUp()
+            swipes += 1
+        }
+        guard entry.exists else {
             unreached.append("no \(id) on the Season page")
             return false
         }
-        var swipes = 0
+        swipes = 0
         while !entry.isHittable && swipes < 4 {
             app.swipeUp()
             swipes += 1
