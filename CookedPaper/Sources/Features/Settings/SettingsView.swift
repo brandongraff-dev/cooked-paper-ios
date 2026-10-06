@@ -256,7 +256,7 @@ struct SettingsView: View {
 
 /// One Settings row: a plain SF Symbol in secondary gray, a title, and an optional
 /// detail or trailing glyph.
-private struct SettingsRow: View {
+struct SettingsRow: View {
     let symbol: String
     let title: String
     var detail: String? = nil
