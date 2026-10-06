@@ -19,7 +19,7 @@ struct StreamerModeView: View {
                     .font(.body)
                     .foregroundStyle(Color.textSecondary)
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section("Overlay link") {
                 if isLoading {
@@ -49,26 +49,26 @@ struct StreamerModeView: View {
                         .foregroundStyle(Color.negative)
                 }
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section {
                 Text("Anyone with this link can see your paper portfolio's returns and recent trades. If it leaks, make a new one: the old link stops working at once.")
                     .font(.footnote)
                     .foregroundStyle(Color.textSecondary)
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section("Play with your viewers") {
                 NavigationLink {
                     RoomsView()
                 } label: {
-                    SettingsRow(symbol: "dot.radiowaves.left.and.right", title: "Host a room: Beat the Streamer")
+                    SettingsRow(symbol: "dot.radiowaves.left.and.right", title: "Host a room: Beat the Streamer", tint: .tilePink)
                 }
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
         }
         .scrollContentBackground(.hidden)
-        .background(Color.appBackground)
+        .screenBackground()
         .navigationTitle("Streamer mode")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

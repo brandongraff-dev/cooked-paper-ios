@@ -61,7 +61,7 @@ struct RoomDetailView: View {
             .padding(.horizontal, Space.margin)
             .padding(.vertical, Space.s16)
         }
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle(room?.title ?? "Room")
         .navigationBarTitleDisplayMode(.inline)
@@ -131,7 +131,7 @@ struct RoomDetailView: View {
         }
         .padding(Space.s16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
     }
 
     private func myStanding(_ me: RoomDetail.Me, room: RoomDetail) -> some View {
@@ -148,7 +148,7 @@ struct RoomDetailView: View {
             ChangeText(percent: me.returnPct, font: .rowValue)
         }
         .padding(Space.s16)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
     }
 
     private func standings(_ room: RoomDetail) -> some View {

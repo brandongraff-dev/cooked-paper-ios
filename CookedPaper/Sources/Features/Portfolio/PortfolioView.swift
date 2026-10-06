@@ -19,7 +19,7 @@ struct PortfolioView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle("Portfolio")
         .navigationBarTitleDisplayMode(.large)
@@ -65,6 +65,7 @@ struct PortfolioView: View {
                                 if index < snapshot.positions.count - 1 { RowSeparator() }
                             }
                         }
+                        .glassList()
                     }
                 }
 
@@ -88,6 +89,7 @@ struct PortfolioView: View {
                                 if index < leveraged.count - 1 { RowSeparator() }
                             }
                         }
+                        .glassList()
                     }
                 }
 
@@ -106,6 +108,7 @@ struct PortfolioView: View {
                                 if index < closed.count - 1 { RowSeparator() }
                             }
                         }
+                        .glassList()
                     }
                 }
             }
@@ -137,8 +140,9 @@ struct PortfolioView: View {
                     .contentTransition(.numericText())
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                HStack(spacing: Space.s4) {
-                    Text("\(PriceFormat.signedUSD(change)) (\(PriceFormat.change(percent)))")
+                HStack(spacing: Space.s8) {
+                    ChangePill(percent: percent)
+                    Text(PriceFormat.signedUSD(change))
                         .foregroundStyle(Color.direction(percent))
                         .contentTransition(.numericText())
                     Text(scrubIndex == nil ? "All time" : "At this point")
@@ -159,14 +163,16 @@ struct PortfolioView: View {
         let cash = live.latestTick?.cashUsd ?? snapshot.cashUsd
         let stats = snapshot.stats
         return [
-            StatItem(label: "Cash", value: PriceFormat.usd(cash)),
+            StatItem(label: "Cash", value: PriceFormat.usd(cash), symbol: "dollarsign", tint: .tileBlue),
             StatItem(
                 label: "Unrealized P&L",
                 value: stats.unrealizedPnlUsd.usd.map(PriceFormat.signedUSD) ?? "—",
-                color: Color.direction(stats.unrealizedPnlUsd.usd)
+                color: Color.direction(stats.unrealizedPnlUsd.usd),
+                symbol: "chart.line.uptrend.xyaxis",
+                tint: .tilePurple
             ),
-            StatItem(label: "Win rate", value: stats.winRatePct.pct.map { "\($0.formatted(.number.precision(.fractionLength(0))))%" } ?? "—"),
-            StatItem(label: "Trades", value: "\(stats.tradeCount)"),
+            StatItem(label: "Win rate", value: stats.winRatePct.pct.map { "\($0.formatted(.number.precision(.fractionLength(0))))%" } ?? "—", symbol: "target", tint: .tileOrange),
+            StatItem(label: "Trades", value: "\(stats.tradeCount)", symbol: "arrow.left.arrow.right", tint: .tileTeal),
         ]
     }
 

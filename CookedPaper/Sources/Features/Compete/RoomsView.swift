@@ -47,7 +47,7 @@ struct RoomsView: View {
             .padding(.horizontal, Space.margin)
             .padding(.vertical, Space.s16)
         }
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle("Live Rooms")
         .navigationBarTitleDisplayMode(.large)
@@ -105,6 +105,7 @@ struct RoomsView: View {
                         if index < rooms.count - 1 { RowSeparator() }
                     }
                 }
+                .glassList()
             }
         }
     }

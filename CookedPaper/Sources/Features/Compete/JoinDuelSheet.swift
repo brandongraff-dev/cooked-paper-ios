@@ -80,7 +80,7 @@ struct JoinDuelSheet: View {
         .padding(.horizontal, Space.margin)
         .padding(.bottom, Space.s8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.appBackground)
+        .screenBackground()
     }
 
     private func join() async {

@@ -30,7 +30,7 @@ struct ProfileView: View {
                 }
                 .accessibilityIdentifier("profile.edit")
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             // Hidden entirely on a server without achievements (404).
             if !achievements.isUnavailable {
@@ -42,7 +42,7 @@ struct ProfileView: View {
                     }
                     .accessibilityIdentifier("profile.achievements")
                 }
-                .listRowBackground(Color.appSurface)
+                .listRowBackground(GlassRowBackground())
             }
 
             Section("Account") {
@@ -54,7 +54,7 @@ struct ProfileView: View {
                     ProfileRow(symbol: "calendar", title: "Joined", detail: joined)
                 }
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             if let code = user?.referralCode, !code.isEmpty {
                 Section {
@@ -99,12 +99,12 @@ struct ProfileView: View {
                 } header: {
                     Text("Invite friends")
                 }
-                .listRowBackground(Color.appSurface)
+                .listRowBackground(GlassRowBackground())
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .tint(Color.textPrimary)
         .navigationTitle("Profile")
@@ -208,7 +208,7 @@ struct EditProfileView: View {
                 .padding(.bottom, Space.s24)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Color.appBackground)
+            .screenBackground()
             .navigationTitle("Edit profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

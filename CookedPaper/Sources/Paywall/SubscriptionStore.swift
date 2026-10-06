@@ -6,10 +6,13 @@ enum ProductID {
     static let monthly = "app.cooked.paper.monthly"
     static let annual = "app.cooked.paper.annual"
     static let weekly = "app.cooked.paper.weekly"
+    /// The one-time offer: annual at a lower price, shown once after the onboarding
+    /// paywall is closed (see `OneTimeOffer`).
+    static let annualOffer = "app.cooked.paper.annual.offer"
     /// The paywall sells annual (the default, with the free trial) and monthly.
     /// Weekly stays recognised so a weekly subscription bought earlier keeps working;
     /// it is no longer sold here.
-    static let all = [weekly, monthly, annual]
+    static let all = [weekly, monthly, annual, annualOffer]
 }
 
 /// The entire paywall: auto-renewing subscriptions in one group, StoreKit 2 first.
@@ -60,6 +63,7 @@ final class SubscriptionStore {
     var monthlyProduct: Product? { products.first { $0.id == ProductID.monthly } }
     var annualProduct: Product? { products.first { $0.id == ProductID.annual } }
     var weeklyProduct: Product? { products.first { $0.id == ProductID.weekly } }
+    var offerProduct: Product? { products.first { $0.id == ProductID.annualOffer } }
 
     func loadProducts() async {
         isLoadingProducts = true

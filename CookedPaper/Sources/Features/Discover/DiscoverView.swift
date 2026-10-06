@@ -26,7 +26,7 @@ struct DiscoverView: View {
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.immediately)
-        .background(Color.appBackground)
+        .screenBackground()
         .refreshable { await load() }
         .navigationDestination(for: String.self) { mint in
             TokenDetailView(mint: mint)
@@ -154,6 +154,7 @@ struct DiscoverView: View {
                         }
                     }
                 }
+                .glassList()
                 .padding(.horizontal, Space.margin)
                 .id(feed)
                 .transition(.opacity)
@@ -304,7 +305,7 @@ private struct TrendingCard: View {
         }
         .padding(Space.s16)
         .frame(width: 136, alignment: .leading)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
     }
 }
 

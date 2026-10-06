@@ -31,7 +31,8 @@ struct SquadsView: View {
                             VStack(spacing: 0) {
                                 ForEach(Array(squads.enumerated()), id: \.element.id) { index, squad in
                                     NavigationLink(value: CompeteRoute.squad(id: squad.id)) {
-                                        HStack {
+                                        HStack(spacing: Metrics.avatarGap) {
+                                            IconTile(symbol: "person.3.fill", color: .tileIndigo, size: Metrics.avatar)
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text(squad.name)
                                                     .font(.rowTitle)
@@ -44,7 +45,10 @@ struct SquadsView: View {
                                             if squad.openProposals > 0 {
                                                 Text("\(squad.openProposals) to vote")
                                                     .font(.caption13.weight(.semibold))
-                                                    .foregroundStyle(Color.accent)
+                                                    .foregroundStyle(Color.accentInk)
+                                                    .padding(.horizontal, Space.s8)
+                                                    .padding(.vertical, 3)
+                                                    .background(LinearGradient.brand, in: Capsule())
                                             }
                                             Image(systemName: "chevron.right")
                                                 .foregroundStyle(Color.textTertiary)
@@ -57,6 +61,7 @@ struct SquadsView: View {
                                     if index < squads.count - 1 { RowSeparator() }
                                 }
                             }
+                            .glassList()
                         }
                     }
                 } else if let errorMessage {
@@ -78,7 +83,7 @@ struct SquadsView: View {
             .padding(.horizontal, Space.margin)
             .padding(.vertical, Space.s16)
         }
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle("Squads")
         .navigationBarTitleDisplayMode(.large)

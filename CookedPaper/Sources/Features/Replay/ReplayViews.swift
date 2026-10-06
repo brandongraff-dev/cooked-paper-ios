@@ -50,7 +50,7 @@ struct ReplayListView: View {
             .padding(.horizontal, Space.margin)
             .padding(.vertical, Space.s16)
         }
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle("Crash Replay")
         .navigationBarTitleDisplayMode(.large)
@@ -88,7 +88,7 @@ struct ReplayListView: View {
             }
         }
         .padding(Space.s16)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
     }
 
     private func load() async {
@@ -146,7 +146,7 @@ struct ReplayPlayerView: View {
                 }
             }
             .padding(Space.margin)
-            .background(Color.appBackground)
+            .screenBackground()
             .navigationTitle("Mystery crash #\(summary.number)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -321,14 +321,32 @@ struct ReplayResultView: View {
     @State private var clipURL: URL?
     @State private var isExporting = false
     @State private var exportError: String?
+    @State private var stamped = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView {
             VStack(spacing: Space.s20) {
+                // The verdict lands like a stamp: big, tilted, then settles.
                 Text(result.survived ? "SURVIVED" : "COOKED")
-                    .font(.system(size: 52, weight: .black))
-                    .foregroundStyle(result.survived ? Color.positive : Color.negative)
+                    .font(.system(size: 46, weight: .black))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, Space.s24)
+                    .padding(.vertical, Space.s8)
+                    .background(
+                        LinearGradient.tile(result.survived ? Color.positive : Color.negative),
+                        in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    )
+                    .shadow(color: (result.survived ? Color.positive : Color.negative).opacity(0.5), radius: 24, y: 8)
+                    .rotationEffect(.degrees(-6))
+                    .scaleEffect(stamped || reduceMotion ? 1 : 1.8)
+                    .opacity(stamped || reduceMotion ? 1 : 0)
+                    .padding(.top, Space.s16)
                     .accessibilityIdentifier("replay.verdict")
+                    .onAppear {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.55)) { stamped = true }
+                        if result.survived { Haptics.success() }
+                    }
                 HStack(spacing: Space.s24) {
                     VStack(spacing: 2) {
                         ChangeText(percent: result.returnPct, font: .system(size: 28, weight: .bold).monospacedDigit())
@@ -357,7 +375,7 @@ struct ReplayResultView: View {
                 }
                 .padding(Space.s16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .glassCard()
 
                 if let clipURL {
                     ShareLink(item: clipURL) {
@@ -383,6 +401,13 @@ struct ReplayResultView: View {
                         .font(.caption13)
                         .foregroundStyle(Color.negative)
                 }
+                ProUpsellCard(
+                    symbol: "chart.line.downtrend.xyaxis",
+                    color: .tileTeal,
+                    title: result.survived ? "Try a harder crash" : "Run it back",
+                    detail: "FTX and LUNA are waiting. Every crash replay comes with Pro.",
+                    reason: .locked("Every crash replay")
+                )
                 Button("Done", action: onDone)
                     .buttonStyle(.secondary)
             }

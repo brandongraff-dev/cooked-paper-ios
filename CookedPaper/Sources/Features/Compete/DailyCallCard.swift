@@ -124,7 +124,7 @@ struct DailyCallCardContent: View {
                 .accessibilityIdentifier("dailyCall.legal")
         }
         .padding(Space.s20)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
         .accessibilityIdentifier("dailyCall.card")
     }
 
@@ -413,6 +413,6 @@ struct CommunitySplit: View {
                 .padding(Space.margin)
         }
     }
-    .background(Color.appBackground)
+    .screenBackground()
 }
 #endif

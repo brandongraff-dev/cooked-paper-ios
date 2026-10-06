@@ -44,7 +44,7 @@ struct SquadDetailView: View {
             .padding(.horizontal, Space.margin)
             .padding(.vertical, Space.s16)
         }
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle(squad?.name ?? "Squad")
         .navigationBarTitleDisplayMode(.inline)
@@ -166,7 +166,7 @@ struct SquadDetailView: View {
                         }
                     }
                     .padding(Space.s16)
-                    .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                    .glassCard()
                 }
             }
         }

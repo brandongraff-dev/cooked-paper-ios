@@ -58,7 +58,7 @@ struct ChallengesView: View {
             .padding(.horizontal, Space.margin)
             .padding(.vertical, Space.s16)
         }
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle("Prop Challenges")
         .navigationBarTitleDisplayMode(.large)
@@ -124,7 +124,7 @@ struct ChallengesView: View {
                         }
                     }
                     .padding(Space.s16)
-                    .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                    .glassCard()
                 }
                 .buttonStyle(.pressable)
                 .disabled(isStarting)
@@ -268,7 +268,7 @@ struct ChallengeProgressCard: View {
                 .foregroundStyle(Color.textTertiary)
         }
         .padding(Space.s20)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
     }
 }
 

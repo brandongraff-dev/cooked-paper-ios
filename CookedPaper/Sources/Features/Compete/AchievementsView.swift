@@ -29,7 +29,7 @@ struct AchievementsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle("Achievements")
         .navigationBarTitleDisplayMode(.inline)
@@ -78,7 +78,7 @@ struct AchievementsView: View {
             ProgressTrack(fraction: center.total > 0 ? Double(center.unlockedCount) / Double(center.total) : 0)
         }
         .padding(Space.s16)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
         .accessibilityElement(children: .combine)
     }
 

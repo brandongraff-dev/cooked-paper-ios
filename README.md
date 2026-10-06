@@ -227,7 +227,22 @@ before it ships.
 
 **Prices and trials are set in App Store Connect**, not here; `StoreKit/Products.storekit`
 (local testing only) matches. In App Store Connect: annual $49.99 with a 1-week free
-introductory offer, monthly $12.99 with no introductory offer, weekly removed from sale.
+introductory offer, monthly $12.99 with no introductory offer, weekly removed from sale,
+and `app.cooked.paper.annual.offer` at $29.99/year (no introductory offer) in the same
+group.
+
+**One-time offer.** Closing the onboarding paywall without buying shows
+`OneTimeOfferView` once per device: the offer plan at $29.99/year, with the regular
+annual price struck through beside it. It says it is shown once, and it is (see
+`OneTimeOffer`); there is no timer. If StoreKit doesn't return the offer product, the
+paywall simply closes.
+
+**Conversion funnel.** `Funnel` (Sources/Networking/Funnel.swift) sends a few named
+steps to `POST /events` on the API: app opened, onboarding started/completed, paywall
+shown/closed (with its reason), trial started, subscribed, offer shown, upsell tapped,
+first trade. Events carry a random per-install id, never the IDFA, so no App Tracking
+Transparency prompt is needed. The API's `docs/funnel.md` has the query that turns
+them into a funnel.
 
 StoreKit 2 decides on the device as before. In addition, every verified
 transaction's signed JWS is sent to `POST /billing/apple/transactions`

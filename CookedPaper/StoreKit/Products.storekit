@@ -148,6 +148,28 @@
           "subscriptionGroupID": "5A6F1B10-0000-4000-8000-000000000010",
           "type": "RecurringSubscription",
           "winbackOffers": []
+        },
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "29.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "5A6F1B10-0000-4000-8000-000000000017",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "Full access to Cooked Paper, billed yearly at the one-time offer price.",
+              "displayName": "Cooked Paper Annual (Offer)",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "app.cooked.paper.annual.offer",
+          "recurringSubscriptionPeriod": "P1Y",
+          "referenceName": "Annual Offer",
+          "subscriptionGroupID": "5A6F1B10-0000-4000-8000-000000000010",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
         }
       ]
     }

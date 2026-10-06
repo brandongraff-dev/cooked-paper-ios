@@ -72,16 +72,25 @@ struct PriceLineChart: View {
                     yStart: .value("Floor", low - pad),
                     yEnd: .value("Price", value)
                 )
-                // The one gradient on this screen: a 15% → 0% wash under the line so
-                // the shape reads at a glance. Justified by the spec; nothing else
-                // here is tinted.
+                // A wash under the line in the period's direction, so the shape reads
+                // at a glance.
                 .foregroundStyle(
-                    LinearGradient(colors: [lineColor.opacity(0.15), lineColor.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    LinearGradient(colors: [lineColor.opacity(0.32), lineColor.opacity(0)], startPoint: .top, endPoint: .bottom)
                 )
 
                 LineMark(x: .value("Time", index), y: .value("Price", value))
                     .foregroundStyle(lineColor)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+            }
+
+            // The latest value, lit, while nothing is being scrubbed.
+            if selectedIndex == nil, let last = values.last {
+                PointMark(x: .value("Time", values.count - 1), y: .value("Price", last))
+                    .foregroundStyle(lineColor.opacity(0.25))
+                    .symbolSize(220)
+                PointMark(x: .value("Time", values.count - 1), y: .value("Price", last))
+                    .foregroundStyle(lineColor)
+                    .symbolSize(50)
             }
 
             // Pinned to the line at the trade's bucket.
@@ -104,6 +113,7 @@ struct PriceLineChart: View {
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
         .chartLegend(.hidden)
+        .shadow(color: lineColor.opacity(0.35), radius: 10, y: 4)
         .chartOverlay { proxy in
             GeometryReader { geometry in
                 Rectangle()

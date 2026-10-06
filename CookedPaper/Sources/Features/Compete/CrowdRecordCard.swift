@@ -86,7 +86,7 @@ struct CrowdRecordContent: View {
         }
         .padding(Space.s20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
         .accessibilityElement(children: .contain)
     }
 

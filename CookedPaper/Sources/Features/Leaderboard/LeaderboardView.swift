@@ -46,7 +46,7 @@ struct LeaderboardView: View {
             .padding(.bottom, Space.s24)
         }
         .scrollIndicators(.hidden)
-        .background(Color.appBackground)
+        .screenBackground()
         .refreshable { await load() }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !isLoading && errorMessage == nil && !entries.isEmpty {
@@ -100,6 +100,7 @@ struct LeaderboardView: View {
                     }
                 }
             }
+            .glassList()
         }
     }
 
@@ -176,11 +177,20 @@ private struct LeaderboardRow: View {
 
     private var isTopThree: Bool { entry.rank <= 3 }
 
+    /// Gold, silver, bronze.
+    private var medalColor: Color {
+        switch entry.rank {
+        case 1: Color(rgb: 0xFFC83D)
+        case 2: Color(rgb: 0xC9D1DC)
+        default: Color(rgb: 0xE08A4B)
+        }
+    }
+
     var body: some View {
         HStack(spacing: Space.s12) {
             Text("\(entry.rank)")
-                .font(.rowSubvalue)
-                .foregroundStyle(isTopThree ? Color.textPrimary : Color.textTertiary)
+                .font(isTopThree ? .rowValue : .rowSubvalue)
+                .foregroundStyle(isTopThree ? medalColor : Color.textTertiary)
                 .frame(width: Self.rankWidth, alignment: .leading)
 
             ListRow(
@@ -189,12 +199,17 @@ private struct LeaderboardRow: View {
                     ? "Bot · trades at random · \(entry.roundTripCount) round trips"
                     : "\(entry.roundTripCount) round trips"
             ) {
-                MonogramAvatar(text: entry.username)
+                ProfileAvatar(seed: entry.username, name: entry.username)
+                    .overlay {
+                        if isTopThree {
+                            Circle().strokeBorder(medalColor, lineWidth: 2)
+                        }
+                    }
                     .overlay(alignment: .bottomTrailing) {
                         if isTopThree {
                             Image(systemName: "medal.fill")
-                                .font(.caption2)
-                                .foregroundStyle(Color.textSecondary)
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(medalColor)
                                 .padding(Space.s4)
                                 .background(Color.appBackground, in: Circle())
                                 .offset(x: Space.s4, y: Space.s4)

@@ -83,7 +83,7 @@ struct SignInView: View {
                 .padding(.top, Space.s24)
                 .padding(.bottom, Space.s8)
         }
-        .background(Color.appBackground)
+        .screenBackground()
         .preferredColorScheme(.dark)
         .task { await auth.loadAppleNonce() }
     }

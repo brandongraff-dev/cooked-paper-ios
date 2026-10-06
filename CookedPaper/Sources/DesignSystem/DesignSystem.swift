@@ -1,9 +1,9 @@
 import Foundation
 import SwiftUI
 
-// The whole visual language in one file. Near-monochrome: color is information
-// (green up, red down) plus one brand accent used in at most one or two places per
-// screen. Hierarchy comes from type and spacing, never from gradients or glows.
+// The core visual language: color, type, spacing, motion, number formats. Green and
+// red mean up and down and nothing else. Depth (the lit backdrop, glass cards, icon
+// tiles, the blue-to-violet brand gradient) lives in `Glass.swift`.
 
 // MARK: - Color
 

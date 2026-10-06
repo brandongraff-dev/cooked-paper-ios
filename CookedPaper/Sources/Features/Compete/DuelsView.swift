@@ -37,7 +37,7 @@ struct DuelsView: View {
             .padding(.bottom, Space.section)
         }
         .scrollIndicators(.hidden)
-        .background(Color.appBackground)
+        .screenBackground()
         .refreshable { await store.load() }
         .reservesTabBarSpace()
         .task { await store.load() }
@@ -203,7 +203,7 @@ private struct DuelRecordCard: View {
             column("Streak", stats.map { "\($0.currentStreak)" }, caption: stats.map { "Best \($0.bestStreak)" })
         }
         .padding(.vertical, Space.s16)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("duels.record")
     }

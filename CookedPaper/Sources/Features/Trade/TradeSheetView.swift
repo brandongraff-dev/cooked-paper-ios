@@ -301,6 +301,7 @@ struct TradeSheetView: View {
                 && averageCost.map { result.fill.fillPriceUsd > $0 } == true
                 && FreeTier.shared.isLimited
             fillResult = result
+            Funnel.trackOnce(.firstTrade)
             Haptics.success()
             await portfolio.refreshAfterTrade()
             let soldAtProfit = result.trade.side == .sell
