@@ -53,18 +53,7 @@ struct TradeSheetView: View {
         NavigationStack {
             Group {
                 if let fillResult {
-                    FillConfirmationView(
-                        result: fillResult,
-                        symbol: tokenSymbol,
-                        // A sell with a known entry gets the on-device image card.
-                        shareCard: shareCard(for: fillResult),
-                        // A sell has a result worth sharing: this token's card
-                        // (main portfolio only; a duel's result is the duel itself).
-                        shareSubjectPath: fillResult.trade.side == .sell && portfolio.isMain
-                            ? portfolio.portfolioId.map { ShareCardSubject.position(portfolioId: $0, mint: mint) }
-                            : nil,
-                        onSeePro: offersProAfterWin ? showAfterWinPaywall : nil
-                    ) { dismiss() }
+                    fillConfirmation(fillResult)
                 } else if isOutOfFreeTrades {
                     OutOfFreeTradesView {
                         paywallReason = .outOfTrades
@@ -272,9 +261,29 @@ struct TradeSheetView: View {
         }
     }
 
-    private func showAfterWinPaywall() {
-        paywallReason = .afterWin
-        showsPaywall = true
+    /// Offered after a profitable sell on the free tier; nil otherwise.
+    private var afterWinAction: (() -> Void)? {
+        guard offersProAfterWin else { return nil }
+        return {
+            paywallReason = .afterWin
+            showsPaywall = true
+        }
+    }
+
+    private func fillConfirmation(_ result: ExecutePaperTradeResponse) -> some View {
+        // A sell has a result worth sharing: this token's card (main portfolio
+        // only; a duel's result is the duel itself).
+        let subjectPath: String? = result.trade.side == .sell && portfolio.isMain
+            ? portfolio.portfolioId.map { ShareCardSubject.position(portfolioId: $0, mint: mint) }
+            : nil
+        return FillConfirmationView(
+            result: result,
+            symbol: tokenSymbol,
+            // A sell with a known entry gets the on-device image card.
+            shareCard: shareCard(for: result),
+            shareSubjectPath: subjectPath,
+            onSeePro: afterWinAction
+        ) { dismiss() }
     }
 
     private func execute() async {
