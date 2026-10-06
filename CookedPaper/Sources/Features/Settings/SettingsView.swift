@@ -39,6 +39,16 @@ struct SettingsView: View {
             }
             .listRowBackground(Color.appSurface)
 
+            Section("Streaming") {
+                NavigationLink {
+                    StreamerModeView()
+                } label: {
+                    SettingsRow(symbol: "video", title: "Streamer mode")
+                }
+                .accessibilityIdentifier("settings.streamer")
+            }
+            .listRowBackground(Color.appSurface)
+
             Section("Subscription") {
                 Button { showManageSubscriptions = true } label: {
                     SettingsRow(symbol: "creditcard", title: "Manage subscription")

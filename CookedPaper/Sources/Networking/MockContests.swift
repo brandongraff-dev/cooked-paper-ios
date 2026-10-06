@@ -20,6 +20,8 @@ nonisolated enum MockContests {
         case ("POST", let rest) where rest.count == 3 && rest[0] == "challenges" && rest[2] == "abandon":
             lock.lock(); challengeActive = false; lock.unlock()
             return (200, ["challenge": challenge(tier: "50k", status: "abandoned", returnPct: "2.48")])
+        case ("GET", ["overlay", "key"]), ("POST", ["overlay", "key"]):
+            return (200, ["key": "demoOverlayKey1234567890", "url": "https://cooked.trade/overlay/demoOverlayKey1234567890"])
         case ("GET", ["rooms"]):
             return (200, ["live": [room(status: "live")], "upcoming": [room(status: "scheduled", title: "Fed decision day")], "mine": [] as [Any]])
         case ("POST", ["rooms"]):

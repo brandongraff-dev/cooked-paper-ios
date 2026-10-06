@@ -238,6 +238,18 @@ enum ChallengeAPI {
     }
 }
 
+/// The streamer overlay link. Bearer.
+enum OverlayAPI {
+    static func current() async throws -> OverlayKey {
+        try await APIClient.shared.send(Endpoint(path: "/paper/overlay/key"), as: OverlayKey.self)
+    }
+
+    /// A new link; the old one stops working.
+    static func rotate() async throws -> OverlayKey {
+        try await APIClient.shared.send(Endpoint(path: "/paper/overlay/key", method: "POST"), as: OverlayKey.self)
+    }
+}
+
 /// Rooms: market event rooms and host rooms (Beat the Streamer). Bearer.
 enum RoomAPI {
     static func list() async throws -> RoomListResponse {

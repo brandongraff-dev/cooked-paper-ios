@@ -79,6 +79,14 @@ struct CreateChallengeBody: Encodable {
     let tier: String
 }
 
+// MARK: - Streamer overlay
+
+/// `GET`/`POST /paper/overlay/key`: the overlay page for OBS, or nulls before one exists.
+struct OverlayKey: Decodable {
+    let key: String?
+    let url: String?
+}
+
 // MARK: - Rooms
 
 struct RoomSummary: Decodable, Identifiable, Hashable {
