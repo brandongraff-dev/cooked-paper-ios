@@ -94,6 +94,7 @@ struct ScreenBackdrop: View {
                 startRadius: 0,
                 endRadius: 360
             )
+            GrainOverlay(opacity: 0.05)
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
@@ -130,6 +131,7 @@ private struct GlassCard: ViewModifier {
                             )
                         )
                     }
+                    GrainOverlay(opacity: 0.08).clipShape(shape)
                 }
                 .environment(\.colorScheme, .dark)
             }
@@ -158,8 +160,9 @@ extension View {
 
 // MARK: - Icon tile
 
-/// A white SF Symbol on a lit, colored squircle — the way iOS Settings marks a row.
-/// Bounces once when it first appears (not under Reduce Motion).
+/// A glossy app-icon-style tile: a lit, colored squircle with a glass highlight across
+/// its top, a bevel, and the symbol embossed in white with a tinted drop. Bounces once
+/// when it first appears (not under Reduce Motion).
 struct IconTile: View {
     let symbol: String
     var color: Color = .tileBlue
@@ -169,17 +172,41 @@ struct IconTile: View {
     @State private var appeared = false
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+        shape
             .fill(LinearGradient.tile(color))
             .overlay {
-                RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+                // The gloss: a soft white dome over the top half.
+                Ellipse()
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.42), .white.opacity(0)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: size * 1.3, height: size * 0.75)
+                    .offset(y: -size * 0.32)
+                    .clipShape(shape)
+            }
+            .overlay {
+                shape.strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.45), .white.opacity(0.05), .black.opacity(0.25)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: max(0.5, size / 48)
+                )
             }
             .frame(width: size, height: size)
             .overlay {
                 Image(systemName: symbol)
-                    .font(.system(size: size * 0.5, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: size * 0.5, weight: .bold))
+                    .foregroundStyle(
+                        LinearGradient(colors: [.white, .white.opacity(0.82)], startPoint: .top, endPoint: .bottom)
+                    )
+                    .shadow(color: color.blended(with: .black, by: 0.5).opacity(0.6), radius: 0, y: size / 40)
                     .symbolEffect(.bounce, value: appeared)
             }
             .shadow(color: color.opacity(0.35), radius: size * 0.18, y: size * 0.08)

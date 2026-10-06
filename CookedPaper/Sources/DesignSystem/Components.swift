@@ -201,7 +201,7 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Glass capsule with a hairline rim, white label, 56pt.
+/// Brushed-gunmetal capsule with a bevel, white label, 56pt.
 struct SecondaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
@@ -211,10 +211,7 @@ struct SecondaryButtonStyle: ButtonStyle {
             .foregroundStyle(Color.textPrimary)
             .frame(maxWidth: .infinity)
             .frame(height: Metrics.buttonHeight)
-            .background(.ultraThinMaterial, in: Capsule())
-            .background(Color.appSurfaceElevated.opacity(0.6), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-            .environment(\.colorScheme, .dark)
+            .metalSurface()
             .opacity(isEnabled ? 1 : 0.35)
             .pressEffect(configuration.isPressed)
     }
@@ -232,7 +229,20 @@ struct AccentButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity)
             .frame(height: Metrics.buttonHeight)
             .background(LinearGradient.brand, in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1).blendMode(.overlay))
+            .overlay {
+                // Glass lip on the top half: the button reads as a raised, lit object.
+                Capsule()
+                    .fill(LinearGradient(colors: [.white.opacity(0.35), .white.opacity(0)], startPoint: .top, endPoint: .center))
+                    .padding(2)
+                    .blendMode(.plusLighter)
+            }
+            .overlay(
+                Capsule().strokeBorder(
+                    LinearGradient(colors: [.white.opacity(0.55), .black.opacity(0.2)], startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1
+                )
+            )
+            .sheen(in: Capsule())
             .shadow(color: Color.accent.opacity(isEnabled ? 0.45 : 0), radius: 14, y: 6)
             .opacity(isEnabled ? 1 : 0.35)
             .pressEffect(configuration.isPressed)
@@ -319,7 +329,16 @@ struct Chip: View {
                 .foregroundStyle(isSelected ? Color.inverseText : Color.textSecondary)
                 .padding(.horizontal, Space.s12)
                 .frame(height: Metrics.chipHeight)
-                .background(isSelected ? Color.inverseFill : Color.appSurface, in: Capsule())
+                .background {
+                    if isSelected {
+                        Capsule().fill(Color.inverseFill)
+                    } else {
+                        Capsule()
+                            .fill(.ultraThinMaterial)
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+                            .environment(\.colorScheme, .dark)
+                    }
+                }
         }
         .buttonStyle(.pressable)
         .animation(Motion.standard, value: isSelected)

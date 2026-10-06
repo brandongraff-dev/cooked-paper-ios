@@ -15,7 +15,7 @@ struct ReplayListView: View {
                     Text("Survive the crash")
                         .font(.appLargeTitle)
                         .foregroundStyle(Color.textPrimary)
-                    Text("Real crashes from crypto history, hour by hour, with the name and date hidden. You get $10,000. Find out what it was when it's over.")
+                    Text("Real crashes. Names hidden. $10K to survive.")
                         .font(.body)
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -64,31 +64,54 @@ struct ReplayListView: View {
     }
 
     private func row(_ scenario: ReplaySummary) -> some View {
-        HStack(spacing: Space.s12) {
-            Image(systemName: scenario.number > 1 && !FreeTier.shared.isPro ? "lock.fill" : "play.fill")
-                .foregroundStyle(Color.accent)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Mystery crash #\(scenario.number)")
-                    .font(.rowTitle)
+        let locked = scenario.number > 1 && !FreeTier.shared.isPro
+        return VStack(alignment: .leading, spacing: Space.s12) {
+            ZStack(alignment: .topLeading) {
+                TeaserChart(values: scenario.teaser ?? [])
+                    .frame(height: 92)
+                Text("#\(scenario.number)")
+                    .font(.system(size: 13, weight: .heavy).monospacedDigit())
                     .foregroundStyle(Color.textPrimary)
-                Text("\(scenario.difficulty.capitalized) · \(scenario.candleCount) hours · \(scenario.players) played")
-                    .font(.rowSubtitle)
-                    .foregroundStyle(Color.textSecondary)
+                    .padding(.horizontal, Space.s8)
+                    .padding(.vertical, 4)
+                    .metalSurface()
             }
-            Spacer()
-            if let best = scenario.bestReturnPct {
-                VStack(alignment: .trailing, spacing: 2) {
-                    ChangeText(percent: best, font: .rowValue)
-                    Text("your best")
-                        .font(.caption13)
-                        .foregroundStyle(Color.textSecondary)
+            HStack(alignment: .center, spacing: Space.s12) {
+                DifficultyFlames(difficulty: scenario.difficulty)
+                Label("\(scenario.players)", systemImage: "person.2.fill")
+                    .font(.caption13Digits)
+                    .foregroundStyle(Color.textSecondary)
+                    .labelStyle(.titleAndIcon)
+                Spacer()
+                if let best = scenario.bestReturnPct {
+                    ChangePill(percent: best)
+                } else if locked {
+                    Image(systemName: "lock.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.textPrimary)
+                        .frame(width: 28, height: 28)
+                        .metalSurface(Circle())
+                } else {
+                    Image(systemName: "play.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.accentInk)
+                        .frame(width: 28, height: 28)
+                        .background(LinearGradient.brand, in: Circle())
                 }
             }
         }
         .padding(Space.s16)
-        .glassCard()
+        .glassCard(tint: difficultyColor(scenario.difficulty))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Mystery crash \(scenario.number), \(scenario.difficulty), \(scenario.players) played\(locked ? ", Pro" : "")")
+    }
+
+    private func difficultyColor(_ difficulty: String) -> Color {
+        switch difficulty {
+        case "brutal": .tilePink
+        case "hard": .tileOrange
+        default: .tileTeal
+        }
     }
 
     private func load() async {
@@ -98,6 +121,100 @@ struct ReplayListView: View {
         } catch {
             if response == nil { errorMessage = error.localizedDescription }
         }
+    }
+}
+
+/// How a crash starts, then a question mark where it goes: the first third of the run
+/// as a lit line with a wash beneath, fading into a dashed unknown.
+struct TeaserChart: View {
+    let values: [Double]
+
+    var body: some View {
+        Canvas { context, size in
+            guard values.count > 1, let low = values.min(), let high = values.max() else { return }
+            let known = size.width * 0.62
+            let span = max(high - low, 0.0001)
+            func point(_ i: Int) -> CGPoint {
+                CGPoint(
+                    x: known * CGFloat(i) / CGFloat(values.count - 1),
+                    y: size.height * 0.12 + (1 - CGFloat((values[i] - low) / span)) * size.height * 0.6
+                )
+            }
+            var line = Path()
+            line.move(to: point(0))
+            for i in 1..<values.count { line.addLine(to: point(i)) }
+
+            var area = line
+            area.addLine(to: CGPoint(x: known, y: size.height))
+            area.addLine(to: CGPoint(x: 0, y: size.height))
+            area.closeSubpath()
+            context.fill(
+                area,
+                with: .linearGradient(
+                    Gradient(colors: [Color.white.opacity(0.18), .clear]),
+                    startPoint: .zero,
+                    endPoint: CGPoint(x: 0, y: size.height)
+                )
+            )
+            context.stroke(
+                line,
+                with: .linearGradient(
+                    Gradient(colors: [Color.white.opacity(0.5), .white]),
+                    startPoint: .zero,
+                    endPoint: CGPoint(x: known, y: 0)
+                ),
+                style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
+            )
+            // Where the story continues: a dashed line off into the unknown.
+            let end = point(values.count - 1)
+            var unknown = Path()
+            unknown.move(to: end)
+            unknown.addLine(to: CGPoint(x: size.width * 0.8, y: end.y))
+            context.stroke(
+                unknown,
+                with: .color(.white.opacity(0.35)),
+                style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [3, 5])
+            )
+            let dot = CGRect(x: end.x - 4, y: end.y - 4, width: 8, height: 8)
+            context.fill(Path(ellipseIn: dot.insetBy(dx: -5, dy: -5)), with: .color(.white.opacity(0.18)))
+            context.fill(Path(ellipseIn: dot), with: .color(.white))
+        }
+        .overlay(alignment: .trailing) {
+            Text("?")
+                .font(.system(size: 54, weight: .black, design: .rounded))
+                .foregroundStyle(LinearGradient.brand)
+                .shadow(color: Color.accentViolet.opacity(0.6), radius: 12)
+                .padding(.trailing, Space.s8)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Difficulty as flames: one for medium, two for hard, three for brutal.
+struct DifficultyFlames: View {
+    let difficulty: String
+
+    private var count: Int {
+        switch difficulty {
+        case "brutal": 3
+        case "hard": 2
+        default: 1
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(0..<3, id: \.self) { index in
+                Image(systemName: "flame.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(
+                        index < count
+                            ? AnyShapeStyle(LinearGradient(colors: [.tileYellow, .tileOrange, .tilePink], startPoint: .top, endPoint: .bottom))
+                            : AnyShapeStyle(Color.white.opacity(0.15))
+                    )
+            }
+        }
+        .accessibilityLabel(difficulty)
     }
 }
 

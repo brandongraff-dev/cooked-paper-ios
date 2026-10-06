@@ -92,7 +92,7 @@ struct ChallengesView: View {
                 Text("Pass a prop challenge")
                     .font(.appLargeTitle)
                     .foregroundStyle(Color.textPrimary)
-                Text("Hit +8% before you lose 5%, within 30 days. The same rules funded traders face, practiced on paper.")
+                Text("+8% to pass. −5% and you\u{2019}re out. 30 days.")
                     .font(.body)
                     .foregroundStyle(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -106,25 +106,7 @@ struct ChallengesView: View {
                 Button {
                     Task { await start(tier, response: response) }
                 } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(tier.tierLabel) Challenge")
-                                .font(.rowTitle)
-                                .foregroundStyle(Color.textPrimary)
-                            Text("Pass at \(PriceFormat.usd(tier.startingBalanceUsd * (1 + tier.rules.profitTargetPct / 100))) · fail at \(PriceFormat.usd(tier.startingBalanceUsd * (1 - tier.rules.maxLossPct / 100)))")
-                                .font(.rowSubtitle)
-                                .foregroundStyle(Color.textSecondary)
-                        }
-                        Spacer()
-                        if isStarting {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "chevron.right")
-                                .foregroundStyle(Color.textTertiary)
-                        }
-                    }
-                    .padding(Space.s16)
-                    .glassCard()
+                    ChallengeTierCard(tier: tier, isStarting: isStarting)
                 }
                 .buttonStyle(.pressable)
                 .disabled(isStarting)
@@ -324,5 +306,82 @@ struct ChallengeShareCard: View {
             }
             .padding(28)
         }
+    }
+}
+
+/// A challenge tier as a brushed-metal account card: the size, big; a glow in the
+/// tier's color; and the rail from the fail line to the pass line.
+private struct ChallengeTierCard: View {
+    let tier: ChallengeTierOffer
+    let isStarting: Bool
+
+    private var glow: Color {
+        switch tier.tier {
+        case "100k": .tileYellow
+        case "50k": .tileIndigo
+        default: .tileTeal
+        }
+    }
+
+    var body: some View {
+        let start = tier.startingBalanceUsd
+        let pass = start * (1 + tier.rules.profitTargetPct / 100)
+        let fail = start * (1 - tier.rules.maxLossPct / 100)
+        let shape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+        VStack(alignment: .leading, spacing: Space.s16) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(tier.tierLabel)
+                    .font(.system(size: 34, weight: .heavy).monospacedDigit())
+                    .foregroundStyle(
+                        LinearGradient(colors: [.white, glow.blended(with: .white, by: 0.5)], startPoint: .top, endPoint: .bottom)
+                    )
+                Text("ACCOUNT")
+                    .font(.caption.weight(.heavy))
+                    .tracking(1.4)
+                    .foregroundStyle(Color.textSecondary)
+                Spacer()
+                if isStarting {
+                    ProgressView()
+                } else {
+                    Image(systemName: "arrow.right")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(Color.accentInk)
+                        .frame(width: 32, height: 32)
+                        .background(LinearGradient.brand, in: Circle())
+                }
+            }
+            VStack(spacing: Space.s4) {
+                Capsule()
+                    .fill(LinearGradient(colors: [.negative, .tileYellow, .positive], startPoint: .leading, endPoint: .trailing))
+                    .frame(height: 5)
+                    .overlay(alignment: .leading) {
+                        GeometryReader { geometry in
+                            // Where the start sits between fail and pass.
+                            let ratio = NSDecimalNumber(decimal: (start - fail) / max(pass - fail, 1)).doubleValue
+                            Circle()
+                                .fill(.white)
+                                .frame(width: 12, height: 12)
+                                .shadow(color: .white.opacity(0.8), radius: 5)
+                                .offset(x: geometry.size.width * ratio - 6, y: -3.5)
+                        }
+                    }
+                HStack {
+                    Label(PriceFormat.usd(fail), systemImage: "xmark")
+                        .foregroundStyle(Color.negative)
+                    Spacer()
+                    Label(PriceFormat.usd(pass), systemImage: "flag.checkered")
+                        .foregroundStyle(Color.positive)
+                }
+                .font(.caption13Digits)
+            }
+        }
+        .padding(Space.s20)
+        .background {
+            RadialGradient(colors: [glow.opacity(0.35), .clear], center: .topLeading, startRadius: 0, endRadius: 220)
+                .clipShape(shape)
+        }
+        .metalSurface(shape)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(tier.tierLabel) challenge. Pass at \(PriceFormat.usd(pass)), fail at \(PriceFormat.usd(fail)).")
     }
 }

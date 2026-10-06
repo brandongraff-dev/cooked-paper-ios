@@ -108,7 +108,7 @@ struct SquadDetailView: View {
                     .foregroundStyle(Color.textPrimary)
                 ChangeText(percent: squad.returnPct, font: .rowValue)
             }
-            Text("Shared by \(squad.members.count) of \(squad.maxMembers) · every trade needs a majority")
+            Text("\(squad.members.count)/\(squad.maxMembers) members · majority rules")
                 .font(.rowSubtitle)
                 .foregroundStyle(Color.textSecondary)
             HStack(spacing: Space.s8) {
@@ -148,7 +148,8 @@ struct SquadDetailView: View {
                             Spacer()
                             if let end = item.expiryDate { CountdownText(end: end) }
                         }
-                        Text("@\(item.proposer) · \(item.yes) yes, \(item.no) no · needs \(item.needed)")
+                        VoteMeter(yes: item.yes, no: item.no, needed: item.needed)
+                        Text("@\(item.proposer)")
                             .font(.rowSubtitle)
                             .foregroundStyle(Color.textSecondary)
                         if let mine = item.myVote {
@@ -320,7 +321,7 @@ struct ProposeSquadTradeSheet: View {
                     }
                 }
                 Section {
-                    Text("Your yes counts now. It runs when most of the squad agrees, within 30 minutes.")
+                    Text("Your yes counts now. It runs when most of the squad agrees (30 min).")
                         .font(.footnote)
                         .foregroundStyle(Color.textSecondary)
                 }
@@ -352,5 +353,36 @@ struct ProposeSquadTradeSheet: View {
             body.sellPercent = percent
         }
         await onSubmit(body)
+    }
+}
+
+/// Votes as pips: one per vote needed, filled green for each yes, and a red count for
+/// the no votes. Reads at a glance how close a proposal is.
+struct VoteMeter: View {
+    let yes: Int
+    let no: Int
+    let needed: Int
+
+    var body: some View {
+        HStack(spacing: Space.s8) {
+            HStack(spacing: 4) {
+                ForEach(0..<max(needed, 1), id: \.self) { index in
+                    Capsule()
+                        .fill(index < yes ? AnyShapeStyle(Color.positive) : AnyShapeStyle(Color.white.opacity(0.12)))
+                        .frame(width: 22, height: 8)
+                        .shadow(color: index < yes ? Color.positive.opacity(0.6) : .clear, radius: 4)
+                }
+            }
+            Text("\(yes)/\(needed)")
+                .font(.caption13Digits)
+                .foregroundStyle(Color.textPrimary)
+            if no > 0 {
+                Label("\(no)", systemImage: "hand.thumbsdown.fill")
+                    .font(.caption13Digits)
+                    .foregroundStyle(Color.negative)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(yes) of \(needed) yes votes needed, \(no) no")
     }
 }

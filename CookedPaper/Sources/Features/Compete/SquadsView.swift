@@ -18,7 +18,7 @@ struct SquadsView: View {
                     Text("Trade as a squad")
                         .font(.appLargeTitle)
                         .foregroundStyle(Color.textPrimary)
-                    Text("3 to 5 friends, one $10,000 paper portfolio. Anyone proposes a trade; it runs when most of the squad votes yes.")
+                    Text("One $10K portfolio, 3–5 friends. Every trade is a vote.")
                         .font(.body)
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

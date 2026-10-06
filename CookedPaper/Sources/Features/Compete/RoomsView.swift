@@ -79,7 +79,7 @@ struct RoomsView: View {
             Text("Trade the moment, together")
                 .font(.appLargeTitle)
                 .foregroundStyle(Color.textPrimary)
-            Text("Everyone gets $10,000 for the same window. Best return when it ends wins the room.")
+            Text("Same $10K, same window. Best return wins.")
                 .font(.body)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -237,7 +237,7 @@ struct HostRoomSheet: View {
                     }
                 }
                 Section {
-                    Text("Everyone who joins with your code gets $10,000 of paper money for the same window, and the board shows how many are beating you.")
+                    Text("Viewers join with your code. The board shows who\u{2019}s beating you.")
                         .font(.footnote)
                         .foregroundStyle(Color.textSecondary)
                 }

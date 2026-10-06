@@ -25,7 +25,8 @@ nonisolated enum MockContests {
         case ("GET", ["replays"]):
             return (200, [
                 "scenarios": [(1, "medium", "covid"), (2, "medium", "may2021"), (3, "hard", "ftx"), (4, "brutal", "luna")].map { n, d, id -> [String: Any] in
-                    ["id": id, "number": n, "difficulty": d, "candleCount": 97, "bestReturnPct": n == 1 ? "4.12" : NSNull(), "players": 120 * n] as [String: Any]
+                    ["id": id, "number": n, "difficulty": d, "candleCount": 97, "bestReturnPct": n == 1 ? "4.12" : NSNull(), "players": 120 * n,
+                     "teaser": teaser(seed: n)] as [String: Any]
                 },
                 "startingBalanceUsd": "10000.00",
             ] as [String: Any])
@@ -60,6 +61,14 @@ nonisolated enum MockContests {
             return (200, ["room": roomDetail(kind: "event", title: "CPI day: the 8:30 print")])
         default:
             return nil
+        }
+    }
+
+    /// A wobbly opening, different per scenario, for the list cards.
+    private static func teaser(seed: Int) -> [Double] {
+        (0..<24).map { i in
+            let x = Double(i)
+            return 100 + sin(x * 0.55 + Double(seed)) * 2.2 - x * 0.12 * Double(seed % 3 + 1) + cos(x * 1.7) * 0.8
         }
     }
 
