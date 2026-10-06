@@ -132,7 +132,7 @@ struct ReplayClipFrame: View {
                 Text(showsVerdict ? result.reveal.date : "Could you survive it?")
                     .font(.system(size: 22, weight: .heavy))
                     .foregroundStyle(.white)
-                ReplayChart(candles: candles, actions: actions)
+                CrashReplayChart(candles: candles, actions: actions)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 HStack {
                     Text("Me \(ShareCardFormat.pnl(result.returnPct))")

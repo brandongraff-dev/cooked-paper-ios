@@ -132,7 +132,7 @@ struct ReplayPlayerView: View {
                     ReplayResultView(scenario: scenario, actions: actions, result: result) { dismiss() }
                 } else if scenario != nil {
                     stats
-                    ReplayChart(candles: Array(candles.prefix(index + 1)), actions: actions)
+                    CrashReplayChart(candles: Array(candles.prefix(index + 1)), actions: actions)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .accessibilityLabel("Price chart, hour \(index + 1) of \(candles.count)")
                     controls
@@ -259,7 +259,7 @@ struct ReplayPlayerView: View {
 
 /// Candles drawn up to the current hour, scaled to what is on screen, with a dot where
 /// each move was made (green buy, red sell).
-struct ReplayChart: View {
+struct CrashReplayChart: View {
     let candles: [[Double]]
     let actions: [ReplayAction]
     var positive: Color = .positive
