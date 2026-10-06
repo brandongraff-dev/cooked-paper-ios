@@ -278,7 +278,6 @@ struct ChallengeShareCard: View {
     var body: some View {
         ZStack {
             ShareCardStyle.background
-            RadialGradient(colors: [ShareCardStyle.glow.opacity(0.35), .clear], center: .top, startRadius: 0, endRadius: 320)
             VStack(alignment: .leading, spacing: 16) {
                 Text("PROP CHALLENGE")
                     .font(.system(size: 13, weight: .bold))
@@ -310,7 +309,7 @@ struct ChallengeShareCard: View {
     }
 }
 
-/// A challenge tier as a brushed-metal account card: the size, big; a glow in the
+/// A challenge tier as a solid metal account card: the size, big; a stripe in the
 /// tier's color; and the rail from the fail line to the pass line.
 private struct ChallengeTierCard: View {
     let tier: ChallengeTierOffer
@@ -333,9 +332,7 @@ private struct ChallengeTierCard: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(tier.tierLabel)
                     .font(.system(size: 34, weight: .heavy).monospacedDigit())
-                    .foregroundStyle(
-                        LinearGradient(colors: [.white, glow.blended(with: .white, by: 0.5)], startPoint: .top, endPoint: .bottom)
-                    )
+                    .foregroundStyle(Color.textPrimary)
                 Text("ACCOUNT")
                     .font(.caption.weight(.heavy))
                     .tracking(1.4)
@@ -348,12 +345,11 @@ private struct ChallengeTierCard: View {
                         .font(.footnote.weight(.bold))
                         .foregroundStyle(Color.accentInk)
                         .frame(width: 32, height: 32)
-                        .background(LinearGradient.brand, in: Circle())
+                        .background(Color.accent, in: Circle())
                 }
             }
             VStack(spacing: Space.s4) {
-                Capsule()
-                    .fill(LinearGradient(colors: [.negative, .tileYellow, .positive], startPoint: .leading, endPoint: .trailing))
+                FailPassRail()
                     .frame(height: 5)
                     .overlay(alignment: .leading) {
                         GeometryReader { geometry in
@@ -362,7 +358,6 @@ private struct ChallengeTierCard: View {
                             Circle()
                                 .fill(.white)
                                 .frame(width: 12, height: 12)
-                                .shadow(color: .white.opacity(0.8), radius: 5)
                                 .offset(x: geometry.size.width * ratio - 6, y: -3.5)
                         }
                     }
@@ -377,10 +372,24 @@ private struct ChallengeTierCard: View {
             }
         }
         .padding(Space.s20)
-        .background {
-            RadialGradient(colors: [glow.opacity(0.35), .clear], center: .topLeading, startRadius: 0, endRadius: 220)
+        .metalSurface(shape)
+        .overlay(alignment: .leading) {
+            // The tier's color as a solid edge stripe.
+            Rectangle()
+                .fill(glow)
+                .frame(width: 4)
                 .clipShape(shape)
         }
-        .metalSurface(shape)
+    }
+}
+
+/// Three solid segments, red to amber to green: the fail line to the pass line.
+struct FailPassRail: View {
+    var body: some View {
+        HStack(spacing: 2) {
+            Capsule().fill(Color.negative)
+            Capsule().fill(Color.tileYellow)
+            Capsule().fill(Color.positive)
+        }
     }
 }

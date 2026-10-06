@@ -97,7 +97,7 @@ struct ReplayListView: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(Color.accentInk)
                         .frame(width: 28, height: 28)
-                        .background(LinearGradient.brand, in: Circle())
+                        .background(Color.accent, in: Circle())
                 }
             }
         }
@@ -124,7 +124,7 @@ struct ReplayListView: View {
 }
 
 /// How a crash starts, then a question mark where it goes: the first third of the run
-/// as a lit line with a wash beneath, fading into a dashed unknown.
+/// as a line over a flat fill, then a dashed line into the unknown.
 struct TeaserChart: View {
     let values: [Double]
 
@@ -147,21 +147,10 @@ struct TeaserChart: View {
             area.addLine(to: CGPoint(x: known, y: size.height))
             area.addLine(to: CGPoint(x: 0, y: size.height))
             area.closeSubpath()
-            context.fill(
-                area,
-                with: .linearGradient(
-                    Gradient(colors: [Color.white.opacity(0.18), .clear]),
-                    startPoint: .zero,
-                    endPoint: CGPoint(x: 0, y: size.height)
-                )
-            )
+            context.fill(area, with: .color(Color.white.opacity(0.08)))
             context.stroke(
                 line,
-                with: .linearGradient(
-                    Gradient(colors: [Color.white.opacity(0.5), .white]),
-                    startPoint: .zero,
-                    endPoint: CGPoint(x: known, y: 0)
-                ),
+                with: .color(.white),
                 style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
             )
             // Where the story continues: a dashed line off into the unknown.
@@ -181,8 +170,7 @@ struct TeaserChart: View {
         .overlay(alignment: .trailing) {
             Text("?")
                 .font(.system(size: 54, weight: .black, design: .rounded))
-                .foregroundStyle(LinearGradient.brand)
-                .shadow(color: Color.accentViolet.opacity(0.6), radius: 12)
+                .foregroundStyle(Color.accent)
                 .padding(.trailing, Space.s8)
         }
         .accessibilityHidden(true)
@@ -207,9 +195,7 @@ struct DifficultyFlames: View {
                 Image(systemName: "flame.fill")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(
-                        index < count
-                            ? AnyShapeStyle(LinearGradient(colors: [.tileYellow, .tileOrange, .tilePink], startPoint: .top, endPoint: .bottom))
-                            : AnyShapeStyle(Color.white.opacity(0.15))
+                        index < count ? Color.tileOrange : Color.white.opacity(0.15)
                     )
             }
         }
@@ -450,10 +436,9 @@ struct ReplayResultView: View {
                     .padding(.horizontal, Space.s24)
                     .padding(.vertical, Space.s8)
                     .background(
-                        LinearGradient.tile(result.survived ? Color.positive : Color.negative),
+                        result.survived ? Color.positive : Color.negative,
                         in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                     )
-                    .shadow(color: (result.survived ? Color.positive : Color.negative).opacity(0.5), radius: 24, y: 8)
                     .rotationEffect(.degrees(-6))
                     .scaleEffect(stamped || reduceMotion ? 1 : 1.8)
                     .opacity(stamped || reduceMotion ? 1 : 0)

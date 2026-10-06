@@ -48,7 +48,7 @@ struct SquadsView: View {
                                                     .foregroundStyle(Color.accentInk)
                                                     .padding(.horizontal, Space.s8)
                                                     .padding(.vertical, 3)
-                                                    .background(LinearGradient.brand, in: Capsule())
+                                                    .background(Color.accent, in: Capsule())
                                             }
                                             Image(systemName: "chevron.right")
                                                 .foregroundStyle(Color.textTertiary)

@@ -80,10 +80,10 @@ struct MonogramAvatar: View {
     }
 }
 
-/// A person's own avatar: a two-tone gradient circle picked deterministically from
+/// A person's own avatar: a solid colored circle picked deterministically from
 /// the account's `avatarSeed` (the user id when there isn't one), with the first
-/// letter of their name on it. The one gradient in the app — it is the account's
-/// color, so the same person looks the same on every device.
+/// letter of their name on it. The color is the account's, so the same person looks
+/// the same on every device.
 struct ProfileAvatar: View {
     let seed: String
     /// Display name, else username; the monogram is its first letter or digit.
@@ -93,16 +93,7 @@ struct ProfileAvatar: View {
     var body: some View {
         let hue = Self.hue(for: seed)
         Circle()
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color(hue: hue, saturation: 0.62, brightness: 0.92),
-                        Color(hue: (hue + 0.11).truncatingRemainder(dividingBy: 1), saturation: 0.72, brightness: 0.62),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
+            .fill(Color(hue: hue, saturation: 0.62, brightness: 0.82))
             .frame(width: size, height: size)
             .overlay(
                 Text(String(name.first(where: { $0.isLetter || $0.isNumber }) ?? "?").uppercased())
@@ -201,7 +192,7 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Brushed-gunmetal capsule with a bevel, white label, 56pt.
+/// Solid gunmetal capsule, white label, 56pt.
 struct SecondaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
@@ -217,8 +208,7 @@ struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Brand-gradient capsule with a soft glow and a lit top edge, dark label, 56pt —
-/// the screen's one main action.
+/// Solid accent capsule, dark label, 56pt — the screen's one main action.
 struct AccentButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
@@ -228,22 +218,7 @@ struct AccentButtonStyle: ButtonStyle {
             .foregroundStyle(Color.accentInk)
             .frame(maxWidth: .infinity)
             .frame(height: Metrics.buttonHeight)
-            .background(LinearGradient.brand, in: Capsule())
-            .overlay {
-                // Glass lip on the top half: the button reads as a raised, lit object.
-                Capsule()
-                    .fill(LinearGradient(colors: [.white.opacity(0.35), .white.opacity(0)], startPoint: .top, endPoint: .center))
-                    .padding(2)
-                    .blendMode(.plusLighter)
-            }
-            .overlay(
-                Capsule().strokeBorder(
-                    LinearGradient(colors: [.white.opacity(0.55), .black.opacity(0.2)], startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1
-                )
-            )
-            .sheen(in: Capsule())
-            .shadow(color: Color.accent.opacity(isEnabled ? 0.45 : 0), radius: 14, y: 6)
+            .background(Color.accent, in: Capsule())
             .opacity(isEnabled ? 1 : 0.35)
             .pressEffect(configuration.isPressed)
     }

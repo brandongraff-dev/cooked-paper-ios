@@ -111,12 +111,6 @@ struct RecapStoryCard: View {
     var body: some View {
         ZStack {
             ShareCardStyle.background
-            RadialGradient(
-                colors: [ShareCardStyle.glow.opacity(0.35), .clear],
-                center: .top,
-                startRadius: 0,
-                endRadius: 380
-            )
             VStack(alignment: .leading, spacing: 18) {
                 Text(monthLabel.uppercased())
                     .font(.system(size: 13, weight: .bold))

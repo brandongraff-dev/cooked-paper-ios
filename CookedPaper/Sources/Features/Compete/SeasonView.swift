@@ -465,14 +465,11 @@ private struct ModeArt: View {
         GeometryReader { geometry in
             let width = geometry.size.width
             ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(LinearGradient(colors: [.negative, .tileYellow, .positive], startPoint: .leading, endPoint: .trailing))
+                FailPassRail()
                     .frame(height: 6)
-                    .opacity(0.85)
                 Circle()
                     .fill(.white)
                     .frame(width: 14, height: 14)
-                    .shadow(color: .white.opacity(0.8), radius: 6)
                     .offset(x: width * 0.66 - 7)
                 Image(systemName: "flag.fill")
                     .font(.caption.weight(.bold))
@@ -534,7 +531,6 @@ private struct ModeArt: View {
             context.stroke(path, with: .color(Color(red: 1, green: 0.27, blue: 0.23)),
                            style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
         }
-        .shadow(color: Color.negative.opacity(0.6), radius: 6)
     }
 }
 
