@@ -390,7 +390,7 @@ struct DuelDetailView: View {
     }
 }
 
-private struct DuelLeveragedSelection: Identifiable {
+struct DuelLeveragedSelection: Identifiable {
     let id: String
     let portfolio: DuelPortfolioStore
 }
@@ -467,7 +467,7 @@ private struct HeadToHeadCard: View {
     }
 }
 
-private struct DuelPositionRow: View {
+struct DuelPositionRow: View {
     let position: PaperPosition
 
     var body: some View {

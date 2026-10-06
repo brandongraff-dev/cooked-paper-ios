@@ -217,6 +217,27 @@ enum DailyCallAPI {
     }
 }
 
+/// Prop-firm style challenges. Bearer.
+enum ChallengeAPI {
+    static func list() async throws -> ChallengeListResponse {
+        try await APIClient.shared.send(Endpoint(path: "/paper/challenges"), as: ChallengeListResponse.self)
+    }
+
+    static func start(tier: String) async throws -> Challenge {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/challenges", method: "POST", body: APIClient.shared.encode(CreateChallengeBody(tier: tier))),
+            as: ChallengeResponse.self
+        ).challenge
+    }
+
+    static func abandon(id: String) async throws -> Challenge {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/challenges/\(id)/abandon", method: "POST"),
+            as: ChallengeResponse.self
+        ).challenge
+    }
+}
+
 extension Error {
     /// The route answered 404 — for the compete endpoints, usually "this server
     /// doesn't have the feature yet".
@@ -264,6 +285,7 @@ enum CompeteErrorText {
         case "duel_limit": return "You already have 5 duels going. Finish or cancel one first."
         case "duel_not_found": return "That duel doesn't exist anymore."
         case "duel_not_active": return "This duel isn't live. Trading opens when it starts and closes when it ends."
+        case "contest_not_active": return "This isn't running right now, so its portfolio can't trade."
         case "duel_self": return "You can't duel yourself. Pick someone else."
         case "duel_exists": return "You already have an invite waiting with this player."
         case "user_not_found": return "No one goes by that username. Check the spelling."

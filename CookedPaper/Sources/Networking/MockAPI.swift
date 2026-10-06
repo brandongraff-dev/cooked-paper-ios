@@ -92,6 +92,7 @@ nonisolated enum MockAPI {
         if match("DELETE", "auth/account") != nil { return (204, [:] as [String: Any]) }
 
         if let leverage = MockLeverage.route(method: method, parts: parts, body: body) { return leverage }
+        if let contest = MockContests.route(method: method, parts: parts, body: body) { return contest }
         if let compete = MockCompete.route(method: method, parts: parts, body: body) { return compete }
 
         if match("POST", "paper/portfolios/starter") != nil {
@@ -572,7 +573,7 @@ nonisolated enum MockAPI {
 
     nonisolated(unsafe) private static let isoFormatter = ISO8601DateFormatter()
 
-    private static func iso(daysFromNow days: Double) -> String {
+    static func iso(daysFromNow days: Double) -> String {
         isoFormatter.string(from: Date().addingTimeInterval(days * 86400))
     }
 

@@ -83,14 +83,18 @@ final class DuelsStore {
 @MainActor
 final class DuelPortfolioStore {
     let portfolioId: String
+    /// The duel's id, or the contest's (challenge, room) for a contest portfolio.
     let duelId: String
+    /// The tag on a trade ticket: "DUEL", "CHALLENGE", "ROOM".
+    let label: String
 
     private(set) var snapshot: PaperSnapshotResponse?
     private(set) var errorMessage: String?
 
-    init(portfolioId: String, duelId: String) {
+    init(portfolioId: String, duelId: String, label: String = "DUEL") {
         self.portfolioId = portfolioId
         self.duelId = duelId
+        self.label = label
     }
 
     func refresh() async {

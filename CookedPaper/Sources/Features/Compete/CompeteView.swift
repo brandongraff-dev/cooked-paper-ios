@@ -66,6 +66,7 @@ nonisolated enum CompeteRoute: Hashable {
     case duel(id: String)
     case league(id: String)
     case recap
+    case challenges
 
     @MainActor @ViewBuilder
     var destination: some View {
@@ -76,6 +77,7 @@ nonisolated enum CompeteRoute: Hashable {
         case .duel(let id): DuelDetailView(duelId: id)
         case .league(let id): LeagueDetailView(leagueId: id, initial: LeaguesStore.shared.leagues?.first { $0.id == id })
         case .recap: RecapView()
+        case .challenges: ChallengesView()
         }
     }
 }

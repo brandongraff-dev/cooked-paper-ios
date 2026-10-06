@@ -21,6 +21,31 @@ struct SeasonView: View {
             CrowdRecordCard()
                 .padding(.horizontal, Space.margin)
                 .padding(.top, Space.s16)
+            NavigationLink(value: CompeteRoute.challenges) {
+                HStack(spacing: Space.s12) {
+                    Image(systemName: "flag.checkered")
+                        .font(.title2)
+                        .foregroundStyle(Color.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Prop Challenges")
+                            .font(.rowTitle)
+                            .foregroundStyle(Color.textPrimary)
+                        Text("Hit +8% before you lose 5%. Practice for a funded account.")
+                            .font(.rowSubtitle)
+                            .foregroundStyle(Color.textSecondary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(Color.textTertiary)
+                }
+                .padding(Space.s16)
+                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            }
+            .buttonStyle(.pressable)
+            .padding(.horizontal, Space.margin)
+            .padding(.top, Space.s16)
+            .accessibilityIdentifier("season.challenges")
             Group {
                 if isLoading {
                     skeleton
