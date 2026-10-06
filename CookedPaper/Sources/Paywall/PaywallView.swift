@@ -13,7 +13,7 @@ struct PaywallView: View {
     let reason: PaywallReason
     /// Closes the paywall without buying. Nil only for a paywall nothing can close.
     let onClose: (() -> Void)?
-    @State private var selectedProductID = ProductID.annual
+    @State private var selectedProductID = ProductID.monthly
     @State private var showsSignIn = false
     /// The plan waiting on the "want a reminder?" pre-prompt.
     @State private var pendingProduct: Product?
@@ -36,9 +36,9 @@ struct PaywallView: View {
         store.products.first { $0.id == selectedProductID }
     }
 
-    /// Yearly, Weekly, Monthly — the order the plans are presented in.
+    /// Monthly first (the default and the better deal), then weekly.
     private var orderedPlans: [Product] {
-        [store.annualProduct, store.weeklyProduct, store.monthlyProduct].compactMap { $0 }
+        [store.monthlyProduct, store.weeklyProduct].compactMap { $0 }
     }
 
     var body: some View {
@@ -127,7 +127,7 @@ struct PaywallView: View {
         }
         .task(id: store.products.map(\.id)) {
             await refreshTrialEligibility()
-            if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.annual }) ?? orderedPlans.first {
+            if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.monthly }) ?? orderedPlans.first {
                 selectedProductID = first.id
             }
         }
@@ -295,24 +295,13 @@ struct PaywallView: View {
                 ForEach(orderedPlans, id: \.id) { product in
                     PlanRow(
                         title: planTitle(product),
-                        badge: product.id == ProductID.annual ? savingsText(annual: product) : nil,
+                        badge: product.id == ProductID.monthly ? savingsText(monthly: product) : nil,
                         subtitle: planSubtitle(product),
                         price: "\(product.displayPrice)/\(shortUnit(product))",
                         detail: planDetail(product),
                         isSelected: selectedProductID == product.id
                     ) { select(product) }
                     .accessibilityIdentifier("paywall.plan.\(product.id)")
-                }
-                if let founding = store.foundingProduct {
-                    PlanRow(
-                        title: "Founding Member",
-                        badge: "FIRST 500",
-                        subtitle: "Pay once. Pro with no renewals.",
-                        price: founding.displayPrice,
-                        detail: "one time",
-                        isSelected: selectedProductID == founding.id
-                    ) { select(founding) }
-                    .accessibilityIdentifier("paywall.plan.\(founding.id)")
                 }
             }
 
@@ -484,9 +473,6 @@ struct PaywallView: View {
     private var ctaTitle: String {
         if orderedPlans.isEmpty { return "Try again" }
         guard let selectedProduct else { return "Continue" }
-        if selectedProduct.id == ProductID.founding {
-            return "Become a Founding Member · \(selectedProduct.displayPrice)"
-        }
         if let offer = trialOffer(selectedProduct) {
             return "Start \(trialDays(offer))-day free trial"
         }
@@ -553,12 +539,12 @@ struct PaywallView: View {
         }
     }
 
-    /// "SAVE 69%" — yearly versus a year of monthly.
-    private func savingsText(annual: Product) -> String? {
-        guard let monthly = store.monthlyProduct, monthly.price > 0 else { return nil }
-        let yearOfMonthly = monthly.price * 12
-        guard yearOfMonthly > annual.price else { return nil }
-        let saving = NSDecimalNumber(decimal: (1 - annual.price / yearOfMonthly) * 100).doubleValue
+    /// "SAVE 54%" — monthly versus a month of weekly (52 weeks over 12 months).
+    private func savingsText(monthly: Product) -> String? {
+        guard let weekly = store.weeklyProduct, weekly.price > 0 else { return nil }
+        let monthOfWeekly = weekly.price * 52 / 12
+        guard monthOfWeekly > monthly.price else { return nil }
+        let saving = NSDecimalNumber(decimal: (1 - monthly.price / monthOfWeekly) * 100).doubleValue
         let rounded = Int(saving.rounded())
         return rounded > 0 ? "SAVE \(rounded)%" : nil
     }
@@ -566,9 +552,6 @@ struct PaywallView: View {
     private var disclosure: String {
         guard let selectedProduct else {
             return "Subscriptions renew automatically until you cancel. Cancel anytime in Settings."
-        }
-        if selectedProduct.id == ProductID.founding {
-            return "One payment of \(selectedProduct.displayPrice). Not a subscription: nothing renews and you won't be charged again."
         }
         let unit = unitName(periodUnit(selectedProduct))
         if let offer = trialOffer(selectedProduct) {

@@ -1,7 +1,7 @@
 # Cooked Paper (iOS)
 
 A native SwiftUI, paper-trading-only companion to Cooked. Free to start, with Pro at
-**$7.99/mo**, **$59.99/yr** or a one-time **Founding Member** purchase (see "Subscriptions"). Built against the same `apps/api` backend as `apps/web` and
+**$7.99/mo** or **$3.99/wk** (see "Subscriptions"). Built against the same `apps/api` backend as `apps/web` and
 `apps/mobile`. The subscription is enforced on-device via StoreKit 2, with the
 server consulted as a second opinion once its Apple billing routes are deployed
 (see "Subscriptions" below).
@@ -79,8 +79,8 @@ CookedPaper/
      `app.cooked.paper`) on the web's Vercel project.
 3. **App Store Connect — subscriptions**
    - Create a subscription group ("Cooked Paper Pro") with two auto-renewable
-     subscriptions: `app.cooked.paper.monthly` ($7.99/mo) and
-     `app.cooked.paper.annual` ($29.99/yr). These product IDs must match
+     subscriptions: `app.cooked.paper.monthly` ($7.99/mo, 7-day free trial) and
+     `app.cooked.paper.weekly` ($3.99/wk, 3-day free trial). These product IDs must match
      `Sources/Paywall/SubscriptionStore.swift`'s `ProductID` exactly.
    - `StoreKit/Products.storekit` mirrors this for local testing (Xcode scheme →
      Options → StoreKit Configuration) without needing App Store Connect at all
@@ -214,16 +214,16 @@ by design (`packages/billing/src/entitlements.ts` in the main repo), so a modifi
 client could trade without limits. Enforcing it server-side means deliberately
 changing that guard.
 
-**Founding Member** (`app.cooked.paper.founding`) is a non-consumable, not Family
-Shareable, that unlocks Pro with no renewals. The paywall labels it "FIRST 500".
-Apple can't cap a product's sales, so **remove it from sale in App Store Connect once
-500 have sold**, or the label stops being true. The server's Apple billing routes
-reconcile subscriptions only; StoreKit alone vouches for this purchase. What
-"Pro, paid once" covers once live trading launches should be checked with counsel
-before launch.
+**Weekly and monthly only.** No annual plan and no lifetime purchase: the plan is to
+make the app free once live trading launches (monetised by swap fees), and a plan sold
+for longer than a few months would outlast that. When the app goes free, **remove both
+subscriptions from sale in App Store Connect** so nobody is billed again. `ProductID.annual`
+stays recognised so an annual subscription bought earlier keeps working; it is not
+offered.
 
-**Prices are set in App Store Connect**, not here. `StoreKit/Products.storekit` (local
-testing only) has annual at $59.99 and Founding Member at $99.99 to match.
+**Prices and trials are set in App Store Connect**, not here. Monthly is the default
+plan and carries a 7-day free trial (weekly keeps its 3-day one); `StoreKit/Products.storekit`
+(local testing only) matches. Monthly needs that trial added in App Store Connect too.
 
 StoreKit 2 decides on the device as before. In addition, every verified
 transaction's signed JWS is sent to `POST /billing/apple/transactions`
@@ -235,7 +235,7 @@ The person is subscribed if StoreKit says so **or** the server says active; an
 unreachable server, a 404 or an inactive answer never takes away a StoreKit
 entitlement.
 
-The annual plan has a 7-day free trial (weekly keeps its 3-day one). When the Apple
+The monthly plan has a 7-day free trial (weekly keeps its 3-day one). When the Apple
 ID is eligible, the paywall says "Start 7-day free trial", shows a three-step "how
 your trial works" timeline, offers a soft "want a reminder?" ask before the purchase,
 and schedules a local reminder two days before the trial converts.

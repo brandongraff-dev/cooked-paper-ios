@@ -19,7 +19,7 @@ enum PaywallReason: Equatable {
 
 /// The free tier: full access for the account's first three days, then three
 /// trades (buys) a day in the main portfolio. Selling is never limited: a limit
-/// must not trap anyone in a position they want out of. Pro (any subscription, or Founding Member)
+/// must not trap anyone in a position they want out of. Pro (any subscription)
 /// lifts every limit.
 ///
 /// Enforced here, on the device, the same way the subscription itself is — the API
