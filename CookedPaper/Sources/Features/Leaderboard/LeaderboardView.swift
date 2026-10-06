@@ -94,6 +94,7 @@ struct LeaderboardView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint("Shows what this trader holds")
+                    .accessibilityIdentifier("leaderboard.row.\(index)")
                     if index < entries.count - 1 {
                         RowSeparator(leadingInset: LeaderboardRow.textInset)
                     }

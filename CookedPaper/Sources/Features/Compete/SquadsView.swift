@@ -53,6 +53,7 @@ struct SquadsView: View {
                                         .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.pressable)
+                                    .accessibilityIdentifier("squads.row.\(index)")
                                     if index < squads.count - 1 { RowSeparator() }
                                 }
                             }

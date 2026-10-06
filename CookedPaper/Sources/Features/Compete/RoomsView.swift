@@ -101,6 +101,7 @@ struct RoomsView: View {
                             RoomRow(room: room)
                         }
                         .buttonStyle(.pressable)
+                        .accessibilityIdentifier("rooms.row.\(index)")
                         if index < rooms.count - 1 { RowSeparator() }
                     }
                 }
