@@ -238,6 +238,24 @@ enum ChallengeAPI {
     }
 }
 
+/// Crash Replay: real historical crashes, played blind and scored by the server. Bearer.
+enum ReplayAPI {
+    static func list() async throws -> ReplayListResponse {
+        try await APIClient.shared.send(Endpoint(path: "/paper/replays"), as: ReplayListResponse.self)
+    }
+
+    static func get(id: String) async throws -> ReplayScenario {
+        try await APIClient.shared.send(Endpoint(path: "/paper/replays/\(id)"), as: ReplayScenario.self)
+    }
+
+    static func submit(id: String, actions: [ReplayAction]) async throws -> ReplayResult {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/replays/\(id)/results", method: "POST", body: APIClient.shared.encode(SubmitReplayBody(actions: actions))),
+            as: ReplayResult.self
+        )
+    }
+}
+
 /// Squads: a shared portfolio traded by majority vote. Bearer.
 enum SquadAPI {
     static func list() async throws -> [SquadSummary] {

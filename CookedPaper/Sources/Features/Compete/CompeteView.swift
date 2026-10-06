@@ -71,6 +71,7 @@ nonisolated enum CompeteRoute: Hashable {
     case room(id: String)
     case squads
     case squad(id: String)
+    case replays
 
     @MainActor @ViewBuilder
     var destination: some View {
@@ -86,6 +87,7 @@ nonisolated enum CompeteRoute: Hashable {
         case .room(let id): RoomDetailView(roomId: id)
         case .squads: SquadsView()
         case .squad(let id): SquadDetailView(squadId: id)
+        case .replays: ReplayListView()
         }
     }
 }

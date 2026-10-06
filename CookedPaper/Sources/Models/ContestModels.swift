@@ -256,3 +256,58 @@ struct ProposeSquadTradeBody: Encodable {
     var notionalUsd: String?
     var sellPercent: Int?
 }
+
+// MARK: - Crash Replay
+
+struct ReplaySummary: Decodable, Identifiable, Hashable {
+    let id: String
+    let number: Int
+    /// medium, hard, brutal
+    let difficulty: String
+    let candleCount: Int
+    @OptionalDecimalString var bestReturnPct: Decimal?
+    let players: Int
+}
+
+struct ReplayListResponse: Decodable {
+    let scenarios: [ReplaySummary]
+    @DecimalString var startingBalanceUsd: Decimal
+}
+
+/// A scenario to play: `[open, high, low, close]` per hourly candle, rescaled to start at 100.
+struct ReplayScenario: Decodable {
+    let id: String
+    let number: Int
+    let difficulty: String
+    let candles: [[Double]]
+    @DecimalString var startingBalanceUsd: Decimal
+}
+
+struct ReplayAction: Codable, Hashable {
+    let candle: Int
+    let side: String
+    let fraction: Double
+}
+
+struct SubmitReplayBody: Encodable {
+    let actions: [ReplayAction]
+}
+
+struct ReplayResult: Decodable, Hashable {
+    struct Reveal: Decodable, Hashable {
+        let name: String
+        let symbol: String
+        let date: String
+        let story: String
+    }
+
+    @DecimalString var returnPct: Decimal
+    @DecimalString var holdReturnPct: Decimal
+    /// survived or cooked
+    let verdict: String
+    let reveal: Reveal
+    let rank: Int
+    let sampleSize: Int
+
+    var survived: Bool { verdict == "survived" }
+}

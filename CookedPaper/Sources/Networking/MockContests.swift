@@ -22,6 +22,22 @@ nonisolated enum MockContests {
             return (200, ["challenge": challenge(tier: "50k", status: "abandoned", returnPct: "2.48")])
         case ("GET", ["overlay", "key"]), ("POST", ["overlay", "key"]):
             return (200, ["key": "demoOverlayKey1234567890", "url": "https://cooked.trade/overlay/demoOverlayKey1234567890"])
+        case ("GET", ["replays"]):
+            return (200, [
+                "scenarios": [(1, "medium", "covid"), (2, "medium", "may2021"), (3, "hard", "ftx"), (4, "brutal", "luna")].map { n, d, id -> [String: Any] in
+                    ["id": id, "number": n, "difficulty": d, "candleCount": 97, "bestReturnPct": n == 1 ? "4.12" : NSNull(), "players": 120 * n] as [String: Any]
+                },
+                "startingBalanceUsd": "10000.00",
+            ] as [String: Any])
+        case ("GET", let rest) where rest.count == 2 && rest[0] == "replays":
+            return (200, replayScenario(id: rest[1]))
+        case ("POST", let rest) where rest.count == 3 && rest[0] == "replays":
+            return (201, [
+                "returnPct": "4.12", "holdReturnPct": "-31.26", "verdict": "survived",
+                "reveal": ["name": "Bitcoin, COVID crash", "symbol": "BTC", "date": "March 10–14, 2020",
+                           "story": "As COVID lockdowns hit, every market sold off at once."],
+                "rank": 12, "sampleSize": 318,
+            ] as [String: Any])
         case ("GET", ["squads"]):
             return (200, ["squads": [["id": "squad-1", "name": "Group chat", "memberCount": 4, "openProposals": 1] as [String: Any]]])
         case ("POST", ["squads"]), ("POST", ["squads", "join"]):
@@ -45,6 +61,20 @@ nonisolated enum MockContests {
         default:
             return nil
         }
+    }
+
+    /// A made-up crash: a slow bleed, a capitulation candle, and a dead-cat bounce.
+    private static func replayScenario(id: String) -> [String: Any] {
+        var candles: [[Double]] = []
+        var price = 100.0
+        for i in 0..<97 {
+            let drift = i == 50 ? -0.28 : (i > 50 && i < 60 ? 0.02 : -0.004)
+            let open = price
+            let close = max(1, open * (1 + drift + sin(Double(i)) * 0.006))
+            candles.append([open, max(open, close) * 1.004, min(open, close) * 0.995, close])
+            price = close
+        }
+        return ["id": id, "number": 1, "difficulty": "medium", "interval": "1h", "candles": candles, "startingBalanceUsd": "10000.00"]
     }
 
     private static func squad() -> [String: Any] {
