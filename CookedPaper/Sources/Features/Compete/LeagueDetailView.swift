@@ -54,7 +54,7 @@ struct LeagueDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle(league?.name ?? "League")
         .navigationBarTitleDisplayMode(.inline)
@@ -219,7 +219,7 @@ struct LeagueDetailView: View {
             }
         }
         .padding(Space.s20)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("league.header")
     }

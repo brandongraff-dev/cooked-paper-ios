@@ -143,6 +143,32 @@ struct PriceText: View {
     }
 }
 
+/// "+3.07%" / "−4.12%" in a tinted capsule with a direction arrow — for the one
+/// headline change on a screen. Rows use `ChangeText`.
+struct ChangePill: View {
+    let percent: Decimal?
+    var font: Font = .rowSubvalue.weight(.semibold)
+
+    var body: some View {
+        let color = Color.direction(percent)
+        HStack(spacing: 3) {
+            if let percent {
+                Image(systemName: percent >= 0 ? "arrow.up.right" : "arrow.down.right")
+                    .font(.caption.weight(.bold))
+            }
+            Text(PriceFormat.change(percent))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+        }
+        .font(font)
+        .foregroundStyle(color)
+        .padding(.horizontal, Space.s8)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.16), in: Capsule())
+        .animation(Motion.standard, value: percent)
+    }
+}
+
 /// "+3.07%" / "−4.12%" as colored text. No pill, no arrow.
 struct ChangeText: View {
     let percent: Decimal?
@@ -175,7 +201,7 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Elevated-surface capsule, white label, 56pt.
+/// Brushed-gunmetal capsule with a bevel, white label, 56pt.
 struct SecondaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
@@ -185,13 +211,14 @@ struct SecondaryButtonStyle: ButtonStyle {
             .foregroundStyle(Color.textPrimary)
             .frame(maxWidth: .infinity)
             .frame(height: Metrics.buttonHeight)
-            .background(Color.appSurfaceElevated, in: Capsule())
+            .metalSurface()
             .opacity(isEnabled ? 1 : 0.35)
             .pressEffect(configuration.isPressed)
     }
 }
 
-/// Accent capsule, dark-blue label, 56pt — reserved for the paywall's one CTA.
+/// Brand-gradient capsule with a soft glow and a lit top edge, dark label, 56pt —
+/// the screen's one main action.
 struct AccentButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
@@ -201,7 +228,22 @@ struct AccentButtonStyle: ButtonStyle {
             .foregroundStyle(Color.accentInk)
             .frame(maxWidth: .infinity)
             .frame(height: Metrics.buttonHeight)
-            .background(Color.accent, in: Capsule())
+            .background(LinearGradient.brand, in: Capsule())
+            .overlay {
+                // Glass lip on the top half: the button reads as a raised, lit object.
+                Capsule()
+                    .fill(LinearGradient(colors: [.white.opacity(0.35), .white.opacity(0)], startPoint: .top, endPoint: .center))
+                    .padding(2)
+                    .blendMode(.plusLighter)
+            }
+            .overlay(
+                Capsule().strokeBorder(
+                    LinearGradient(colors: [.white.opacity(0.55), .black.opacity(0.2)], startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1
+                )
+            )
+            .sheen(in: Capsule())
+            .shadow(color: Color.accent.opacity(isEnabled ? 0.45 : 0), radius: 14, y: 6)
             .opacity(isEnabled ? 1 : 0.35)
             .pressEffect(configuration.isPressed)
     }
@@ -287,7 +329,16 @@ struct Chip: View {
                 .foregroundStyle(isSelected ? Color.inverseText : Color.textSecondary)
                 .padding(.horizontal, Space.s12)
                 .frame(height: Metrics.chipHeight)
-                .background(isSelected ? Color.inverseFill : Color.appSurface, in: Capsule())
+                .background {
+                    if isSelected {
+                        Capsule().fill(Color.inverseFill)
+                    } else {
+                        Capsule()
+                            .fill(.ultraThinMaterial)
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+                            .environment(\.colorScheme, .dark)
+                    }
+                }
         }
         .buttonStyle(.pressable)
         .animation(Motion.standard, value: isSelected)
@@ -311,7 +362,13 @@ struct Segment: View {
                 .foregroundStyle(isSelected ? Color.textPrimary : Color.textSecondary)
                 .frame(maxWidth: .infinity)
                 .frame(height: Metrics.chipHeight)
-                .background(isSelected ? Color.appSurfaceElevated : Color.clear, in: Capsule())
+                .background {
+                    if isSelected {
+                        Capsule()
+                            .fill(Color.white.opacity(0.14))
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    }
+                }
         }
         .buttonStyle(.pressable)
         .animation(Motion.standard, value: isSelected)
@@ -374,6 +431,15 @@ struct ListRow<Leading: View, Trailing: View>: View {
     }
 }
 
+extension View {
+    /// Puts a stack of rows on one glass card, inset from its edges.
+    func glassList() -> some View {
+        padding(.horizontal, Space.s16)
+            .padding(.vertical, Space.s4)
+            .glassCard()
+    }
+}
+
 /// A hairline between rows, inset to start under the row's text (past the avatar).
 struct RowSeparator: View {
     var leadingInset: CGFloat = Metrics.avatar + Metrics.avatarGap
@@ -390,6 +456,9 @@ struct StatItem: Identifiable {
     let label: String
     let value: String
     var color: Color = .textPrimary
+    /// A small icon tile beside the label, when set.
+    var symbol: String? = nil
+    var tint: Color = .tileBlue
     var id: String { label }
 }
 
@@ -405,9 +474,14 @@ struct StatGrid: View {
         ) {
             ForEach(items) { item in
                 VStack(alignment: .leading, spacing: Space.s4) {
-                    Text(item.label)
-                        .font(.caption13)
-                        .foregroundStyle(Color.textSecondary)
+                    HStack(spacing: Space.s8) {
+                        if let symbol = item.symbol {
+                            IconTile(symbol: symbol, color: item.tint, size: 22)
+                        }
+                        Text(item.label)
+                            .font(.caption13)
+                            .foregroundStyle(Color.textSecondary)
+                    }
                     Text(item.value)
                         .font(.rowValue)
                         .foregroundStyle(item.color)
@@ -418,7 +492,7 @@ struct StatGrid: View {
             }
         }
         .padding(Space.s16)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
     }
 }
 
@@ -441,9 +515,8 @@ struct EmptyStateView: View {
 
     var body: some View {
         VStack(spacing: Space.s8) {
-            Image(systemName: symbol)
-                .font(.title2)
-                .foregroundStyle(Color.textTertiary)
+            IconTile(symbol: symbol, color: .tileGray, size: 52)
+                .padding(.bottom, Space.s8)
             Text(title)
                 .font(.rowTitle)
                 .foregroundStyle(Color.textPrimary)

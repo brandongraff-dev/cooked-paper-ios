@@ -267,6 +267,8 @@ struct ReplaySummary: Decodable, Identifiable, Hashable {
     let candleCount: Int
     @OptionalDecimalString var bestReturnPct: Decimal?
     let players: Int
+    /// Closes from the run's first third, for the card. Absent on older servers.
+    let teaser: [Double]?
 }
 
 struct ReplayListResponse: Decodable {

@@ -78,7 +78,7 @@ struct OnboardingView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(Color.appBackground)
+        .screenBackground()
         .preferredColorScheme(.dark)
         .overlay {
             if isStartingGuest {
@@ -114,7 +114,7 @@ struct OnboardingView: View {
                 Task { await PortfolioStore.shared.resetAndRebootstrap() }
                 onFinished()
             }
-            .background(Color.appBackground)
+            .screenBackground()
             .presentationDragIndicator(.visible)
         }
     }
@@ -477,7 +477,7 @@ private struct BalanceStep: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Space.s32)
                 .padding(.horizontal, Space.s20)
-                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous))
+                .glassCard(cornerRadius: Radius.sheet)
 
                 StepHeadline(
                     title: "Trade the real market\nwith paper money.",
@@ -566,7 +566,7 @@ private struct GoalStep: View {
                                     .foregroundStyle(Color.textTertiary)
                             }
                             .padding(Space.s20)
-                            .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                            .glassCard()
                         }
                         .buttonStyle(.pressable)
                         .accessibilityIdentifier("onboarding.goal.\(goal.rawValue)")
@@ -613,7 +613,7 @@ private struct ExperienceStep: View {
                                     .foregroundStyle(Color.textTertiary)
                             }
                             .padding(Space.s20)
-                            .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                            .glassCard()
                         }
                         .buttonStyle(.pressable)
                         .accessibilityIdentifier("onboarding.answer.\(answer.rawValue)")
@@ -664,7 +664,7 @@ private struct PickStep: View {
                 .accessibilityIdentifier("onboarding.buy")
                 .padding(.horizontal, Space.margin)
                 .padding(.bottom, Space.s8)
-                .background(Color.appBackground)
+                .screenBackground()
         }
         .task {
             // Keep the list's prices current while choosing.
@@ -683,7 +683,7 @@ private struct PickStep: View {
                 ForEach(0..<6, id: \.self) { _ in SkeletonRow() }
             }
             .padding(.horizontal, Space.s16)
-            .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .glassCard()
         } else if let error = model.tokensError, model.tokens.isEmpty {
             VStack(spacing: Space.s16) {
                 EmptyStateView(symbol: "wifi.slash", title: "Couldn't load prices", detail: error)
@@ -715,7 +715,7 @@ private struct PickStep: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .glassCard()
         }
     }
 }
@@ -819,7 +819,7 @@ private struct PortfolioStep: View {
                 .accessibilityIdentifier("onboarding.keep")
                 .padding(.horizontal, Space.margin)
                 .padding(.bottom, Space.s8)
-                .background(Color.appBackground)
+                .screenBackground()
         }
         .task(id: model.hasFinishedBuying) {
             guard model.hasFinishedBuying else { return }
@@ -877,7 +877,7 @@ private struct PortfolioStep: View {
             }
         }
         .padding(Space.s20)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
     }
 
     // MARK: Summary
@@ -914,7 +914,7 @@ private struct PortfolioStep: View {
         }
         .padding(Space.s20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous))
+        .glassCard(cornerRadius: Radius.sheet)
     }
 
     private var positionList: some View {
@@ -948,7 +948,7 @@ private struct PortfolioStep: View {
                         .foregroundStyle(Color.textTertiary)
                 }
                 .padding(Space.s20)
-                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .glassCard()
             }
         }
     }
@@ -988,7 +988,7 @@ private struct PortfolioStep: View {
                     }
                 }
             }
-            .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .glassCard()
         }
     }
 }
@@ -1082,7 +1082,7 @@ private struct LivePositionCard: View {
                 .allowsHitTesting(false)
         }
         .padding(Space.s20)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
         .animation(Motion.standard, value: samples.count)
     }
 

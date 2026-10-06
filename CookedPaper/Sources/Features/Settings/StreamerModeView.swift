@@ -15,11 +15,11 @@ struct StreamerModeView: View {
     var body: some View {
         List {
             Section {
-                Text("Show your paper trades live on stream. Add the link below to OBS as a Browser source (about 600 × 300). It updates every few seconds, and a sell beyond ±20% fires a COOKING or COOKED banner your chat will clip.")
+                Text("Your trades, live on stream. Add this link to OBS as a Browser source (600 × 300). A ±20% sell fires a COOKING or COOKED banner.")
                     .font(.body)
                     .foregroundStyle(Color.textSecondary)
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section("Overlay link") {
                 if isLoading {
@@ -49,26 +49,26 @@ struct StreamerModeView: View {
                         .foregroundStyle(Color.negative)
                 }
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section {
-                Text("Anyone with this link can see your paper portfolio's returns and recent trades. If it leaks, make a new one: the old link stops working at once.")
+                Text("Anyone with this link sees your returns and trades. Leaked? Make a new one; the old one stops working.")
                     .font(.footnote)
                     .foregroundStyle(Color.textSecondary)
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section("Play with your viewers") {
                 NavigationLink {
                     RoomsView()
                 } label: {
-                    SettingsRow(symbol: "dot.radiowaves.left.and.right", title: "Host a room: Beat the Streamer")
+                    SettingsRow(symbol: "dot.radiowaves.left.and.right", title: "Host a room: Beat the Streamer", tint: .tilePink)
                 }
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
         }
         .scrollContentBackground(.hidden)
-        .background(Color.appBackground)
+        .screenBackground()
         .navigationTitle("Streamer mode")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

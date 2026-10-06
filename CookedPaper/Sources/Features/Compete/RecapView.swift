@@ -71,7 +71,7 @@ struct RecapView: View {
             .padding(.horizontal, Space.margin)
             .padding(.vertical, Space.s16)
         }
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle("Monthly recap")
         .navigationBarTitleDisplayMode(.large)

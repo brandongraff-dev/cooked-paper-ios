@@ -43,7 +43,7 @@ struct DuelDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle(duel.map { "vs \($0.them?.handle ?? "open invite")" } ?? "Duel")
         .navigationBarTitleDisplayMode(.inline)
@@ -422,7 +422,7 @@ private struct HeadToHeadCard: View {
             }
         }
         .padding(Space.s20)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("duel.headToHead")
     }

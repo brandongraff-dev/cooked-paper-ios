@@ -27,44 +27,44 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.profile")
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section("Notifications") {
                 NavigationLink {
                     AlertsListView()
                 } label: {
-                    SettingsRow(symbol: "bell", title: "Price alerts")
+                    SettingsRow(symbol: "bell.fill", title: "Price alerts", tint: .tileOrange)
                 }
                 .accessibilityIdentifier("settings.alerts")
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section("Streaming") {
                 NavigationLink {
                     StreamerModeView()
                 } label: {
-                    SettingsRow(symbol: "video", title: "Streamer mode")
+                    SettingsRow(symbol: "video.fill", title: "Streamer mode", tint: .tilePink)
                 }
                 .accessibilityIdentifier("settings.streamer")
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section("Subscription") {
                 Button { showManageSubscriptions = true } label: {
-                    SettingsRow(symbol: "creditcard", title: "Manage subscription")
+                    SettingsRow(symbol: "creditcard.fill", title: "Manage subscription", tint: .tileIndigo)
                 }
                 Button { Task { await subscriptionStore.restore() } } label: {
-                    SettingsRow(symbol: "arrow.clockwise", title: "Restore purchases")
+                    SettingsRow(symbol: "arrow.clockwise", title: "Restore purchases", tint: .tileTeal)
                 }
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section {
                 Link(destination: LegalLinks.terms) {
-                    SettingsRow(symbol: "doc.text", title: "Terms of Service", trailingSymbol: "arrow.up.right")
+                    SettingsRow(symbol: "doc.text.fill", title: "Terms of Service", trailingSymbol: "arrow.up.right")
                 }
                 Link(destination: LegalLinks.privacy) {
-                    SettingsRow(symbol: "hand.raised", title: "Privacy Policy", trailingSymbol: "arrow.up.right")
+                    SettingsRow(symbol: "hand.raised.fill", title: "Privacy Policy", trailingSymbol: "arrow.up.right")
                 }
             } header: {
                 Text("Legal")
@@ -73,7 +73,7 @@ struct SettingsView: View {
                     .font(.caption13)
                     .foregroundStyle(Color.textTertiary)
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section("Account") {
                 Button { showSignOutConfirm = true } label: {
@@ -96,7 +96,7 @@ struct SettingsView: View {
                         .foregroundStyle(Color.negative)
                 }
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
 
             Section {
                 Button(role: .destructive) { showResetConfirm = true } label: {
@@ -119,11 +119,11 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, Space.s32)
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(GlassRowBackground())
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .tint(Color.textPrimary)
         .navigationTitle("Settings")
@@ -261,14 +261,11 @@ struct SettingsRow: View {
     let title: String
     var detail: String? = nil
     var trailingSymbol: String? = nil
+    var tint: Color = .tileGray
 
     var body: some View {
         HStack(spacing: Space.s12) {
-            Image(systemName: symbol)
-                .font(.body)
-                .foregroundStyle(Color.textSecondary)
-                .frame(width: 24)
-                .accessibilityHidden(true)
+            IconTile(symbol: symbol, color: tint, size: 30)
             Text(title)
                 .font(.body)
                 .foregroundStyle(Color.textPrimary)

@@ -94,7 +94,7 @@ struct PracticeRoundStep: View {
             actionButton
                 .padding(.horizontal, Space.margin)
                 .padding(.bottom, Space.s8)
-                .background(Color.appBackground)
+                .screenBackground()
         }
         .onDisappear { playback?.cancel() }
         .onChange(of: phase) { _, newPhase in
@@ -177,7 +177,7 @@ struct PracticeRoundStep: View {
             }
         }
         .padding(Space.s20)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous))
+        .glassCard(cornerRadius: Radius.sheet)
         .overlay(
             RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous)
                 .strokeBorder(Color.appSeparator, lineWidth: 1)

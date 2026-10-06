@@ -13,7 +13,7 @@ struct PaywallView: View {
     let reason: PaywallReason
     /// Closes the paywall without buying. Nil only for a paywall nothing can close.
     let onClose: (() -> Void)?
-    @State private var selectedProductID = ProductID.monthly
+    @State private var selectedProductID = ProductID.annual
     @State private var showsSignIn = false
     /// The plan waiting on the "want a reminder?" pre-prompt.
     @State private var pendingProduct: Product?
@@ -26,6 +26,8 @@ struct PaywallView: View {
     /// Product ids whose introductory offer this Apple ID can still redeem — a trial
     /// is only ever advertised to someone who will actually get it.
     @State private var trialEligibleIDs: Set<String> = []
+    /// The one-time offer, over the onboarding paywall after its close button.
+    @State private var showsOffer = false
 
     init(reason: PaywallReason = .onboarding, onClose: (() -> Void)? = nil) {
         self.reason = reason
@@ -36,9 +38,10 @@ struct PaywallView: View {
         store.products.first { $0.id == selectedProductID }
     }
 
-    /// Monthly first (the default and the better deal), then weekly.
+    /// Annual first (the default, the better deal, and the one with the trial), then
+    /// monthly.
     private var orderedPlans: [Product] {
-        [store.monthlyProduct, store.weeklyProduct].compactMap { $0 }
+        [store.annualProduct, store.monthlyProduct].compactMap { $0 }
     }
 
     var body: some View {
@@ -67,7 +70,7 @@ struct PaywallView: View {
             footer
         }
         .background(alignment: .top) { backdrop }
-        .background(Color.appBackground)
+        .screenBackground()
         .overlay(alignment: .topTrailing) {
             Button("Restore") { Task { await store.restore() } }
                 .font(.body)
@@ -95,7 +98,7 @@ struct PaywallView: View {
                 showsSignIn = false
                 Task { await PortfolioStore.shared.resetAndRebootstrap() }
             }
-            .background(Color.appBackground)
+            .screenBackground()
             .presentationDragIndicator(.visible)
         }
         // Soft pre-prompt before a trial purchase: the system prompt only follows
@@ -116,6 +119,15 @@ struct PaywallView: View {
             Text("We'll send one notification two days before you're billed.")
         }
         .preferredColorScheme(.dark)
+        .fullScreenCover(isPresented: $showsOffer) {
+            if let offer = store.offerProduct {
+                OneTimeOfferView(offer: offer, regular: store.annualProduct) {
+                    showsOffer = false
+                    onClose?()
+                }
+            }
+        }
+        .onAppear { Funnel.track(.paywallShown, ["reason": reasonKey]) }
         .task {
             // The positions this paywall is about: the account's, or the guest's
             // from onboarding (also after a relaunch on this screen).
@@ -127,7 +139,7 @@ struct PaywallView: View {
         }
         .task(id: store.products.map(\.id)) {
             await refreshTrialEligibility()
-            if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.monthly }) ?? orderedPlans.first {
+            if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.annual }) ?? orderedPlans.first {
                 selectedProductID = first.id
             }
         }
@@ -198,7 +210,11 @@ struct PaywallView: View {
         switch reason {
         case .onboarding: return nil
         case .outOfTrades: return "\(free) Pro trades without limits, so you never sit out a move."
-        case .fullAccessEnded: return "\(free) Pro keeps everything you've been using: unlimited trades, leverage and alerts."
+        case .fullAccessEnded:
+            if let pct = PortfolioStore.shared.snapshot?.stats.returnPct.pct, pct > 0 {
+                return "Your portfolio is up \(PriceFormat.change(pct)). From today, free accounts get \(FreeTier.freeTradesPerDay) trades a day. Pro keeps you trading without limits."
+            }
+            return "\(free) Pro keeps everything you've been using: unlimited trades, leverage and alerts."
         case .afterWin: return "\(free) Pro trades without limits."
         case .locked: return "Pro unlocks it, along with unlimited trades, leverage and alerts."
         }
@@ -239,7 +255,7 @@ struct PaywallView: View {
                 }
             }
         }
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
         .padding(.top, Space.s4)
     }
 
@@ -254,11 +270,11 @@ struct PaywallView: View {
             if let topTrader {
                 TopTraderBanner(trader: topTrader)
             }
-            FeatureCheck(symbol: "infinity", text: "Unlimited trades (free: \(FreeTier.freeTradesPerDay) a day)")
-            FeatureCheck(symbol: "chart.xyaxis.line", text: "Live on-chain prices & charts")
-            FeatureCheck(symbol: "bolt.fill", text: "Leverage up to \(maxLeverage)x")
-            FeatureCheck(symbol: "bell.badge.fill", text: "Price alerts on any token")
-            FeatureCheck(symbol: "trophy.fill", text: "Monthly leaderboard")
+            FeatureCheck(symbol: "infinity", color: .tileBlue, text: "Unlimited trades (free: \(FreeTier.freeTradesPerDay) a day)")
+            FeatureCheck(symbol: "bolt.fill", color: .tileOrange, text: "Leverage up to \(maxLeverage)x")
+            FeatureCheck(symbol: "flag.checkered", color: .tilePink, text: "Every Challenge and Crash Replay")
+            FeatureCheck(symbol: "eye.fill", color: .tilePurple, text: "See what top traders hold")
+            FeatureCheck(symbol: "bell.badge.fill", color: .tileTeal, text: "Price alerts on any token")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task { await loadTopTrader() }
@@ -295,7 +311,7 @@ struct PaywallView: View {
                 ForEach(orderedPlans, id: \.id) { product in
                     PlanRow(
                         title: planTitle(product),
-                        badge: product.id == ProductID.monthly ? savingsText(monthly: product) : nil,
+                        badge: product.id == ProductID.annual ? savingsText(annual: product) : nil,
                         subtitle: planSubtitle(product),
                         price: "\(product.displayPrice)/\(shortUnit(product))",
                         detail: planDetail(product),
@@ -327,9 +343,9 @@ struct PaywallView: View {
             .buttonStyle(.accent)
             .accessibilityIdentifier("paywall.subscribeButton")
 
-            if let onClose {
-                Button(closeTitle, action: onClose)
-                    .font(.body.weight(.semibold))
+            if onClose != nil {
+                Button(closeTitle, action: close)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color.textSecondary)
                     .accessibilityIdentifier("paywall.close")
             }
@@ -353,6 +369,28 @@ struct PaywallView: View {
     }
 
     // MARK: - Actions
+
+    /// "funnel" name for this paywall's reason.
+    private var reasonKey: String {
+        switch reason {
+        case .onboarding: "onboarding"
+        case .outOfTrades: "out_of_trades"
+        case .fullAccessEnded: "full_access_ended"
+        case .afterWin: "after_win"
+        case .locked: "locked"
+        }
+    }
+
+    /// Closing the onboarding paywall shows the one-time offer first, once ever and
+    /// only when StoreKit has the offer plan; every other close just closes.
+    private func close() {
+        Funnel.track(.paywallClosed, ["reason": reasonKey])
+        if reason == .onboarding, !OneTimeOffer.hasBeenShown, store.offerProduct != nil {
+            showsOffer = true
+        } else {
+            onClose?()
+        }
+    }
 
     private func select(_ product: Product) {
         guard selectedProductID != product.id else { return }
@@ -385,6 +423,7 @@ struct PaywallView: View {
         await store.purchase(product)
         isPurchasing = false
         guard store.isSubscribed else { return }
+        Funnel.track(trial != nil ? .trialStarted : .subscribed, ["product": product.id, "reason": reasonKey])
         Haptics.success()
         onClose?()
         if let trial {
@@ -446,7 +485,7 @@ struct PaywallView: View {
         }
         .padding(Space.s20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
         .accessibilityIdentifier("paywall.trialTimeline")
     }
 
@@ -461,11 +500,8 @@ struct PaywallView: View {
     /// starts with, so closing is a plain choice rather than a hunt for an X.
     private var closeTitle: String {
         switch reason {
-        case .onboarding:
-            FreeTier.shared.isInFullAccess
-                ? "Start free · full access for \(FreeTier.fullAccessDays) days"
-                : "Continue free · \(FreeTier.freeTradesPerDay) trades a day"
-        case .fullAccessEnded: "Continue free · \(FreeTier.freeTradesPerDay) trades a day"
+        case .onboarding: "Not now"
+        case .fullAccessEnded: "Continue with \(FreeTier.freeTradesPerDay) trades a day"
         default: "Not now"
         }
     }
@@ -501,10 +537,11 @@ struct PaywallView: View {
         }
     }
 
-    /// The small line under the price: a weekly equivalent for longer plans, or
-    /// "after trial" when the plan starts with one.
+    /// The small line under the price: what a year works out to per week (the billed
+    /// price above it stays the most prominent figure), or "after trial" for a shorter
+    /// plan that starts with one.
     private func planDetail(_ product: Product) -> String? {
-        if trialOffer(product) != nil { return "after trial" }
+        if trialOffer(product) != nil && periodUnit(product) != .year { return "after trial" }
         let weeks: Decimal
         switch periodUnit(product) {
         case .year: weeks = 52
@@ -539,12 +576,12 @@ struct PaywallView: View {
         }
     }
 
-    /// "SAVE 54%" — monthly versus a month of weekly (52 weeks over 12 months).
-    private func savingsText(monthly: Product) -> String? {
-        guard let weekly = store.weeklyProduct, weekly.price > 0 else { return nil }
-        let monthOfWeekly = weekly.price * 52 / 12
-        guard monthOfWeekly > monthly.price else { return nil }
-        let saving = NSDecimalNumber(decimal: (1 - monthly.price / monthOfWeekly) * 100).doubleValue
+    /// "SAVE 68%": annual versus twelve months of monthly.
+    private func savingsText(annual: Product) -> String? {
+        guard let monthly = store.monthlyProduct, monthly.price > 0 else { return nil }
+        let yearOfMonthly = monthly.price * 12
+        guard yearOfMonthly > annual.price else { return nil }
+        let saving = NSDecimalNumber(decimal: (1 - annual.price / yearOfMonthly) * 100).doubleValue
         let rounded = Int(saving.rounded())
         return rounded > 0 ? "SAVE \(rounded)%" : nil
     }
@@ -609,11 +646,7 @@ private struct TopTraderBanner: View {
 
     var body: some View {
         HStack(spacing: Space.s12) {
-            Image(systemName: "crown.fill")
-                .font(.body)
-                .foregroundStyle(Color.accent)
-                .frame(width: 20)
-                .accessibilityHidden(true)
+            IconTile(symbol: "crown.fill", color: .tileYellow, size: 32)
             VStack(alignment: .leading, spacing: 2) {
                 (Text("This month's top trader: ").foregroundStyle(Color.textPrimary)
                     + Text(PriceFormat.change(trader.returnPct)).foregroundStyle(Color.positive))
@@ -625,7 +658,7 @@ private struct TopTraderBanner: View {
         }
         .padding(Space.s16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard(tint: .tileYellow)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("paywall.topTrader")
     }
@@ -633,15 +666,12 @@ private struct TopTraderBanner: View {
 
 private struct FeatureCheck: View {
     var symbol = "checkmark"
+    var color: Color = .tileBlue
     let text: String
 
     var body: some View {
         HStack(spacing: Space.s16) {
-            Image(systemName: symbol)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(Color.accent)
-                .frame(width: 20)
-                .accessibilityHidden(true)
+            IconTile(symbol: symbol, color: color, size: 32)
             Text(text)
                 .font(.body)
                 .foregroundStyle(Color.textPrimary)
@@ -674,11 +704,11 @@ private struct PlanRow: View {
                             .foregroundStyle(Color.textPrimary)
                         if let badge {
                             Text(badge)
-                                .font(.footnote.weight(.bold))
-                                .foregroundStyle(Color.accent)
+                                .font(.caption.weight(.heavy))
+                                .foregroundStyle(Color.accentInk)
                                 .padding(.horizontal, Space.s8)
-                                .padding(.vertical, Space.s4)
-                                .background(Color.accent.opacity(0.16), in: Capsule())
+                                .padding(.vertical, 3)
+                                .background(LinearGradient.brand, in: Capsule())
                         }
                     }
                     Text(subtitle)
@@ -702,8 +732,13 @@ private struct PlanRow: View {
                 }
             }
             .padding(Space.s20)
-            .background(isSelected ? Color.accent.opacity(0.08) : Color.appSurface, in: shape)
-            .overlay(shape.strokeBorder(isSelected ? Color.accent : Color.appSeparator, lineWidth: isSelected ? 1.5 : 1))
+            .glassCard(tint: isSelected ? .accent : nil)
+            .overlay {
+                if isSelected {
+                    shape.strokeBorder(LinearGradient.brand, lineWidth: 2)
+                }
+            }
+            .shadow(color: isSelected ? Color.accent.opacity(0.3) : .clear, radius: 16)
         }
         .buttonStyle(.pressable)
         .accessibilityElement(children: .combine)

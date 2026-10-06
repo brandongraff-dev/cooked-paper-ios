@@ -183,7 +183,7 @@ struct PriceAlertSheet: View {
                         }
                     }
                 }
-                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .glassCard()
             }
         } else if let loadError = store.loadError, !store.hasLoaded {
             HStack(spacing: Space.s8) {

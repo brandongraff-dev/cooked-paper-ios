@@ -94,7 +94,7 @@ struct ProfileSetupView: View {
             .padding(.top, Space.s8)
             .padding(.bottom, Space.s8)
         }
-        .background(Color.appBackground)
+        .screenBackground()
         .preferredColorScheme(.dark)
     }
 

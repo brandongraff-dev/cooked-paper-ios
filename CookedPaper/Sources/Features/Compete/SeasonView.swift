@@ -21,106 +21,12 @@ struct SeasonView: View {
             CrowdRecordCard()
                 .padding(.horizontal, Space.margin)
                 .padding(.top, Space.s16)
-            NavigationLink(value: CompeteRoute.challenges) {
-                HStack(spacing: Space.s12) {
-                    Image(systemName: "flag.checkered")
-                        .font(.title2)
-                        .foregroundStyle(Color.accent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Prop Challenges")
-                            .font(.rowTitle)
-                            .foregroundStyle(Color.textPrimary)
-                        Text("Hit +8% before you lose 5%. Practice for a funded account.")
-                            .font(.rowSubtitle)
-                            .foregroundStyle(Color.textSecondary)
-                            .multilineTextAlignment(.leading)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(Color.textTertiary)
-                }
-                .padding(Space.s16)
-                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            }
-            .buttonStyle(.pressable)
-            .padding(.horizontal, Space.margin)
-            .padding(.top, Space.s16)
-            .accessibilityIdentifier("season.challenges")
-            NavigationLink(value: CompeteRoute.rooms) {
-                HStack(spacing: Space.s12) {
-                    Image(systemName: "dot.radiowaves.left.and.right")
-                        .font(.title2)
-                        .foregroundStyle(Color.accent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Live Rooms")
-                            .font(.rowTitle)
-                            .foregroundStyle(Color.textPrimary)
-                        Text("Trade CPI and Fed days with everyone, or host a room for your stream.")
-                            .font(.rowSubtitle)
-                            .foregroundStyle(Color.textSecondary)
-                            .multilineTextAlignment(.leading)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(Color.textTertiary)
-                }
-                .padding(Space.s16)
-                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            }
-            .buttonStyle(.pressable)
-            .padding(.horizontal, Space.margin)
-            .padding(.top, Space.s12)
-            .accessibilityIdentifier("season.rooms")
-            NavigationLink(value: CompeteRoute.squads) {
-                HStack(spacing: Space.s12) {
-                    Image(systemName: "person.3.fill")
-                        .font(.title2)
-                        .foregroundStyle(Color.accent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Squads")
-                            .font(.rowTitle)
-                            .foregroundStyle(Color.textPrimary)
-                        Text("Share one portfolio with friends. Every trade is a vote.")
-                            .font(.rowSubtitle)
-                            .foregroundStyle(Color.textSecondary)
-                            .multilineTextAlignment(.leading)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(Color.textTertiary)
-                }
-                .padding(Space.s16)
-                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            }
-            .buttonStyle(.pressable)
-            .padding(.horizontal, Space.margin)
-            .padding(.top, Space.s12)
-            .accessibilityIdentifier("season.squads")
-            NavigationLink(value: CompeteRoute.replays) {
-                HStack(spacing: Space.s12) {
-                    Image(systemName: "chart.line.downtrend.xyaxis")
-                        .font(.title2)
-                        .foregroundStyle(Color.accent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Crash Replay")
-                            .font(.rowTitle)
-                            .foregroundStyle(Color.textPrimary)
-                        Text("Trade a real crash blind. Survive it, then post the clip.")
-                            .font(.rowSubtitle)
-                            .foregroundStyle(Color.textSecondary)
-                            .multilineTextAlignment(.leading)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(Color.textTertiary)
-                }
-                .padding(Space.s16)
-                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            }
-            .buttonStyle(.pressable)
-            .padding(.horizontal, Space.margin)
-            .padding(.top, Space.s12)
-            .accessibilityIdentifier("season.replay")
+            SectionHeader(title: "Play")
+                .padding(.horizontal, Space.margin)
+                .padding(.top, Space.s24)
+            PlayGrid()
+                .padding(.horizontal, Space.margin)
+                .padding(.top, Space.headerGap)
             Group {
                 if isLoading {
                     skeleton
@@ -146,7 +52,7 @@ struct SeasonView: View {
             .padding(.bottom, Space.section)
         }
         .scrollIndicators(.hidden)
-        .background(Color.appBackground)
+        .screenBackground()
         .refreshable { await load() }
         .reservesTabBarSpace()
         .task { await load() }
@@ -183,27 +89,28 @@ struct SeasonView: View {
                         LinkRow(
                             symbol: "rosette",
                             title: "Achievements",
-                            detail: achievements.response.map { "\($0.unlockedCount) of \($0.total)" }
+                            detail: achievements.response.map { "\($0.unlockedCount) of \($0.total)" },
+                            tint: .tileYellow
                         )
                     }
                     .buttonStyle(.pressable)
                     .accessibilityIdentifier("season.achievements")
-                    RowSeparator(leadingInset: 24 + Space.s12)
+                    RowSeparator(leadingInset: 30 + Space.s12)
                 }
                 NavigationLink(value: CompeteRoute.recap) {
-                    LinkRow(symbol: "sparkles.rectangle.stack", title: "Your monthly recap", detail: nil)
+                    LinkRow(symbol: "sparkles.rectangle.stack", title: "Your monthly recap", detail: nil, tint: .tilePink)
                 }
                 .buttonStyle(.pressable)
                 .accessibilityIdentifier("season.recap")
-                RowSeparator(leadingInset: 24 + Space.s12)
+                RowSeparator(leadingInset: 30 + Space.s12)
                 NavigationLink(value: CompeteRoute.seasonHistory) {
-                    LinkRow(symbol: "clock.arrow.circlepath", title: "Past seasons", detail: nil)
+                    LinkRow(symbol: "clock.arrow.circlepath", title: "Past seasons", detail: nil, tint: .tileGray)
                 }
                 .buttonStyle(.pressable)
                 .accessibilityIdentifier("season.history")
             }
             .padding(.horizontal, Space.s16)
-            .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .glassCard()
 
             CompeteLegalCaption()
         }
@@ -295,7 +202,7 @@ private struct SeasonHeaderCard: View {
             SimulatedCaption()
         }
         .padding(Space.s20)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
         .accessibilityIdentifier("season.header")
     }
 
@@ -459,19 +366,180 @@ struct SeasonEntryRow: View {
     }
 }
 
+/// The four game modes as tiles: a big colored icon, a name, and a few words.
+private struct PlayGrid: View {
+    private struct Mode: Identifiable {
+        let id: String
+        let route: CompeteRoute
+        let symbol: String
+        let color: Color
+        let title: String
+        let caption: String
+        /// The full sentence, for VoiceOver.
+        let detail: String
+    }
+
+    private let modes: [Mode] = [
+        Mode(id: "season.challenges", route: .challenges, symbol: "flag.checkered", color: .tileOrange,
+             title: "Challenges", caption: "+8% to pass",
+             detail: "Hit plus 8 percent before you lose 5 percent."),
+        Mode(id: "season.rooms", route: .rooms, symbol: "dot.radiowaves.left.and.right", color: .tilePink,
+             title: "Live Rooms", caption: "CPI & Fed days",
+             detail: "Trade market events with everyone, or host a room for your stream."),
+        Mode(id: "season.squads", route: .squads, symbol: "person.3.fill", color: .tileIndigo,
+             title: "Squads", caption: "Trade by vote",
+             detail: "Share one portfolio with friends. Every trade is a vote."),
+        Mode(id: "season.replay", route: .replays, symbol: "chart.line.downtrend.xyaxis", color: .tileTeal,
+             title: "Crash Replay", caption: "Survive the crash",
+             detail: "Trade a real historical crash blind."),
+    ]
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: Space.s12), GridItem(.flexible(), spacing: Space.s12)], spacing: Space.s12) {
+            ForEach(modes) { mode in
+                NavigationLink(value: mode.route) {
+                    VStack(alignment: .leading, spacing: Space.s4) {
+                        HStack(alignment: .top) {
+                            IconTile(symbol: mode.symbol, color: mode.color, size: 40)
+                            Spacer(minLength: 0)
+                        }
+                        ModeArt(mode: mode.id, color: mode.color)
+                            .frame(height: 34)
+                            .padding(.vertical, Space.s8)
+                        Text(mode.title)
+                            .font(.rowTitle)
+                            .foregroundStyle(Color.textPrimary)
+                            .lineLimit(1)
+                        Text(mode.caption)
+                            .font(.caption13)
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Space.s16)
+                    .glassCard(tint: mode.color)
+                }
+                .buttonStyle(.pressable)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(mode.title)
+                .accessibilityHint(mode.detail)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier(mode.id)
+            }
+        }
+    }
+}
+
+/// A small picture of what each mode is: the challenge meter, a live pulse, a squad's
+/// faces, a crash line.
+private struct ModeArt: View {
+    let mode: String
+    let color: Color
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
+
+    var body: some View {
+        Group {
+            switch mode {
+            case "season.challenges": challengeMeter
+            case "season.rooms": livePulse
+            case "season.squads": squadFaces
+            default: crashLine
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// −5% … +8%: a red-to-green rail with a glowing marker past the middle and a flag
+    /// at the finish.
+    private var challengeMeter: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(LinearGradient(colors: [.negative, .tileYellow, .positive], startPoint: .leading, endPoint: .trailing))
+                    .frame(height: 6)
+                    .opacity(0.85)
+                Circle()
+                    .fill(.white)
+                    .frame(width: 14, height: 14)
+                    .shadow(color: .white.opacity(0.8), radius: 6)
+                    .offset(x: width * 0.66 - 7)
+                Image(systemName: "flag.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.positive)
+                    .offset(x: width - 12, y: -12)
+            }
+            .frame(maxHeight: .infinity)
+        }
+    }
+
+    /// A LIVE badge with a dot that breathes.
+    private var livePulse: some View {
+        HStack(spacing: Space.s8) {
+            ZStack {
+                Circle()
+                    .fill(Color.negative.opacity(0.35))
+                    .frame(width: 18, height: 18)
+                    .scaleEffect(pulse ? 1.4 : 0.8)
+                    .opacity(pulse ? 0 : 1)
+                Circle().fill(Color.negative).frame(width: 9, height: 9)
+            }
+            Text("LIVE")
+                .font(.caption.weight(.heavy))
+                .tracking(1.2)
+                .foregroundStyle(Color.textPrimary)
+            Spacer(minLength: 0)
+        }
+        .onAppear {
+            guard !reduceMotion, ProcessInfo.processInfo.environment["UITEST_STILL_FRAMES"] != "1" else { return }
+            withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { pulse = true }
+        }
+    }
+
+    /// Three friends' avatars, overlapping, and a +2.
+    private var squadFaces: some View {
+        HStack(spacing: -10) {
+            ForEach(["ada", "kai", "zoe"], id: \.self) { seed in
+                ProfileAvatar(seed: seed, name: seed, size: 30)
+                    .overlay(Circle().strokeBorder(Color.appBackground, lineWidth: 2))
+            }
+            Text("+2")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.textPrimary)
+                .frame(width: 30, height: 30)
+                .metalSurface(Circle())
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// A drift, a cliff, a dead-cat bounce, in red.
+    private var crashLine: some View {
+        Canvas { context, size in
+            let shape: [CGFloat] = [0.2, 0.25, 0.18, 0.3, 0.26, 0.85, 0.95, 0.7, 0.78]
+            var path = Path()
+            for (i, y) in shape.enumerated() {
+                let point = CGPoint(x: size.width * CGFloat(i) / CGFloat(shape.count - 1), y: size.height * y)
+                if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            context.stroke(path, with: .color(Color(red: 1, green: 0.27, blue: 0.23)),
+                           style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+        }
+        .shadow(color: Color.negative.opacity(0.6), radius: 6)
+    }
+}
+
 /// An icon, a title and an optional detail, with a chevron — a row inside a card.
 struct LinkRow: View {
     let symbol: String
     let title: String
     let detail: String?
+    var tint: Color = .tileBlue
 
     var body: some View {
         HStack(spacing: Space.s12) {
-            Image(systemName: symbol)
-                .font(.body)
-                .foregroundStyle(Color.textSecondary)
-                .frame(width: 24)
-                .accessibilityHidden(true)
+            IconTile(symbol: symbol, color: tint, size: 30)
             Text(title)
                 .font(.body)
                 .foregroundStyle(Color.textPrimary)
@@ -529,7 +597,7 @@ struct SeasonHistoryView: View {
             .padding(.bottom, Space.section)
         }
         .scrollIndicators(.hidden)
-        .background(Color.appBackground)
+        .screenBackground()
         .refreshable { await load() }
         .reservesTabBarSpace()
         .navigationTitle("Past seasons")
@@ -622,7 +690,7 @@ struct SeasonResultsView: View {
             .padding(.bottom, Space.section)
         }
         .scrollIndicators(.hidden)
-        .background(Color.appBackground)
+        .screenBackground()
         .refreshable { await load() }
         .reservesTabBarSpace()
         .navigationTitle(label)

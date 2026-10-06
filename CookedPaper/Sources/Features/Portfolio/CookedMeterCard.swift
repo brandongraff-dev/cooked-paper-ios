@@ -40,7 +40,7 @@ struct CookedMeterCard: View {
             }
             .padding(Space.s16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .glassCard()
             .animation(Motion.standard, value: reading.tier)
         }
         .buttonStyle(.pressable)
@@ -233,7 +233,7 @@ private struct CookedMeterCardPreview: View {
         }
         .padding(Space.margin)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.appBackground)
+        .screenBackground()
     }
 }
 

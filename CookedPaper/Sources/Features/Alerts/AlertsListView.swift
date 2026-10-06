@@ -19,21 +19,21 @@ struct AlertsListView: View {
                         .font(.rowSubtitle)
                         .foregroundStyle(Color.textSecondary)
                 }
-                .listRowBackground(Color.appSurface)
+                .listRowBackground(GlassRowBackground())
             }
 
             if !store.hasLoaded && store.isLoading {
                 Section {
                     ForEach(0..<3, id: \.self) { _ in SkeletonRow() }
                 }
-                .listRowBackground(Color.appSurface)
+                .listRowBackground(GlassRowBackground())
             } else if !store.hasLoaded, let loadError = store.loadError {
                 Section {
                     EmptyStateView(symbol: "wifi.slash", title: "Couldn't load your alerts", detail: loadError) {
                         Task { await store.load() }
                     }
                 }
-                .listRowBackground(Color.appSurface)
+                .listRowBackground(GlassRowBackground())
             } else if store.alerts.isEmpty {
                 Section {
                     EmptyStateView(
@@ -42,7 +42,7 @@ struct AlertsListView: View {
                         detail: "Tap the bell on any token to be notified when its price crosses a level."
                     )
                 }
-                .listRowBackground(Color.appSurface)
+                .listRowBackground(GlassRowBackground())
             } else {
                 Section {
                     ForEach(store.alerts) { alert in
@@ -69,12 +69,12 @@ struct AlertsListView: View {
                             .foregroundStyle(Color.textTertiary)
                     }
                 }
-                .listRowBackground(Color.appSurface)
+                .listRowBackground(GlassRowBackground())
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle("Price alerts")
         .navigationBarTitleDisplayMode(.inline)

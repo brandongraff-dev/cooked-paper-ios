@@ -51,7 +51,11 @@ struct RootView: View {
             if store.isLoadingProducts && !store.isSubscribed {
                 LaunchScreen()
             } else if !hasSeenOnboarding && !store.isSubscribed {
-                OnboardingView(onFinished: { hasSeenOnboarding = true })
+                OnboardingView(onFinished: {
+                    Funnel.track(.onboardingCompleted)
+                    hasSeenOnboarding = true
+                })
+                .onAppear { Funnel.trackOnce(.onboardingStarted) }
             } else if session.isSignedIn && session.needsProfileSetup {
                 // A sign-in outside onboarding just created the account (onboarding
                 // shows this as its own step instead).
@@ -74,6 +78,7 @@ struct RootView: View {
                 AppShellView()
             }
         }
+        .task { Funnel.track(.appOpened) }
         .animation(Motion.standard, value: store.isSubscribed)
         .animation(Motion.standard, value: hasClosedOnboardingPaywall)
         .animation(Motion.standard, value: session.isSignedIn)

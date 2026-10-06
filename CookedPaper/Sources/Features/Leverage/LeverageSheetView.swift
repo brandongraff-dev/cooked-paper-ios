@@ -180,7 +180,7 @@ struct LeverageSheetView: View {
                 .contentTransition(.numericText())
         }
         .padding(Space.s16)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
         .redacted(reason: isQuoting && quote == nil ? .placeholder : [])
     }
 

@@ -41,7 +41,7 @@ struct LeaguesView: View {
             .padding(.bottom, Space.section)
         }
         .scrollIndicators(.hidden)
-        .background(Color.appBackground)
+        .screenBackground()
         .refreshable { await store.load() }
         .reservesTabBarSpace()
         .task { await store.load() }

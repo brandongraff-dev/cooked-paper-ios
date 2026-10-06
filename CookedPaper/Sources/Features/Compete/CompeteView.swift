@@ -15,7 +15,7 @@ struct CompeteView: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) { picker }
-        .background(Color.appBackground)
+        .screenBackground()
         .navigationTitle("Compete")
         .navigationBarTitleDisplayMode(.large)
         .navigationDestination(for: CompeteRoute.self) { route in
@@ -38,7 +38,7 @@ struct CompeteView: View {
         .padding(.horizontal, Space.margin)
         .padding(.top, Space.s4)
         .padding(.bottom, Space.s8)
-        .background(Color.appBackground)
+        .screenBackground()
     }
 }
 

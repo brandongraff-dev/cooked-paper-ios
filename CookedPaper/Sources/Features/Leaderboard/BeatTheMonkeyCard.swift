@@ -65,7 +65,7 @@ struct BeatTheMonkeyCard: View {
         }
         .padding(Space.s20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .glassCard()
     }
 
     /// Your return against the monkey's, when you're ranked. A tie goes to the monkey,

@@ -105,7 +105,7 @@ struct TokenDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.appBackground)
+        .screenBackground()
         .reservesTabBarSpace()
         .navigationTitle(profile?.token.symbol ?? "")
         .navigationBarTitleDisplayMode(.inline)
@@ -289,9 +289,10 @@ struct TokenDetailView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
 
-            HStack(spacing: Space.s4) {
+            HStack(spacing: Space.s8) {
                 if let change = shown.change, let percent = shown.percent {
-                    Text("\(PriceFormat.signedPrice(change, reference: shown.price)) (\(PriceFormat.change(percent)))")
+                    ChangePill(percent: percent)
+                    Text(PriceFormat.signedPrice(change, reference: shown.price))
                         .foregroundStyle(Color.direction(percent))
                         .contentTransition(.numericText())
                 } else {
