@@ -385,8 +385,10 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
                     app.buttons["Sell 50%"].firstMatch.tap()
                     Thread.sleep(forTimeInterval: 1)
                     attach(app, name: "49-crash-replay-playing")
-                    app.buttons["1×"].firstMatch.tap()
-                    if app.descendants(matching: .any)["replay.verdict"].firstMatch.waitForExistence(timeout: 60) {
+                    // 3× plays the 97 candles in ~20 s; 1× would take a minute.
+                    let speed = app.buttons["1×"].firstMatch
+                    if speed.waitForExistence(timeout: 3) { speed.tap() }
+                    if app.descendants(matching: .any)["replay.verdict"].firstMatch.waitForExistence(timeout: 120) {
                         Thread.sleep(forTimeInterval: 1.5)
                         attach(app, name: "50-crash-replay-result")
                         let done = app.buttons["Done"].firstMatch
