@@ -13,7 +13,7 @@ struct PaywallView: View {
     let reason: PaywallReason
     /// Closes the paywall without buying. Nil only for a paywall nothing can close.
     let onClose: (() -> Void)?
-    @State private var selectedProductID = ProductID.monthly
+    @State private var selectedProductID = ProductID.annual
     @State private var showsSignIn = false
     /// The plan waiting on the "want a reminder?" pre-prompt.
     @State private var pendingProduct: Product?
@@ -36,9 +36,10 @@ struct PaywallView: View {
         store.products.first { $0.id == selectedProductID }
     }
 
-    /// Monthly first (the default and the better deal), then weekly.
+    /// Annual first (the default, the better deal, and the one with the trial), then
+    /// monthly.
     private var orderedPlans: [Product] {
-        [store.monthlyProduct, store.weeklyProduct].compactMap { $0 }
+        [store.annualProduct, store.monthlyProduct].compactMap { $0 }
     }
 
     var body: some View {
@@ -127,7 +128,7 @@ struct PaywallView: View {
         }
         .task(id: store.products.map(\.id)) {
             await refreshTrialEligibility()
-            if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.monthly }) ?? orderedPlans.first {
+            if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.annual }) ?? orderedPlans.first {
                 selectedProductID = first.id
             }
         }
@@ -295,7 +296,7 @@ struct PaywallView: View {
                 ForEach(orderedPlans, id: \.id) { product in
                     PlanRow(
                         title: planTitle(product),
-                        badge: product.id == ProductID.monthly ? savingsText(monthly: product) : nil,
+                        badge: product.id == ProductID.annual ? savingsText(annual: product) : nil,
                         subtitle: planSubtitle(product),
                         price: "\(product.displayPrice)/\(shortUnit(product))",
                         detail: planDetail(product),
@@ -501,10 +502,11 @@ struct PaywallView: View {
         }
     }
 
-    /// The small line under the price: a weekly equivalent for longer plans, or
-    /// "after trial" when the plan starts with one.
+    /// The small line under the price: what a year works out to per week (the billed
+    /// price above it stays the most prominent figure), or "after trial" for a shorter
+    /// plan that starts with one.
     private func planDetail(_ product: Product) -> String? {
-        if trialOffer(product) != nil { return "after trial" }
+        if trialOffer(product) != nil && periodUnit(product) != .year { return "after trial" }
         let weeks: Decimal
         switch periodUnit(product) {
         case .year: weeks = 52
@@ -539,12 +541,12 @@ struct PaywallView: View {
         }
     }
 
-    /// "SAVE 54%" — monthly versus a month of weekly (52 weeks over 12 months).
-    private func savingsText(monthly: Product) -> String? {
-        guard let weekly = store.weeklyProduct, weekly.price > 0 else { return nil }
-        let monthOfWeekly = weekly.price * 52 / 12
-        guard monthOfWeekly > monthly.price else { return nil }
-        let saving = NSDecimalNumber(decimal: (1 - monthly.price / monthOfWeekly) * 100).doubleValue
+    /// "SAVE 68%": annual versus twelve months of monthly.
+    private func savingsText(annual: Product) -> String? {
+        guard let monthly = store.monthlyProduct, monthly.price > 0 else { return nil }
+        let yearOfMonthly = monthly.price * 12
+        guard yearOfMonthly > annual.price else { return nil }
+        let saving = NSDecimalNumber(decimal: (1 - annual.price / yearOfMonthly) * 100).doubleValue
         let rounded = Int(saving.rounded())
         return rounded > 0 ? "SAVE \(rounded)%" : nil
     }

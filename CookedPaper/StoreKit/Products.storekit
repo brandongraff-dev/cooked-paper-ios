@@ -76,16 +76,11 @@
         {
           "adHocOffers": [],
           "codeOffers": [],
-          "displayPrice": "7.99",
+          "displayPrice": "12.99",
           "familyShareable": false,
           "groupNumber": 1,
           "internalID": "5A6F1B10-0000-4000-8000-000000000011",
-          "introductoryOffer": {
-            "internalID": "5A6F1B10-0000-4000-8000-000000000016",
-            "numberOfPeriods": 1,
-            "paymentMode": "free",
-            "subscriptionPeriod": "P1W"
-          },
+          "introductoryOffer": null,
           "localizations": [
             {
               "description": "Full access to Cooked Paper, billed monthly.",
@@ -103,7 +98,7 @@
         {
           "adHocOffers": [],
           "codeOffers": [],
-          "displayPrice": "29.99",
+          "displayPrice": "49.99",
           "familyShareable": false,
           "groupNumber": 1,
           "internalID": "5A6F1B10-0000-4000-8000-000000000012",
