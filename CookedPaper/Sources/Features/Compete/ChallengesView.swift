@@ -110,6 +110,7 @@ struct ChallengesView: View {
                 }
                 .buttonStyle(.pressable)
                 .disabled(isStarting)
+                .accessibilityLabel("\(tier.tierLabel) challenge")
                 .accessibilityIdentifier("challenge.start.\(tier.tier)")
             }
         }
@@ -381,7 +382,5 @@ private struct ChallengeTierCard: View {
                 .clipShape(shape)
         }
         .metalSurface(shape)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(tier.tierLabel) challenge. Pass at \(PriceFormat.usd(pass)), fail at \(PriceFormat.usd(fail)).")
     }
 }

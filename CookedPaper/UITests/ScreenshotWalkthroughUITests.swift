@@ -304,7 +304,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         }
         // The sheet above can still be animating away; retry until Season shows.
         let seasonHeader = app.descendants(matching: .any)["season.header"].firstMatch
-        for _ in 0..<3 where !app.buttons["season.challenges"].exists {
+        for _ in 0..<3 where !app.descendants(matching: .any)["season.challenges"].firstMatch.exists {
             seasonSegment.tap()
             if seasonHeader.waitForExistence(timeout: 5) { break }
         }
@@ -413,7 +413,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
     /// Scrolls the Season page until the entry is tappable, then opens it.
     @MainActor
     private func openFromSeason(_ app: XCUIApplication, id: String, unreached: inout [String]) -> Bool {
-        let entry = app.buttons[id]
+        let entry = app.descendants(matching: .any)[id].firstMatch
         guard entry.waitForExistence(timeout: 5) else {
             unreached.append("no \(id) on the Season page")
             return false

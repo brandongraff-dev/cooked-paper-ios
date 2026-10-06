@@ -33,6 +33,7 @@ struct ReplayListView: View {
                                 row(scenario)
                             }
                             .buttonStyle(.pressable)
+                            .accessibilityLabel("Mystery crash \(scenario.number), \(scenario.difficulty), \(scenario.players) played\(scenario.number > 1 && !FreeTier.shared.isPro ? ", Pro" : "")")
                             .accessibilityIdentifier("replay.\(scenario.number)")
                         }
                     }
@@ -102,8 +103,6 @@ struct ReplayListView: View {
         }
         .padding(Space.s16)
         .glassCard(tint: difficultyColor(scenario.difficulty))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Mystery crash \(scenario.number), \(scenario.difficulty), \(scenario.players) played\(locked ? ", Pro" : "")")
     }
 
     private func difficultyColor(_ difficulty: String) -> Color {

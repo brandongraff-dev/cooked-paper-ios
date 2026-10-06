@@ -420,10 +420,8 @@ private struct PlayGrid: View {
                     .glassCard(tint: mode.color)
                 }
                 .buttonStyle(.pressable)
-                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(mode.title)
                 .accessibilityHint(mode.detail)
-                .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier(mode.id)
             }
         }
