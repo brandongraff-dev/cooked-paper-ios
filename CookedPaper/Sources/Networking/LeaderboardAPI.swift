@@ -13,4 +13,32 @@ enum LeaderboardAPI {
             as: PaperLeaderboardResponse.self
         )
     }
+
+    /// Your recap for a `YYYY-MM` month (UTC). Bearer.
+    static func recap(month: String) async throws -> PaperRecap {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/recap", query: ["month": month]),
+            as: PaperRecap.self
+        )
+    }
+
+    /// What a ranked trader holds now. Public; 404 when they're unranked or hide balances.
+    static func traderPositions(portfolioId: String) async throws -> PaperTraderPositions {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/leaderboard/portfolios/\(portfolioId)/positions", attachToken: false),
+            as: PaperTraderPositions.self
+        )
+    }
+
+    /// Beat the Monkey: the share of ranked traders above the house bot. Public.
+    static func monkeyStanding(window: LeaderboardWindow = .all) async throws -> PaperMonkeyStanding {
+        try await APIClient.shared.send(
+            Endpoint(
+                path: "/paper/leaderboard/monkey",
+                query: ["window": window.rawValue],
+                attachToken: false
+            ),
+            as: PaperMonkeyStanding.self
+        )
+    }
 }

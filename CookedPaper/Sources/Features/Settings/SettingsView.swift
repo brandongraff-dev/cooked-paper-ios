@@ -39,6 +39,16 @@ struct SettingsView: View {
             }
             .listRowBackground(Color.appSurface)
 
+            Section("Streaming") {
+                NavigationLink {
+                    StreamerModeView()
+                } label: {
+                    SettingsRow(symbol: "video", title: "Streamer mode")
+                }
+                .accessibilityIdentifier("settings.streamer")
+            }
+            .listRowBackground(Color.appSurface)
+
             Section("Subscription") {
                 Button { showManageSubscriptions = true } label: {
                     SettingsRow(symbol: "creditcard", title: "Manage subscription")
@@ -246,7 +256,7 @@ struct SettingsView: View {
 
 /// One Settings row: a plain SF Symbol in secondary gray, a title, and an optional
 /// detail or trailing glyph.
-private struct SettingsRow: View {
+struct SettingsRow: View {
     let symbol: String
     let title: String
     var detail: String? = nil

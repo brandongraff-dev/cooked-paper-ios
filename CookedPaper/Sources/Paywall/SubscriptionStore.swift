@@ -6,6 +6,8 @@ enum ProductID {
     static let monthly = "app.cooked.paper.monthly"
     static let annual = "app.cooked.paper.annual"
     static let weekly = "app.cooked.paper.weekly"
+    /// The paywall offers weekly and monthly only. Annual stays recognised so an
+    /// existing annual subscription keeps working; it is no longer sold here.
     static let all = [weekly, monthly, annual]
 }
 

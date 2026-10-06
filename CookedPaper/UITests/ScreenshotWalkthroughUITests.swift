@@ -255,6 +255,179 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         }
     }
 
+    /// The growth features: Beat the Monkey and a top trader's positions on the
+    /// Leaderboard; Challenges, event rooms, Squads, Crash Replay and the monthly recap
+    /// from Season; and Streamer mode from Settings. Served by MockAPI/MockContests.
+    @MainActor
+    func testGrowthFeatureScreenshots() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["UITEST_BYPASS_PAYWALL"] = "1"
+        app.launchEnvironment["UITEST_MOCK_API"] = "1"
+        app.launchEnvironment["UITEST_STILL_FRAMES"] = "1"
+        app.launch()
+
+        var unreached: [String] = []
+        guard app.buttons["tab.compete"].waitForExistence(timeout: 20) else {
+            XCTFail("Main tab bar never appeared within 20s of a bypassed launch.")
+            return
+        }
+        waitOutAchievementToast(app)
+        app.buttons["tab.compete"].tap()
+        Thread.sleep(forTimeInterval: 1)
+
+        // Leaderboard: the monkey card, then a trader's (blurred for free) positions.
+        let leaderboardSegment = app.buttons["compete.segment.leaderboard"]
+        if leaderboardSegment.waitForExistence(timeout: 5) {
+            leaderboardSegment.tap()
+            Thread.sleep(forTimeInterval: 1.5)
+            attach(app, name: "40-leaderboard-beat-the-monkey")
+            let row = app.buttons["leaderboard.row.0"]
+            if row.waitForExistence(timeout: 5) {
+                if !row.isHittable { app.swipeUp() }
+                row.tap()
+                Thread.sleep(forTimeInterval: 1.5)
+                attach(app, name: "41-trader-positions")
+                app.swipeDown()
+                Thread.sleep(forTimeInterval: 0.8)
+            } else {
+                unreached.append("no leaderboard row")
+            }
+        } else {
+            unreached.append("Leaderboard segment never appeared")
+        }
+
+        let seasonSegment = app.buttons["compete.segment.season"]
+        guard seasonSegment.waitForExistence(timeout: 5) else {
+            XCTFail("Season segment never appeared")
+            return
+        }
+        seasonSegment.tap()
+        Thread.sleep(forTimeInterval: 1.2)
+        attach(app, name: "42-season-new-cards")
+
+        if openFromSeason(app, id: "season.challenges", unreached: &unreached) {
+            _ = app.buttons["challenge.start.10k"].waitForExistence(timeout: 5)
+            Thread.sleep(forTimeInterval: 1)
+            attach(app, name: "43-challenges")
+            goBack(app)
+        }
+
+        if openFromSeason(app, id: "season.rooms", unreached: &unreached) {
+            Thread.sleep(forTimeInterval: 1.2)
+            attach(app, name: "44-rooms")
+            let room = app.buttons["rooms.row.0"].firstMatch
+            if room.waitForExistence(timeout: 5) {
+                room.tap()
+                Thread.sleep(forTimeInterval: 1.5)
+                attach(app, name: "45-room-detail")
+                goBack(app)
+            } else {
+                unreached.append("no room row")
+            }
+            goBack(app)
+        }
+
+        if openFromSeason(app, id: "season.squads", unreached: &unreached) {
+            Thread.sleep(forTimeInterval: 1.2)
+            attach(app, name: "46-squads")
+            let squad = app.buttons["squads.row.0"]
+            if squad.waitForExistence(timeout: 5) {
+                squad.tap()
+                Thread.sleep(forTimeInterval: 1.5)
+                attach(app, name: "47-squad-detail")
+                goBack(app)
+            } else {
+                unreached.append("no squad row")
+            }
+            goBack(app)
+        }
+
+        if openFromSeason(app, id: "season.replay", unreached: &unreached) {
+            Thread.sleep(forTimeInterval: 1.2)
+            attach(app, name: "48-crash-replay-list")
+            let first = app.buttons["replay.1"]
+            if first.waitForExistence(timeout: 5) {
+                first.tap()
+                let play = app.buttons["replay.play"]
+                if play.waitForExistence(timeout: 8) {
+                    play.tap()
+                    Thread.sleep(forTimeInterval: 3)
+                    app.buttons["Buy all"].firstMatch.tap()
+                    Thread.sleep(forTimeInterval: 6)
+                    app.buttons["Sell 50%"].firstMatch.tap()
+                    Thread.sleep(forTimeInterval: 1)
+                    attach(app, name: "49-crash-replay-playing")
+                    app.buttons["1×"].firstMatch.tap()
+                    if app.descendants(matching: .any)["replay.verdict"].firstMatch.waitForExistence(timeout: 60) {
+                        Thread.sleep(forTimeInterval: 1.5)
+                        attach(app, name: "50-crash-replay-result")
+                        let done = app.buttons["Done"].firstMatch
+                        if done.waitForExistence(timeout: 3) { done.tap() }
+                    } else {
+                        unreached.append("replay never reached its verdict")
+                        app.buttons["Quit"].firstMatch.tap()
+                    }
+                    Thread.sleep(forTimeInterval: 1)
+                } else {
+                    unreached.append("replay player never loaded")
+                }
+            } else {
+                unreached.append("no replay row")
+            }
+            goBack(app)
+        }
+
+        if openFromSeason(app, id: "season.recap", unreached: &unreached) {
+            Thread.sleep(forTimeInterval: 1.5)
+            attach(app, name: "51-monthly-recap")
+            goBack(app)
+        }
+
+        let settingsTab = app.buttons["tab.settings"]
+        if settingsTab.waitForExistence(timeout: 5) {
+            settingsTab.tap()
+            let streamer = app.buttons["settings.streamer"]
+            if streamer.waitForExistence(timeout: 5) {
+                if !streamer.isHittable { app.swipeUp() }
+                streamer.tap()
+                let create = app.buttons["streamer.create"]
+                if create.waitForExistence(timeout: 5) { create.tap() }
+                Thread.sleep(forTimeInterval: 1.5)
+                attach(app, name: "52-streamer-mode")
+            } else {
+                unreached.append("no Streamer mode row in Settings")
+            }
+        }
+
+        if !unreached.isEmpty {
+            XCTFail("Growth walkthrough didn't fully complete: \(unreached.joined(separator: "; "))")
+        }
+    }
+
+    /// Scrolls the Season page until the entry is tappable, then opens it.
+    @MainActor
+    private func openFromSeason(_ app: XCUIApplication, id: String, unreached: inout [String]) -> Bool {
+        let entry = app.buttons[id]
+        guard entry.waitForExistence(timeout: 5) else {
+            unreached.append("no \(id) on the Season page")
+            return false
+        }
+        var swipes = 0
+        while !entry.isHittable && swipes < 4 {
+            app.swipeUp()
+            swipes += 1
+        }
+        entry.tap()
+        return true
+    }
+
+    @MainActor
+    private func goBack(_ app: XCUIApplication) {
+        let backButton = app.navigationBars.buttons.element(boundBy: 0)
+        if backButton.waitForExistence(timeout: 3) { backButton.tap() }
+        Thread.sleep(forTimeInterval: 0.8)
+    }
+
     /// Screenshots the launch-time unlock toast if it shows, then waits for it to
     /// go (it dismisses itself after a few seconds).
     @MainActor

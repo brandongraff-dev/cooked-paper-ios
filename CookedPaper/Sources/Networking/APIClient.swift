@@ -94,8 +94,12 @@ final class APIClient {
         }
         if http.statusCode == 401, endpoint.attachToken, endpoint.signsOutOnUnauthorized, SessionStore.shared.isSignedIn {
             // The refresh token is gone or revoked: the session is over. Sending the
-            // person back to sign-in beats a screen of silent failures.
-            SessionStore.shared.clear()
+            // person back to sign-in beats a screen of silent failures. An account
+            // is one iPhone at a time; when another phone signed in, say so.
+            let code = (try? decoder.decode(APIErrorBody.self, from: data))?.error
+            SessionStore.shared.clear(
+                notice: code == "session_evicted" ? SessionStore.otherDeviceNotice : nil
+            )
         }
 
         guard (200..<300).contains(http.statusCode) else {

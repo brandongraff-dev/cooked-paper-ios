@@ -18,6 +18,8 @@ import UniformTypeIdentifiers
 enum ShareCardStyle {
     /// The canvas in points; `ShareCardRenderer.scale` turns it into 1080×1350 px.
     static let size = CGSize(width: 360, height: 450)
+    /// A 9:16 story (Instagram, TikTok, Snapchat): 1080×1920 px at the same scale.
+    static let storySize = CGSize(width: 360, height: 640)
     /// The landing page's background.
     static let background = Color(rgb: 0x0A0A0D)
     /// The landing page's ribbon accent.
@@ -229,14 +231,14 @@ enum ShareCardRenderer {
 
     /// The card as PNG data, or nil if rendering failed. Fixed Dynamic Type and a
     /// dark scheme, so the image is the same on every device.
-    static func png<Card: View>(_ card: Card) -> Data? {
+    static func png<Card: View>(_ card: Card, size: CGSize = ShareCardStyle.size) -> Data? {
         let content = card
-            .frame(width: ShareCardStyle.size.width, height: ShareCardStyle.size.height)
+            .frame(width: size.width, height: size.height)
             .environment(\.dynamicTypeSize, .large)
             .environment(\.colorScheme, .dark)
         let renderer = ImageRenderer(content: content)
         renderer.scale = scale
-        renderer.proposedSize = ProposedViewSize(ShareCardStyle.size)
+        renderer.proposedSize = ProposedViewSize(size)
         renderer.isOpaque = true
         return renderer.uiImage?.pngData()
     }
@@ -289,6 +291,8 @@ struct ShareImageButton<ID: Hashable, Card: View>: View {
     /// Icon-only, for a toolbar or a card header.
     var compact = false
     var label = "Share card"
+    /// The canvas: the 4:5 card by default, `ShareCardStyle.storySize` for a story.
+    var size = ShareCardStyle.size
     let card: (UIImage?) -> Card
 
     @State private var image: ShareCardImage?
@@ -301,8 +305,10 @@ struct ShareImageButton<ID: Hashable, Card: View>: View {
         logoURL: URL? = nil,
         compact: Bool = false,
         label: String = "Share card",
+        size: CGSize = ShareCardStyle.size,
         @ViewBuilder card: @escaping (UIImage?) -> Card
     ) {
+        self.size = size
         self.id = id
         self.title = title
         self.message = message
@@ -349,7 +355,7 @@ struct ShareImageButton<ID: Hashable, Card: View>: View {
         guard !Task.isCancelled else { return }
         let logo = await ShareCardLogoCache.image(for: logoURL)
         guard !Task.isCancelled else { return }
-        guard let data = ShareCardRenderer.png(card(logo)) else { return }
+        guard let data = ShareCardRenderer.png(card(logo), size: size) else { return }
         image = ShareCardImage(png: data)
         preview = UIImage(data: data).map { Image(uiImage: $0) }
     }

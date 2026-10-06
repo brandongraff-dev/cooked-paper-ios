@@ -30,7 +30,10 @@ enum TradePortfolioContext {
 
     /// The small outlined tag next to the balance on a ticket.
     var badge: String {
-        isMain ? "PAPER" : "DUEL"
+        switch self {
+        case .main: "PAPER"
+        case .duel(let store): store.label
+        }
     }
 
     func refreshAfterTrade() async {

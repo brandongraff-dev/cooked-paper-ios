@@ -92,6 +92,7 @@ nonisolated enum MockAPI {
         if match("DELETE", "auth/account") != nil { return (204, [:] as [String: Any]) }
 
         if let leverage = MockLeverage.route(method: method, parts: parts, body: body) { return leverage }
+        if let contest = MockContests.route(method: method, parts: parts, body: body) { return contest }
         if let compete = MockCompete.route(method: method, parts: parts, body: body) { return compete }
 
         if match("POST", "paper/portfolios/starter") != nil {
@@ -111,6 +112,15 @@ nonisolated enum MockAPI {
         if match("POST", "paper/portfolios/:/trades") != nil { return (200, executeResponse(body)) }
         if match("POST", "paper/portfolios/:/reset") != nil { return (200, [:] as [String: Any]) }
         if match("GET", "paper/discover") != nil { return (200, discover) }
+        if match("GET", "paper/recap") != nil {
+            return (200, recap(month: query["month"] ?? "2026-10"))
+        }
+        if let c = match("GET", "paper/leaderboard/portfolios/:/positions") {
+            return (200, traderPositions(portfolioId: c[0]))
+        }
+        if match("GET", "paper/leaderboard/monkey") != nil {
+            return (200, monkeyStanding(window: query["window"] ?? "all"))
+        }
         if match("GET", "paper/leaderboard") != nil {
             return (200, leaderboard(window: query["window"] ?? "all"))
         }
@@ -460,20 +470,63 @@ nonisolated enum MockAPI {
     // MARK: - Leaderboard
 
     private static func leaderboard(window: String) -> [String: Any] {
-        let names = ["degenwizard", "solsniper", "paperhands", "moonboi", "rugsurvivor", "chartooor", "bagholder", "wenlambo", "gmgn", "cookedcat", "fomo_fren", "diamondpaws"]
-        let returns = ["184.21", "122.40", "97.12", "74.55", "61.02", "48.90", "33.14", "21.70", "12.49", "4.02", "-3.88", "-12.40"]
+        let names = ["degenwizard", "solsniper", "paperhands", "moonboi", "rugsurvivor", "chartooor", "the_monkey", "bagholder", "wenlambo", "gmgn", "cookedcat", "fomo_fren", "diamondpaws"]
+        let returns = ["184.21", "122.40", "97.12", "74.55", "61.02", "48.90", "38.20", "33.14", "21.70", "12.49", "4.02", "-3.88", "-12.40"]
         let entries: [[String: Any]] = names.enumerated().map { i, name in
-            [
-                "rank": i + 1, "portfolioId": "lb-\(i)", "username": name, "provenance": "PAPER · UNVERIFIED",
-                "returnPct": ["pct": returns[i], "sampleSize": 12 - i / 2, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
-                "roundTripCount": 24 - i,
-                "maxDrawdownPct": ["pct": dec(6 + Double(i) * 1.7), "sampleSize": 12, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
-                "resetCount": i % 3 == 0 ? 1 : 0, "startingBalanceUsd": "10000", "createdAt": iso(daysFromNow: -20),
-            ]
+            leaderboardEntry(rank: i + 1, username: name, returnPct: returns[i], roundTrips: 24 - i)
         }
         return [
             "window": window, "season": "2026-09", "entries": entries,
             "rankedCount": entries.count, "emergingCount": 4, "computedAt": iso(daysFromNow: 0),
+        ]
+    }
+
+    private static func leaderboardEntry(rank: Int, username: String, returnPct: String, roundTrips: Int) -> [String: Any] {
+        [
+            "rank": rank, "portfolioId": "lb-\(rank)", "username": username, "provenance": "PAPER · SIMULATED",
+            "returnPct": ["pct": returnPct, "sampleSize": roundTrips, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
+            "roundTripCount": roundTrips, "resetCount": rank % 3 == 0 ? 1 : 0, "createdAt": iso(daysFromNow: -20),
+            "isBot": username == "the_monkey",
+        ]
+    }
+
+    private static func recap(month: String) -> [String: Any] {
+        let wif = tokens[1], bonk = tokens[0]
+        return [
+            "month": month, "provenance": "PAPER · SIMULATED",
+            "returnPct": ["pct": "12.40", "sampleSize": 14, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
+            "tradeCount": 31, "roundTripCount": 14,
+            "winRatePct": ["pct": "57.1", "sampleSize": 14, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
+            "bestTrade": ["tokenMint": wif.mint, "symbol": wif.symbol, "returnPct": "48.20"],
+            "worstTrade": ["tokenMint": bonk.mint, "symbol": bonk.symbol, "returnPct": "-21.05"],
+            "mostTraded": ["tokenMint": wif.mint, "symbol": wif.symbol, "tradeCount": 9] as [String: Any],
+            "avgHoldMinutes": 214,
+            "personality": ["id": "sniper", "title": "The Sniper", "description": "Picks spots carefully and is right most of the time."],
+            "monkey": ["returnPct": "3.20", "beatMonkey": true] as [String: Any],
+            "dailyCall": ["played": 18, "correct": 11],
+            "computedAt": iso(daysFromNow: 0),
+        ]
+    }
+
+    private static func traderPositions(portfolioId: String) -> [String: Any] {
+        let held = Array(tokens.prefix(3))
+        let shares = ["41.5", "22.0", "9.5"]
+        let returns = ["12.3", "-4.1", "31.0"]
+        return [
+            "entry": leaderboardEntry(rank: 1, username: "degenwizard", returnPct: "184.21", roundTrips: 24),
+            "positions": held.enumerated().map { i, t in
+                ["tokenMint": t.mint, "symbol": t.symbol, "name": t.name, "sharePct": shares[i], "unrealizedReturnPct": returns[i]] as [String: Any]
+            },
+            "cashSharePct": "27.0", "sampleSize": held.count, "computedAt": iso(daysFromNow: 0),
+        ]
+    }
+
+    /// Six of the twelve demo traders are above the monkey's 38.2%.
+    private static func monkeyStanding(window: String) -> [String: Any] {
+        [
+            "window": window, "season": "2026-10",
+            "monkey": leaderboardEntry(rank: 7, username: "the_monkey", returnPct: "38.20", roundTrips: 18),
+            "sampleSize": 12, "beatingMonkey": 6, "beatingPct": "50.0", "computedAt": iso(daysFromNow: 0),
         ]
     }
 
@@ -520,7 +573,7 @@ nonisolated enum MockAPI {
 
     nonisolated(unsafe) private static let isoFormatter = ISO8601DateFormatter()
 
-    private static func iso(daysFromNow days: Double) -> String {
+    static func iso(daysFromNow days: Double) -> String {
         isoFormatter.string(from: Date().addingTimeInterval(days * 86400))
     }
 

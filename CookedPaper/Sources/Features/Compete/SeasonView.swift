@@ -18,6 +18,109 @@ struct SeasonView: View {
             DailyCallCard()
                 .padding(.horizontal, Space.margin)
                 .padding(.top, Space.s8)
+            CrowdRecordCard()
+                .padding(.horizontal, Space.margin)
+                .padding(.top, Space.s16)
+            NavigationLink(value: CompeteRoute.challenges) {
+                HStack(spacing: Space.s12) {
+                    Image(systemName: "flag.checkered")
+                        .font(.title2)
+                        .foregroundStyle(Color.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Prop Challenges")
+                            .font(.rowTitle)
+                            .foregroundStyle(Color.textPrimary)
+                        Text("Hit +8% before you lose 5%. Practice for a funded account.")
+                            .font(.rowSubtitle)
+                            .foregroundStyle(Color.textSecondary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(Color.textTertiary)
+                }
+                .padding(Space.s16)
+                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            }
+            .buttonStyle(.pressable)
+            .padding(.horizontal, Space.margin)
+            .padding(.top, Space.s16)
+            .accessibilityIdentifier("season.challenges")
+            NavigationLink(value: CompeteRoute.rooms) {
+                HStack(spacing: Space.s12) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.title2)
+                        .foregroundStyle(Color.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Live Rooms")
+                            .font(.rowTitle)
+                            .foregroundStyle(Color.textPrimary)
+                        Text("Trade CPI and Fed days with everyone, or host a room for your stream.")
+                            .font(.rowSubtitle)
+                            .foregroundStyle(Color.textSecondary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(Color.textTertiary)
+                }
+                .padding(Space.s16)
+                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            }
+            .buttonStyle(.pressable)
+            .padding(.horizontal, Space.margin)
+            .padding(.top, Space.s12)
+            .accessibilityIdentifier("season.rooms")
+            NavigationLink(value: CompeteRoute.squads) {
+                HStack(spacing: Space.s12) {
+                    Image(systemName: "person.3.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Squads")
+                            .font(.rowTitle)
+                            .foregroundStyle(Color.textPrimary)
+                        Text("Share one portfolio with friends. Every trade is a vote.")
+                            .font(.rowSubtitle)
+                            .foregroundStyle(Color.textSecondary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(Color.textTertiary)
+                }
+                .padding(Space.s16)
+                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            }
+            .buttonStyle(.pressable)
+            .padding(.horizontal, Space.margin)
+            .padding(.top, Space.s12)
+            .accessibilityIdentifier("season.squads")
+            NavigationLink(value: CompeteRoute.replays) {
+                HStack(spacing: Space.s12) {
+                    Image(systemName: "chart.line.downtrend.xyaxis")
+                        .font(.title2)
+                        .foregroundStyle(Color.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Crash Replay")
+                            .font(.rowTitle)
+                            .foregroundStyle(Color.textPrimary)
+                        Text("Trade a real crash blind. Survive it, then post the clip.")
+                            .font(.rowSubtitle)
+                            .foregroundStyle(Color.textSecondary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(Color.textTertiary)
+                }
+                .padding(Space.s16)
+                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            }
+            .buttonStyle(.pressable)
+            .padding(.horizontal, Space.margin)
+            .padding(.top, Space.s12)
+            .accessibilityIdentifier("season.replay")
             Group {
                 if isLoading {
                     skeleton
@@ -87,6 +190,12 @@ struct SeasonView: View {
                     .accessibilityIdentifier("season.achievements")
                     RowSeparator(leadingInset: 24 + Space.s12)
                 }
+                NavigationLink(value: CompeteRoute.recap) {
+                    LinkRow(symbol: "sparkles.rectangle.stack", title: "Your monthly recap", detail: nil)
+                }
+                .buttonStyle(.pressable)
+                .accessibilityIdentifier("season.recap")
+                RowSeparator(leadingInset: 24 + Space.s12)
                 NavigationLink(value: CompeteRoute.seasonHistory) {
                     LinkRow(symbol: "clock.arrow.circlepath", title: "Past seasons", detail: nil)
                 }

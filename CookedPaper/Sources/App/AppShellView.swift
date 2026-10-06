@@ -31,6 +31,18 @@ struct AppShellView: View {
 
     @State private var selection: AppTab = .discover
     @State private var isKeyboardVisible = false
+    /// Once per account, on the first open after the free tier's full-access days end.
+    @AppStorage("hasSeenFullAccessEnded") private var hasSeenFullAccessEnded = false
+    @State private var showsFullAccessEnded = false
+
+    /// Recounts today's free trades, and says so once when full access has ended.
+    private func checkFreeTier() async {
+        await FreeTier.shared.refresh()
+        if FreeTier.shared.isLimited && !hasSeenFullAccessEnded {
+            hasSeenFullAccessEnded = true
+            showsFullAccessEnded = true
+        }
+    }
 
     var body: some View {
         // All four stacks stay alive (so each keeps its navigation and scroll
@@ -85,6 +97,7 @@ struct AppShellView: View {
         .tint(Color.accent)
         .task {
             await portfolioStore.bootstrapIfNeeded()
+            await checkFreeTier()
         }
         // Unlocks earned while the app was away are celebrated on the way back in.
         .task {
@@ -93,6 +106,10 @@ struct AppShellView: View {
         .onChange(of: scenePhase) { oldPhase, newPhase in
             guard newPhase == .active, oldPhase == .background || oldPhase == .inactive else { return }
             Task { await AchievementCenter.shared.checkForUnseen() }
+            Task { await checkFreeTier() }
+        }
+        .sheet(isPresented: $showsFullAccessEnded) {
+            PaywallView(reason: .fullAccessEnded) { showsFullAccessEnded = false }
         }
         .sheet(item: deepLinkBinding) { target in
             switch target {

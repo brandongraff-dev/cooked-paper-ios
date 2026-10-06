@@ -2,14 +2,18 @@ import Foundation
 import StoreKit
 import SwiftUI
 
-/// The hard paywall — the only door into the app. No skip button; see
-/// `SubscriptionStore` for why there's no server-side gate to match (paper trading
-/// is free/unlimited on apps/api by design, so the subscription is enforced entirely
-/// here). Every price, period and trial term shown is read from StoreKit.
+/// The paywall. Shown once after sign-in (closable — the free tier is usable on its
+/// own) and again whenever the free tier runs out or a Pro feature is opened; see
+/// `FreeTier`. There's no server-side gate to match (paper trading is free and
+/// unlimited on apps/api by design), so the subscription is enforced here. Every
+/// price, period and trial term shown is read from StoreKit.
 struct PaywallView: View {
     let store = SubscriptionStore.shared
     let session = SessionStore.shared
-    @State private var selectedProductID = ProductID.annual
+    let reason: PaywallReason
+    /// Closes the paywall without buying. Nil only for a paywall nothing can close.
+    let onClose: (() -> Void)?
+    @State private var selectedProductID = ProductID.monthly
     @State private var showsSignIn = false
     /// The plan waiting on the "want a reminder?" pre-prompt.
     @State private var pendingProduct: Product?
@@ -23,13 +27,18 @@ struct PaywallView: View {
     /// is only ever advertised to someone who will actually get it.
     @State private var trialEligibleIDs: Set<String> = []
 
+    init(reason: PaywallReason = .onboarding, onClose: (() -> Void)? = nil) {
+        self.reason = reason
+        self.onClose = onClose
+    }
+
     private var selectedProduct: Product? {
         store.products.first { $0.id == selectedProductID }
     }
 
-    /// Yearly, Weekly, Monthly — the order the plans are presented in.
+    /// Monthly first (the default and the better deal), then weekly.
     private var orderedPlans: [Product] {
-        [store.annualProduct, store.weeklyProduct, store.monthlyProduct].compactMap { $0 }
+        [store.monthlyProduct, store.weeklyProduct].compactMap { $0 }
     }
 
     var body: some View {
@@ -118,7 +127,7 @@ struct PaywallView: View {
         }
         .task(id: store.products.map(\.id)) {
             await refreshTrialEligibility()
-            if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.annual }) ?? orderedPlans.first {
+            if selectedProduct == nil, let first = orderedPlans.first(where: { $0.id == ProductID.monthly }) ?? orderedPlans.first {
                 selectedProductID = first.id
             }
         }
@@ -150,16 +159,16 @@ struct PaywallView: View {
             BrandWordmark(height: 34)
                 .padding(.top, Space.s48)
 
-            Text(goal?.paywallHeadline ?? (heldPositions.isEmpty ? "Trade live prices\nwith paper money." : "Keep your\nportfolio."))
+            Text(reasonHeadline ?? goal?.paywallHeadline ?? (heldPositions.isEmpty ? "Trade live prices\nwith paper money." : "Keep your\nportfolio."))
                 .font(.system(size: 34, weight: .bold))
                 .tracking(-0.8)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Color.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(heldPositions.isEmpty
+            Text(reasonDetail ?? (heldPositions.isEmpty
                  ? "Every fill uses the real market price. Every loss stays on your record."
-                 : "\(positionNames) \(heldPositions.count == 1 ? "is" : "are") moving with the market right now. Subscribe to keep trading them.")
+                 : "\(positionNames) \(heldPositions.count == 1 ? "is" : "are") moving with the market right now. Go Pro to trade them without limits."))
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Color.textSecondary)
@@ -170,6 +179,29 @@ struct PaywallView: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// The headline for a paywall opened by a limit or a Pro feature; nil for the
+    /// one after sign-in, which keeps its goal-based headline.
+    private var reasonHeadline: String? {
+        switch reason {
+        case .onboarding: nil
+        case .outOfTrades: "That's your 3 free\ntrades for today."
+        case .fullAccessEnded: "Your full-access\ndays are over."
+        case .afterWin: "Nice exit.\nKeep going."
+        case .locked(let feature): "\(feature)\nis part of Pro."
+        }
+    }
+
+    private var reasonDetail: String? {
+        let free = "Free accounts get \(FreeTier.freeTradesPerDay) trades a day and the Daily Call."
+        switch reason {
+        case .onboarding: return nil
+        case .outOfTrades: return "\(free) Pro trades without limits, so you never sit out a move."
+        case .fullAccessEnded: return "\(free) Pro keeps everything you've been using: unlimited trades, leverage and alerts."
+        case .afterWin: return "\(free) Pro trades without limits."
+        case .locked: return "Pro unlocks it, along with unlimited trades, leverage and alerts."
+        }
     }
 
     /// "WIF, BONK and JUP"
@@ -222,6 +254,7 @@ struct PaywallView: View {
             if let topTrader {
                 TopTraderBanner(trader: topTrader)
             }
+            FeatureCheck(symbol: "infinity", text: "Unlimited trades (free: \(FreeTier.freeTradesPerDay) a day)")
             FeatureCheck(symbol: "chart.xyaxis.line", text: "Live on-chain prices & charts")
             FeatureCheck(symbol: "bolt.fill", text: "Leverage up to \(maxLeverage)x")
             FeatureCheck(symbol: "bell.badge.fill", text: "Price alerts on any token")
@@ -262,7 +295,7 @@ struct PaywallView: View {
                 ForEach(orderedPlans, id: \.id) { product in
                     PlanRow(
                         title: planTitle(product),
-                        badge: product.id == ProductID.annual ? savingsText(annual: product) : nil,
+                        badge: product.id == ProductID.monthly ? savingsText(monthly: product) : nil,
                         subtitle: planSubtitle(product),
                         price: "\(product.displayPrice)/\(shortUnit(product))",
                         detail: planDetail(product),
@@ -293,6 +326,13 @@ struct PaywallView: View {
             }
             .buttonStyle(.accent)
             .accessibilityIdentifier("paywall.subscribeButton")
+
+            if let onClose {
+                Button(closeTitle, action: onClose)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .accessibilityIdentifier("paywall.close")
+            }
 
             Text(disclosure)
                 .font(.footnote)
@@ -346,6 +386,7 @@ struct PaywallView: View {
         isPurchasing = false
         guard store.isSubscribed else { return }
         Haptics.success()
+        onClose?()
         if let trial {
             await PushRegistrar.shared.scheduleTrialReminder(
                 trialDays: trialDays(trial),
@@ -414,6 +455,19 @@ struct PaywallView: View {
         let value = offer.period.value
         let unit = unitName(offer.period.unit)
         return "\(value) \(unit)\(value == 1 ? "" : "s")"
+    }
+
+    /// The way out without buying. After sign-in it names what the free tier
+    /// starts with, so closing is a plain choice rather than a hunt for an X.
+    private var closeTitle: String {
+        switch reason {
+        case .onboarding:
+            FreeTier.shared.isInFullAccess
+                ? "Start free · full access for \(FreeTier.fullAccessDays) days"
+                : "Continue free · \(FreeTier.freeTradesPerDay) trades a day"
+        case .fullAccessEnded: "Continue free · \(FreeTier.freeTradesPerDay) trades a day"
+        default: "Not now"
+        }
     }
 
     private var ctaTitle: String {
@@ -485,12 +539,12 @@ struct PaywallView: View {
         }
     }
 
-    /// "SAVE 69%" — yearly versus a year of monthly.
-    private func savingsText(annual: Product) -> String? {
-        guard let monthly = store.monthlyProduct, monthly.price > 0 else { return nil }
-        let yearOfMonthly = monthly.price * 12
-        guard yearOfMonthly > annual.price else { return nil }
-        let saving = NSDecimalNumber(decimal: (1 - annual.price / yearOfMonthly) * 100).doubleValue
+    /// "SAVE 54%" — monthly versus a month of weekly (52 weeks over 12 months).
+    private func savingsText(monthly: Product) -> String? {
+        guard let weekly = store.weeklyProduct, weekly.price > 0 else { return nil }
+        let monthOfWeekly = weekly.price * 52 / 12
+        guard monthOfWeekly > monthly.price else { return nil }
+        let saving = NSDecimalNumber(decimal: (1 - monthly.price / monthOfWeekly) * 100).doubleValue
         let rounded = Int(saving.rounded())
         return rounded > 0 ? "SAVE \(rounded)%" : nil
     }

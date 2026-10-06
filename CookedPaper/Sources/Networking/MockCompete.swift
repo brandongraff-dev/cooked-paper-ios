@@ -58,6 +58,7 @@ nonisolated enum MockCompete {
         case ("GET", ["daily-call"]): return (200, dailyToday())
         case ("POST", ["daily-call"]): return makeDailyCall(json["side"] as? String ?? "")
         case ("GET", ["daily-call", "stats"]): return (200, dailyStats())
+        case ("GET", ["daily-call", "crowd-record"]): return (200, crowdRecord())
 
         // Leagues
         case ("GET", ["leagues"]): return (200, ["leagues": leagueList()])
@@ -364,6 +365,27 @@ nonisolated enum MockCompete {
         dailyPick = (side, Date())
         lock.unlock()
         return (201, dailyToday())
+    }
+
+    private static func crowdRecord() -> [String: Any] {
+        // Wrong the last three days, 5 of 14 overall.
+        let rights = [false, false, false, true, false, true, false, false, true, false, true, false, true, false]
+        let days: [[String: Any]] = rights.enumerated().map { index, right in
+            let up = index % 2 == 0
+            let result = up ? "higher" : "lower"
+            let crowd = right ? result : (up ? "lower" : "higher")
+            return [
+                "id": dayId(daysAgo: index + 1), "symbol": dailyDemoToken(daysAgo: index + 1).symbol,
+                "result": result, "crowdSide": crowd, "crowdPct": "61.0", "sampleSize": 120,
+                "crowdRight": right,
+            ]
+        }
+        let right = rights.filter { $0 }.count
+        return [
+            "windowDays": 30, "sampleSize": rights.count, "crowdRight": right,
+            "crowdWrong": rights.count - right, "crowdRightPct": "35.7", "currentRun": -3,
+            "days": days, "disclaimer": "Paper game: simulated prices, no stakes, no prizes.",
+        ]
     }
 
     private static func dailyStats() -> [String: Any] {

@@ -33,6 +33,16 @@ struct TradeSheetView: View {
     /// The position's average cost just before a sell, for the trade card's entry.
     @State private var soldAverageCost: Decimal?
     @State private var quoteTask: Task<Void, Never>?
+    @State private var showsPaywall = false
+    @State private var paywallReason: PaywallReason = .outOfTrades
+    /// A profitable sell on the free tier: the fill confirmation offers Pro.
+    @State private var offersProAfterWin = false
+
+    /// The free tier's daily buy limit applies to the main portfolio only; duels
+    /// and selling are never limited.
+    private var isOutOfFreeTrades: Bool {
+        side == .buy && portfolio.isMain && !FreeTier.shared.canTrade
+    }
 
     private var cashUsd: Decimal { portfolio.snapshot?.cashUsd ?? 0 }
     private var position: PaperPosition? {
@@ -43,17 +53,12 @@ struct TradeSheetView: View {
         NavigationStack {
             Group {
                 if let fillResult {
-                    FillConfirmationView(
-                        result: fillResult,
-                        symbol: tokenSymbol,
-                        // A sell with a known entry gets the on-device image card.
-                        shareCard: shareCard(for: fillResult),
-                        // A sell has a result worth sharing: this token's card
-                        // (main portfolio only; a duel's result is the duel itself).
-                        shareSubjectPath: fillResult.trade.side == .sell && portfolio.isMain
-                            ? portfolio.portfolioId.map { ShareCardSubject.position(portfolioId: $0, mint: mint) }
-                            : nil
-                    ) { dismiss() }
+                    fillConfirmation(fillResult)
+                } else if isOutOfFreeTrades {
+                    OutOfFreeTradesView {
+                        paywallReason = .outOfTrades
+                        showsPaywall = true
+                    }
                 } else {
                     form
                 }
@@ -68,6 +73,9 @@ struct TradeSheetView: View {
                         .foregroundStyle(Color.textPrimary)
                 }
             }
+        }
+        .sheet(isPresented: $showsPaywall) {
+            PaywallView(reason: paywallReason) { showsPaywall = false }
         }
         .presentationDetents([.large])
         .presentationCornerRadius(Radius.sheet)
@@ -85,6 +93,12 @@ struct TradeSheetView: View {
 
             VStack(spacing: Space.s16) {
                 availableLine
+                if side == .buy, portfolio.isMain, FreeTier.shared.isLimited {
+                    Text("\(FreeTier.shared.tradesLeftToday) of \(FreeTier.freeTradesPerDay) free buys left today")
+                        .font(.caption13)
+                        .foregroundStyle(Color.textSecondary)
+                        .accessibilityIdentifier("trade.freeTradesLeft")
+                }
                 quickAmountRow
                 if let errorMessage {
                     Text(errorMessage)
@@ -247,6 +261,31 @@ struct TradeSheetView: View {
         }
     }
 
+    /// Offered after a profitable sell on the free tier; nil otherwise.
+    private var afterWinAction: (() -> Void)? {
+        guard offersProAfterWin else { return nil }
+        return {
+            paywallReason = .afterWin
+            showsPaywall = true
+        }
+    }
+
+    private func fillConfirmation(_ result: ExecutePaperTradeResponse) -> some View {
+        // A sell has a result worth sharing: this token's card (main portfolio
+        // only; a duel's result is the duel itself).
+        let subjectPath: String? = result.trade.side == .sell && portfolio.isMain
+            ? portfolio.portfolioId.map { ShareCardSubject.position(portfolioId: $0, mint: mint) }
+            : nil
+        return FillConfirmationView(
+            result: result,
+            symbol: tokenSymbol,
+            // A sell with a known entry gets the on-device image card.
+            shareCard: shareCard(for: result),
+            shareSubjectPath: subjectPath,
+            onSeePro: afterWinAction
+        ) { dismiss() }
+    }
+
     private func execute() async {
         guard let portfolioId = portfolio.portfolioId else { return }
         isExecuting = true
@@ -256,6 +295,11 @@ struct TradeSheetView: View {
         do {
             let result = try await PaperAPI.execute(portfolioId: portfolioId, body: makeBody())
             soldAverageCost = side == .sell ? averageCost : nil
+            if portfolio.isMain, side == .buy { FreeTier.shared.recordTrade() }
+            offersProAfterWin = portfolio.isMain
+                && result.trade.side == .sell
+                && averageCost.map { result.fill.fillPriceUsd > $0 } == true
+                && FreeTier.shared.isLimited
             fillResult = result
             Haptics.success()
             await portfolio.refreshAfterTrade()
@@ -312,6 +356,8 @@ private struct FillConfirmationView: View {
     let symbol: String
     var shareCard: TradeShareCardModel? = nil
     var shareSubjectPath: String? = nil
+    /// Set after a profitable sell on the free tier.
+    var onSeePro: (() -> Void)? = nil
     let onDone: () -> Void
 
     var body: some View {
@@ -338,8 +384,42 @@ private struct FillConfirmationView: View {
                 ShareCardButton(subjectPath: shareSubjectPath)
                     .buttonStyle(.secondary)
             }
+            if let onSeePro {
+                Button("Trade without limits with Pro", action: onSeePro)
+                    .buttonStyle(.secondary)
+                    .accessibilityIdentifier("trade.afterWinPro")
+            }
             Button("Done", action: onDone)
                 .buttonStyle(.primary)
+        }
+        .padding(.horizontal, Space.margin)
+        .padding(.bottom, Space.s8)
+    }
+}
+
+/// In place of the buy ticket once the day's free buys are used. Says when they
+/// come back and that selling still works, so it reads as a limit, not a lockout.
+private struct OutOfFreeTradesView: View {
+    let onSeePro: () -> Void
+
+    var body: some View {
+        VStack(spacing: Space.s24) {
+            Spacer()
+            Image(systemName: "hourglass")
+                .font(.system(size: 48))
+                .foregroundStyle(Color.accent)
+            Text("You've used today's \(FreeTier.freeTradesPerDay) free buys")
+                .font(.appLargeTitle)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color.textPrimary)
+            Text("They come back tomorrow. Selling is always free. Pro buys without limits.")
+                .font(.body)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color.textSecondary)
+            Spacer()
+            Button("See Pro", action: onSeePro)
+                .buttonStyle(.accent)
+                .accessibilityIdentifier("trade.outOfTrades.seePro")
         }
         .padding(.horizontal, Space.margin)
         .padding(.bottom, Space.s8)

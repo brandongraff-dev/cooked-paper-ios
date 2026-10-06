@@ -118,14 +118,18 @@ struct TokenDetailView: View {
             )
         }
         .sheet(isPresented: $showsLeverage) {
-            LeverageSheetView(mint: mint, tokenSymbol: profile?.token.symbol ?? "token")
+            ProGate(feature: "Leverage") {
+                LeverageSheetView(mint: mint, tokenSymbol: profile?.token.symbol ?? "token")
+            }
         }
         .sheet(isPresented: $showsAlerts) {
-            PriceAlertSheet(
-                mint: mint,
-                symbol: profile?.token.symbol ?? "token",
-                currentPrice: feed.latestPrice ?? profile?.market.priceUsd.value
-            )
+            ProGate(feature: "Price alerts") {
+                PriceAlertSheet(
+                    mint: mint,
+                    symbol: profile?.token.symbol ?? "token",
+                    currentPrice: feed.latestPrice ?? profile?.market.priceUsd.value
+                )
+            }
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

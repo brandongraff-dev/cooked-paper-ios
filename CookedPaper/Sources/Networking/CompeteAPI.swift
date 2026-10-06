@@ -207,6 +207,146 @@ enum DailyCallAPI {
             as: DailyCallStats.self
         )
     }
+
+    /// Public: the same record for everyone.
+    static func crowdRecord() async throws -> DailyCallCrowdRecord {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/daily-call/crowd-record"),
+            as: DailyCallCrowdRecord.self
+        )
+    }
+}
+
+/// Prop-firm style challenges. Bearer.
+enum ChallengeAPI {
+    static func list() async throws -> ChallengeListResponse {
+        try await APIClient.shared.send(Endpoint(path: "/paper/challenges"), as: ChallengeListResponse.self)
+    }
+
+    static func start(tier: String) async throws -> Challenge {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/challenges", method: "POST", body: APIClient.shared.encode(CreateChallengeBody(tier: tier))),
+            as: ChallengeResponse.self
+        ).challenge
+    }
+
+    static func abandon(id: String) async throws -> Challenge {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/challenges/\(id)/abandon", method: "POST"),
+            as: ChallengeResponse.self
+        ).challenge
+    }
+}
+
+/// Crash Replay: real historical crashes, played blind and scored by the server. Bearer.
+enum ReplayAPI {
+    static func list() async throws -> ReplayListResponse {
+        try await APIClient.shared.send(Endpoint(path: "/paper/replays"), as: ReplayListResponse.self)
+    }
+
+    static func get(id: String) async throws -> ReplayScenario {
+        try await APIClient.shared.send(Endpoint(path: "/paper/replays/\(id)"), as: ReplayScenario.self)
+    }
+
+    static func submit(id: String, actions: [ReplayAction]) async throws -> ReplayResult {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/replays/\(id)/results", method: "POST", body: APIClient.shared.encode(SubmitReplayBody(actions: actions))),
+            as: ReplayResult.self
+        )
+    }
+}
+
+/// Squads: a shared portfolio traded by majority vote. Bearer.
+enum SquadAPI {
+    static func list() async throws -> [SquadSummary] {
+        try await APIClient.shared.send(Endpoint(path: "/paper/squads"), as: SquadListResponse.self).squads
+    }
+
+    static func get(id: String) async throws -> Squad {
+        try await APIClient.shared.send(Endpoint(path: "/paper/squads/\(id)"), as: SquadResponse.self).squad
+    }
+
+    static func create(name: String) async throws -> Squad {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/squads", method: "POST", body: APIClient.shared.encode(CreateSquadBody(name: name))),
+            as: SquadResponse.self
+        ).squad
+    }
+
+    static func join(code: String) async throws -> Squad {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/squads/join", method: "POST", body: APIClient.shared.encode(JoinSquadBody(inviteCode: code))),
+            as: SquadResponse.self
+        ).squad
+    }
+
+    static func leave(id: String) async throws {
+        try await APIClient.shared.sendIgnoringResponse(Endpoint(path: "/paper/squads/\(id)/leave", method: "POST"))
+    }
+
+    static func propose(squadId: String, body: ProposeSquadTradeBody) async throws -> Squad {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/squads/\(squadId)/proposals", method: "POST", body: APIClient.shared.encode(body)),
+            as: SquadResponse.self
+        ).squad
+    }
+
+    static func vote(squadId: String, proposalId: String, yes: Bool) async throws -> Squad {
+        try await APIClient.shared.send(
+            Endpoint(
+                path: "/paper/squads/\(squadId)/proposals/\(proposalId)/vote",
+                method: "POST",
+                body: APIClient.shared.encode(SquadVoteBody(vote: yes ? "yes" : "no"))
+            ),
+            as: SquadResponse.self
+        ).squad
+    }
+}
+
+/// The streamer overlay link. Bearer.
+enum OverlayAPI {
+    static func current() async throws -> OverlayKey {
+        try await APIClient.shared.send(Endpoint(path: "/paper/overlay/key"), as: OverlayKey.self)
+    }
+
+    /// A new link; the old one stops working.
+    static func rotate() async throws -> OverlayKey {
+        try await APIClient.shared.send(Endpoint(path: "/paper/overlay/key", method: "POST"), as: OverlayKey.self)
+    }
+}
+
+/// Rooms: market event rooms and host rooms (Beat the Streamer). Bearer.
+enum RoomAPI {
+    static func list() async throws -> RoomListResponse {
+        try await APIClient.shared.send(Endpoint(path: "/paper/rooms"), as: RoomListResponse.self)
+    }
+
+    static func get(id: String) async throws -> RoomDetail {
+        try await APIClient.shared.send(Endpoint(path: "/paper/rooms/\(id)"), as: RoomResponse.self).room
+    }
+
+    static func join(id: String) async throws -> RoomDetail {
+        try await APIClient.shared.send(Endpoint(path: "/paper/rooms/\(id)/join", method: "POST"), as: RoomResponse.self).room
+    }
+
+    static func join(code: String) async throws -> RoomDetail {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/rooms/join", method: "POST", body: APIClient.shared.encode(JoinRoomBody(inviteCode: code))),
+            as: RoomResponse.self
+        ).room
+    }
+
+    static func create(title: String, startsAt: Date, durationMinutes: Int) async throws -> RoomDetail {
+        let body = CreateRoomBody(
+            title: title,
+            startsAt: ISO8601DateFormatter().string(from: startsAt),
+            durationMinutes: durationMinutes
+        )
+        return try await APIClient.shared.send(
+            Endpoint(path: "/paper/rooms", method: "POST", body: APIClient.shared.encode(body)),
+            as: RoomResponse.self
+        ).room
+    }
 }
 
 extension Error {
@@ -256,6 +396,7 @@ enum CompeteErrorText {
         case "duel_limit": return "You already have 5 duels going. Finish or cancel one first."
         case "duel_not_found": return "That duel doesn't exist anymore."
         case "duel_not_active": return "This duel isn't live. Trading opens when it starts and closes when it ends."
+        case "contest_not_active": return "This isn't running right now, so its portfolio can't trade."
         case "duel_self": return "You can't duel yourself. Pick someone else."
         case "duel_exists": return "You already have an invite waiting with this player."
         case "user_not_found": return "No one goes by that username. Check the spelling."
