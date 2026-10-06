@@ -170,3 +170,89 @@ struct CreateRoomBody: Encodable {
 struct JoinRoomBody: Encodable {
     let inviteCode: String
 }
+
+// MARK: - Squads
+
+struct SquadSummary: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let memberCount: Int
+    let openProposals: Int
+}
+
+struct SquadListResponse: Decodable {
+    let squads: [SquadSummary]
+}
+
+struct SquadProposal: Decodable, Identifiable, Hashable {
+    let id: String
+    let proposer: String
+    let side: String
+    let tokenMint: String
+    let symbol: String?
+    @OptionalDecimalString var notionalUsd: Decimal?
+    let sellPercent: Int?
+    /// open, executed, rejected, expired, failed
+    let status: String
+    let yes: Int
+    let no: Int
+    let needed: Int
+    let myVote: String?
+    let createdAt: String
+    let expiresAt: String
+    let failure: String?
+
+    var isOpen: Bool { status == "open" }
+    var expiryDate: Date? { CompeteDate.parse(expiresAt) }
+
+    /// "Buy $250 of WIF" / "Sell 50% of BONK"
+    var summary: String {
+        let coin = symbol ?? "a coin"
+        if side == "buy" {
+            return "Buy \(notionalUsd.map { PriceFormat.usd($0) } ?? "?") of \(coin)"
+        }
+        return "Sell \(sellPercent ?? 100)% of \(coin)"
+    }
+}
+
+struct Squad: Decodable {
+    struct Member: Decodable, Hashable {
+        let username: String
+        let isOwner: Bool
+    }
+    struct Position: Decodable, Identifiable, Hashable {
+        var id: String { tokenMint }
+        let tokenMint: String
+        let symbol: String?
+        @DecimalString var valueUsd: Decimal
+        @OptionalDecimalString var unrealizedReturnPct: Decimal?
+    }
+
+    let id: String
+    let name: String
+    let owner: String
+    let members: [Member]
+    let inviteCode: String
+    let portfolioId: String?
+    @OptionalDecimalString var returnPct: Decimal?
+    @OptionalDecimalString var equityUsd: Decimal?
+    @OptionalDecimalString var cashUsd: Decimal?
+    let positions: [Position]
+    let open: [SquadProposal]
+    let recent: [SquadProposal]
+    let maxMembers: Int
+}
+
+struct SquadResponse: Decodable {
+    let squad: Squad
+}
+
+struct CreateSquadBody: Encodable { let name: String }
+struct JoinSquadBody: Encodable { let inviteCode: String }
+struct SquadVoteBody: Encodable { let vote: String }
+struct ProposeSquadTradeBody: Encodable {
+    let side: String
+    let tokenMint: String
+    var notionalUsd: String?
+    var sellPercent: Int?
+}

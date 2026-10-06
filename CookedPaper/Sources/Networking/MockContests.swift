@@ -22,6 +22,16 @@ nonisolated enum MockContests {
             return (200, ["challenge": challenge(tier: "50k", status: "abandoned", returnPct: "2.48")])
         case ("GET", ["overlay", "key"]), ("POST", ["overlay", "key"]):
             return (200, ["key": "demoOverlayKey1234567890", "url": "https://cooked.trade/overlay/demoOverlayKey1234567890"])
+        case ("GET", ["squads"]):
+            return (200, ["squads": [["id": "squad-1", "name": "Group chat", "memberCount": 4, "openProposals": 1] as [String: Any]]])
+        case ("POST", ["squads"]), ("POST", ["squads", "join"]):
+            return (200, ["squad": squad()])
+        case ("GET", let rest) where rest.count == 2 && rest[0] == "squads":
+            return (200, ["squad": squad()])
+        case ("POST", let rest) where rest.count >= 3 && rest[0] == "squads" && rest[2] == "proposals":
+            return (200, ["squad": squad()])
+        case ("POST", let rest) where rest.count == 3 && rest[0] == "squads" && rest[2] == "leave":
+            return (200, ["ok": true])
         case ("GET", ["rooms"]):
             return (200, ["live": [room(status: "live")], "upcoming": [room(status: "scheduled", title: "Fed decision day")], "mine": [] as [Any]])
         case ("POST", ["rooms"]):
@@ -35,6 +45,24 @@ nonisolated enum MockContests {
         default:
             return nil
         }
+    }
+
+    private static func squad() -> [String: Any] {
+        let wif = MockAPI.tokens[1]
+        let proposal: [String: Any] = [
+            "id": "proposal-1", "proposer": "moonboi", "side": "buy", "tokenMint": wif.mint, "symbol": wif.symbol,
+            "notionalUsd": "1500.00", "sellPercent": NSNull(), "status": "open", "yes": 2, "no": 0, "needed": 3,
+            "myVote": NSNull(), "createdAt": MockAPI.iso(daysFromNow: -0.005), "expiresAt": MockAPI.iso(daysFromNow: 0.015),
+            "failure": NSNull(),
+        ]
+        return [
+            "id": "squad-1", "name": "Group chat", "owner": "moonboi",
+            "members": ["moonboi", "you", "solsniper", "cookedcat"].map { ["username": $0, "isOwner": $0 == "moonboi"] as [String: Any] },
+            "inviteCode": "Sq8dCh4t", "portfolioId": "squad-portfolio", "returnPct": "7.25",
+            "equityUsd": "10725.00", "cashUsd": "6200.00",
+            "positions": [["tokenMint": wif.mint, "symbol": wif.symbol, "valueUsd": "4525.00", "unrealizedReturnPct": "13.10"] as [String: Any]],
+            "open": [proposal], "recent": [] as [Any], "maxMembers": 5,
+        ]
     }
 
     private static func room(status: String, title: String = "CPI day: the 8:30 print", kind: String = "event") -> [String: Any] {

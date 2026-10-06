@@ -238,6 +238,53 @@ enum ChallengeAPI {
     }
 }
 
+/// Squads: a shared portfolio traded by majority vote. Bearer.
+enum SquadAPI {
+    static func list() async throws -> [SquadSummary] {
+        try await APIClient.shared.send(Endpoint(path: "/paper/squads"), as: SquadListResponse.self).squads
+    }
+
+    static func get(id: String) async throws -> Squad {
+        try await APIClient.shared.send(Endpoint(path: "/paper/squads/\(id)"), as: SquadResponse.self).squad
+    }
+
+    static func create(name: String) async throws -> Squad {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/squads", method: "POST", body: APIClient.shared.encode(CreateSquadBody(name: name))),
+            as: SquadResponse.self
+        ).squad
+    }
+
+    static func join(code: String) async throws -> Squad {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/squads/join", method: "POST", body: APIClient.shared.encode(JoinSquadBody(inviteCode: code))),
+            as: SquadResponse.self
+        ).squad
+    }
+
+    static func leave(id: String) async throws {
+        try await APIClient.shared.sendIgnoringResponse(Endpoint(path: "/paper/squads/\(id)/leave", method: "POST"))
+    }
+
+    static func propose(squadId: String, body: ProposeSquadTradeBody) async throws -> Squad {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/squads/\(squadId)/proposals", method: "POST", body: APIClient.shared.encode(body)),
+            as: SquadResponse.self
+        ).squad
+    }
+
+    static func vote(squadId: String, proposalId: String, yes: Bool) async throws -> Squad {
+        try await APIClient.shared.send(
+            Endpoint(
+                path: "/paper/squads/\(squadId)/proposals/\(proposalId)/vote",
+                method: "POST",
+                body: APIClient.shared.encode(SquadVoteBody(vote: yes ? "yes" : "no"))
+            ),
+            as: SquadResponse.self
+        ).squad
+    }
+}
+
 /// The streamer overlay link. Bearer.
 enum OverlayAPI {
     static func current() async throws -> OverlayKey {

@@ -71,6 +71,31 @@ struct SeasonView: View {
             .padding(.horizontal, Space.margin)
             .padding(.top, Space.s12)
             .accessibilityIdentifier("season.rooms")
+            NavigationLink(value: CompeteRoute.squads) {
+                HStack(spacing: Space.s12) {
+                    Image(systemName: "person.3.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Squads")
+                            .font(.rowTitle)
+                            .foregroundStyle(Color.textPrimary)
+                        Text("Share one portfolio with friends. Every trade is a vote.")
+                            .font(.rowSubtitle)
+                            .foregroundStyle(Color.textSecondary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(Color.textTertiary)
+                }
+                .padding(Space.s16)
+                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            }
+            .buttonStyle(.pressable)
+            .padding(.horizontal, Space.margin)
+            .padding(.top, Space.s12)
+            .accessibilityIdentifier("season.squads")
             Group {
                 if isLoading {
                     skeleton
