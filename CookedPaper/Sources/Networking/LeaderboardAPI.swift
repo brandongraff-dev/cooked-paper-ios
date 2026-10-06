@@ -13,4 +13,16 @@ enum LeaderboardAPI {
             as: PaperLeaderboardResponse.self
         )
     }
+
+    /// Beat the Monkey: the share of ranked traders above the house bot. Public.
+    static func monkeyStanding(window: LeaderboardWindow = .all) async throws -> PaperMonkeyStanding {
+        try await APIClient.shared.send(
+            Endpoint(
+                path: "/paper/leaderboard/monkey",
+                query: ["window": window.rawValue],
+                attachToken: false
+            ),
+            as: PaperMonkeyStanding.self
+        )
+    }
 }

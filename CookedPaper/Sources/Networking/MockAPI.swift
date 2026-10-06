@@ -111,6 +111,9 @@ nonisolated enum MockAPI {
         if match("POST", "paper/portfolios/:/trades") != nil { return (200, executeResponse(body)) }
         if match("POST", "paper/portfolios/:/reset") != nil { return (200, [:] as [String: Any]) }
         if match("GET", "paper/discover") != nil { return (200, discover) }
+        if match("GET", "paper/leaderboard/monkey") != nil {
+            return (200, monkeyStanding(window: query["window"] ?? "all"))
+        }
         if match("GET", "paper/leaderboard") != nil {
             return (200, leaderboard(window: query["window"] ?? "all"))
         }
@@ -460,20 +463,32 @@ nonisolated enum MockAPI {
     // MARK: - Leaderboard
 
     private static func leaderboard(window: String) -> [String: Any] {
-        let names = ["degenwizard", "solsniper", "paperhands", "moonboi", "rugsurvivor", "chartooor", "bagholder", "wenlambo", "gmgn", "cookedcat", "fomo_fren", "diamondpaws"]
-        let returns = ["184.21", "122.40", "97.12", "74.55", "61.02", "48.90", "33.14", "21.70", "12.49", "4.02", "-3.88", "-12.40"]
+        let names = ["degenwizard", "solsniper", "paperhands", "moonboi", "rugsurvivor", "chartooor", "the_monkey", "bagholder", "wenlambo", "gmgn", "cookedcat", "fomo_fren", "diamondpaws"]
+        let returns = ["184.21", "122.40", "97.12", "74.55", "61.02", "48.90", "38.20", "33.14", "21.70", "12.49", "4.02", "-3.88", "-12.40"]
         let entries: [[String: Any]] = names.enumerated().map { i, name in
-            [
-                "rank": i + 1, "portfolioId": "lb-\(i)", "username": name, "provenance": "PAPER · UNVERIFIED",
-                "returnPct": ["pct": returns[i], "sampleSize": 12 - i / 2, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
-                "roundTripCount": 24 - i,
-                "maxDrawdownPct": ["pct": dec(6 + Double(i) * 1.7), "sampleSize": 12, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
-                "resetCount": i % 3 == 0 ? 1 : 0, "startingBalanceUsd": "10000", "createdAt": iso(daysFromNow: -20),
-            ]
+            leaderboardEntry(rank: i + 1, username: name, returnPct: returns[i], roundTrips: 24 - i)
         }
         return [
             "window": window, "season": "2026-09", "entries": entries,
             "rankedCount": entries.count, "emergingCount": 4, "computedAt": iso(daysFromNow: 0),
+        ]
+    }
+
+    private static func leaderboardEntry(rank: Int, username: String, returnPct: String, roundTrips: Int) -> [String: Any] {
+        [
+            "rank": rank, "portfolioId": "lb-\(rank)", "username": username, "provenance": "PAPER · SIMULATED",
+            "returnPct": ["pct": returnPct, "sampleSize": roundTrips, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
+            "roundTripCount": roundTrips, "resetCount": rank % 3 == 0 ? 1 : 0, "createdAt": iso(daysFromNow: -20),
+            "isBot": username == "the_monkey",
+        ]
+    }
+
+    /// Six of the twelve demo traders are above the monkey's 38.2%.
+    private static func monkeyStanding(window: String) -> [String: Any] {
+        [
+            "window": window, "season": "2026-10",
+            "monkey": leaderboardEntry(rank: 7, username: "the_monkey", returnPct: "38.20", roundTrips: 18),
+            "sampleSize": 12, "beatingMonkey": 6, "beatingPct": "50.0", "computedAt": iso(daysFromNow: 0),
         ]
     }
 

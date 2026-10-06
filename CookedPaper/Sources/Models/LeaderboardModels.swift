@@ -29,10 +29,24 @@ struct PaperLeaderboardEntry: Decodable, Identifiable {
     let provenance: String
     let returnPct: MeasuredPct
     let roundTripCount: Int
-    let maxDrawdownPct: MeasuredPct
     let resetCount: Int
-    @DecimalString var startingBalanceUsd: Decimal
     let createdAt: String
+    /// The house bot ("The Monkey", trades at random). Optional so an older server
+    /// that doesn't send it still decodes.
+    let isBot: Bool?
+
+    var isHouseBot: Bool { isBot == true }
+}
+
+/// `GET /paper/leaderboard/monkey`: how many ranked people beat the house bot.
+struct PaperMonkeyStanding: Decodable {
+    let window: String
+    /// Nil while the monkey hasn't closed enough round trips to rank.
+    let monkey: PaperLeaderboardEntry?
+    /// People ranked in the window (the monkey isn't one).
+    let sampleSize: Int
+    let beatingMonkey: Int?
+    @OptionalDecimalString var beatingPct: Decimal?
 }
 
 struct PaperLeaderboardResponse: Decodable {

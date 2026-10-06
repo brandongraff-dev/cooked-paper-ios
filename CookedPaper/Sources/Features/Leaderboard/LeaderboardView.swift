@@ -35,6 +35,9 @@ struct LeaderboardView: View {
                 }
                 .scrollIndicators(.hidden)
 
+                BeatTheMonkeyCard(window: window, myEntry: myEntry)
+                    .padding(.horizontal, Space.margin)
+
                 list
                     .padding(.horizontal, Space.margin)
             }
@@ -167,8 +170,10 @@ private struct LeaderboardRow: View {
                 .frame(width: Self.rankWidth, alignment: .leading)
 
             ListRow(
-                title: titleOverride ?? entry.username,
-                subtitle: "\(entry.roundTripCount) round trips"
+                title: titleOverride ?? (entry.isHouseBot ? "The Monkey 🐒" : entry.username),
+                subtitle: entry.isHouseBot
+                    ? "Bot · trades at random · \(entry.roundTripCount) round trips"
+                    : "\(entry.roundTripCount) round trips"
             ) {
                 MonogramAvatar(text: entry.username)
                     .overlay(alignment: .bottomTrailing) {
