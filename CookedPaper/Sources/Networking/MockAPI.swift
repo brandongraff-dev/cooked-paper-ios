@@ -111,6 +111,9 @@ nonisolated enum MockAPI {
         if match("POST", "paper/portfolios/:/trades") != nil { return (200, executeResponse(body)) }
         if match("POST", "paper/portfolios/:/reset") != nil { return (200, [:] as [String: Any]) }
         if match("GET", "paper/discover") != nil { return (200, discover) }
+        if let c = match("GET", "paper/leaderboard/portfolios/:/positions") {
+            return (200, traderPositions(portfolioId: c[0]))
+        }
         if match("GET", "paper/leaderboard/monkey") != nil {
             return (200, monkeyStanding(window: query["window"] ?? "all"))
         }
@@ -480,6 +483,19 @@ nonisolated enum MockAPI {
             "returnPct": ["pct": returnPct, "sampleSize": roundTrips, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
             "roundTripCount": roundTrips, "resetCount": rank % 3 == 0 ? 1 : 0, "createdAt": iso(daysFromNow: -20),
             "isBot": username == "the_monkey",
+        ]
+    }
+
+    private static func traderPositions(portfolioId: String) -> [String: Any] {
+        let held = Array(tokens.prefix(3))
+        let shares = ["41.5", "22.0", "9.5"]
+        let returns = ["12.3", "-4.1", "31.0"]
+        return [
+            "entry": leaderboardEntry(rank: 1, username: "degenwizard", returnPct: "184.21", roundTrips: 24),
+            "positions": held.enumerated().map { i, t in
+                ["tokenMint": t.mint, "symbol": t.symbol, "name": t.name, "sharePct": shares[i], "unrealizedReturnPct": returns[i]] as [String: Any]
+            },
+            "cashSharePct": "27.0", "sampleSize": held.count, "computedAt": iso(daysFromNow: 0),
         ]
     }
 

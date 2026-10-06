@@ -197,6 +197,11 @@ enum PriceFormat {
         return sign + "$" + abs(double).formatted(.number.precision(.fractionLength(2)))
     }
 
+    /// 41.5% — an unsigned share, one decimal.
+    static func percentPlain(_ percent: Decimal) -> String {
+        NSDecimalNumber(decimal: percent).doubleValue.formatted(.number.precision(.fractionLength(1))) + "%"
+    }
+
     /// +3.07% / −4.12%, with a real minus sign.
     static func change(_ percent: Decimal?) -> String {
         guard let percent else { return "—" }

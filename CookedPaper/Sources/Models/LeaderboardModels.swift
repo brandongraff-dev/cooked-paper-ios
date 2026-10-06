@@ -38,6 +38,24 @@ struct PaperLeaderboardEntry: Decodable, Identifiable {
     var isHouseBot: Bool { isBot == true }
 }
 
+/// One open position of a ranked trader: shares and returns only, never amounts.
+struct PaperTraderPosition: Decodable, Identifiable {
+    var id: String { tokenMint }
+    let tokenMint: String
+    let symbol: String?
+    let name: String?
+    @DecimalString var sharePct: Decimal
+    @OptionalDecimalString var unrealizedReturnPct: Decimal?
+}
+
+/// `GET /paper/leaderboard/portfolios/:id/positions`.
+struct PaperTraderPositions: Decodable {
+    let entry: PaperLeaderboardEntry
+    let positions: [PaperTraderPosition]
+    @DecimalString var cashSharePct: Decimal
+    let sampleSize: Int
+}
+
 /// `GET /paper/leaderboard/monkey`: how many ranked people beat the house bot.
 struct PaperMonkeyStanding: Decodable {
     let window: String

@@ -14,6 +14,14 @@ enum LeaderboardAPI {
         )
     }
 
+    /// What a ranked trader holds now. Public; 404 when they're unranked or hide balances.
+    static func traderPositions(portfolioId: String) async throws -> PaperTraderPositions {
+        try await APIClient.shared.send(
+            Endpoint(path: "/paper/leaderboard/portfolios/\(portfolioId)/positions", attachToken: false),
+            as: PaperTraderPositions.self
+        )
+    }
+
     /// Beat the Monkey: the share of ranked traders above the house bot. Public.
     static func monkeyStanding(window: LeaderboardWindow = .all) async throws -> PaperMonkeyStanding {
         try await APIClient.shared.send(

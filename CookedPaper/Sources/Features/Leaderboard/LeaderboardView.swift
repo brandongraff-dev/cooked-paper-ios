@@ -9,6 +9,8 @@ struct LeaderboardView: View {
     @State private var response: PaperLeaderboardResponse?
     @State private var isLoading = true
     @State private var errorMessage: String?
+    /// The row tapped: opens what that trader holds.
+    @State private var selectedEntry: PaperLeaderboardEntry?
 
     private var entries: [PaperLeaderboardEntry] { response?.entries ?? [] }
 
@@ -59,6 +61,9 @@ struct LeaderboardView: View {
             Task { await load() }
         }
         .autoRefresh(every: 60) { await refreshSilently() }
+        .sheet(item: $selectedEntry) { entry in
+            TraderPositionsSheet(entry: entry)
+        }
     }
 
     @ViewBuilder
@@ -80,7 +85,15 @@ struct LeaderboardView: View {
         } else {
             LazyVStack(spacing: 0) {
                 ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                    LeaderboardRow(entry: entry)
+                    Button {
+                        Haptics.tap()
+                        selectedEntry = entry
+                    } label: {
+                        LeaderboardRow(entry: entry)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Shows what this trader holds")
                     if index < entries.count - 1 {
                         RowSeparator(leadingInset: LeaderboardRow.textInset)
                     }
