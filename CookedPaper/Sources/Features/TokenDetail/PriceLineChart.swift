@@ -74,7 +74,7 @@ struct PriceLineChart: View {
                 )
                 // A flat fill under the line in the period's direction, so the shape
                 // reads at a glance.
-                .foregroundStyle(lineColor.opacity(0.12))
+                .foregroundStyle(lineColor.opacity(0.08))
 
                 LineMark(x: .value("Time", index), y: .value("Price", value))
                     .foregroundStyle(lineColor)
@@ -111,6 +111,8 @@ struct PriceLineChart: View {
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
         .chartLegend(.hidden)
+        // Room for the latest-value dot at the right edge.
+        .padding(.trailing, Space.s12)
         .chartOverlay { proxy in
             GeometryReader { geometry in
                 Rectangle()

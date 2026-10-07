@@ -423,8 +423,12 @@ struct TokenDetailView: View {
         .padding(.top, Space.s24)
         .padding(.bottom, Space.s8)
         .background(
-            // Solid black behind the buttons, so the chart never shows through them.
+            // Solid black behind the buttons, so the chart never shows through them,
+            // and a hairline where the scrolling content meets it.
             Color.appBackground
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Color.appSeparator).frame(height: 1)
+                }
                 .ignoresSafeArea(edges: .bottom)
         )
     }

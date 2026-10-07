@@ -29,7 +29,7 @@ struct BeatTheMonkeyCard: View {
         let headline = "\(beating) of \(standing.sampleSize) traders are beating the monkey"
         return VStack(alignment: .leading, spacing: Space.s12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Beat the Monkey 🐒")
+                Text("Beat the Monkey")
                     .font(.sectionHeader)
                     .foregroundStyle(Color.textPrimary)
                 Spacer()

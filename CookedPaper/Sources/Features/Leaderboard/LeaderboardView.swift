@@ -194,17 +194,12 @@ private struct LeaderboardRow: View {
                 .frame(width: Self.rankWidth, alignment: .leading)
 
             ListRow(
-                title: titleOverride ?? (entry.isHouseBot ? "The Monkey 🐒" : entry.username),
+                title: titleOverride ?? (entry.isHouseBot ? "The Monkey" : entry.username),
                 subtitle: entry.isHouseBot
                     ? "Bot · trades at random · \(entry.roundTripCount) round trips"
                     : "\(entry.roundTripCount) round trips"
             ) {
                 ProfileAvatar(seed: entry.username, name: entry.username)
-                    .overlay {
-                        if isTopThree {
-                            Circle().strokeBorder(medalColor, lineWidth: 2)
-                        }
-                    }
                     .overlay(alignment: .bottomTrailing) {
                         if isTopThree {
                             Image(systemName: "medal.fill")

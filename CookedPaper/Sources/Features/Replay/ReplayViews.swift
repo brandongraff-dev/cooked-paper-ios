@@ -12,9 +12,6 @@ struct ReplayListView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.section) {
                 VStack(alignment: .leading, spacing: Space.s8) {
-                    Text("Survive the crash")
-                        .font(.appLargeTitle)
-                        .foregroundStyle(Color.textPrimary)
                     Text("Real crashes. Names hidden. $10K to survive.")
                         .font(.body)
                         .foregroundStyle(Color.textSecondary)
@@ -67,16 +64,11 @@ struct ReplayListView: View {
     private func row(_ scenario: ReplaySummary) -> some View {
         let locked = scenario.number > 1 && !FreeTier.shared.isPro
         return VStack(alignment: .leading, spacing: Space.s12) {
-            ZStack(alignment: .topLeading) {
-                TeaserChart(values: scenario.teaser ?? [])
-                    .frame(height: 92)
-                Text("#\(scenario.number)")
-                    .font(.system(size: 13, weight: .heavy).monospacedDigit())
-                    .foregroundStyle(Color.textPrimary)
-                    .padding(.horizontal, Space.s8)
-                    .padding(.vertical, 4)
-                    .metalSurface()
-            }
+            Text("Crash #\(scenario.number)")
+                .font(.rowTitle)
+                .foregroundStyle(Color.textPrimary)
+            TeaserChart(values: scenario.teaser ?? [])
+                .frame(height: 80)
             HStack(alignment: .center, spacing: Space.s12) {
                 DifficultyFlames(difficulty: scenario.difficulty)
                 Label("\(scenario.players)", systemImage: "person.2.fill")
@@ -102,15 +94,7 @@ struct ReplayListView: View {
             }
         }
         .padding(Space.s16)
-        .glassCard(tint: difficultyColor(scenario.difficulty))
-    }
-
-    private func difficultyColor(_ difficulty: String) -> Color {
-        switch difficulty {
-        case "brutal": .tilePink
-        case "hard": .tileOrange
-        default: .tileTeal
-        }
+        .glassCard()
     }
 
     private func load() async {
@@ -147,7 +131,7 @@ struct TeaserChart: View {
             area.addLine(to: CGPoint(x: known, y: size.height))
             area.addLine(to: CGPoint(x: 0, y: size.height))
             area.closeSubpath()
-            context.fill(area, with: .color(Color.white.opacity(0.08)))
+            context.fill(area, with: .color(Color.white.opacity(0.05)))
             context.stroke(
                 line,
                 with: .color(.white),
@@ -169,8 +153,8 @@ struct TeaserChart: View {
         }
         .overlay(alignment: .trailing) {
             Text("?")
-                .font(.system(size: 54, weight: .black, design: .rounded))
-                .foregroundStyle(Color.accent)
+                .font(.system(size: 40, weight: .bold, design: .rounded))
+                .foregroundStyle(Color.textTertiary)
                 .padding(.trailing, Space.s8)
         }
         .accessibilityHidden(true)

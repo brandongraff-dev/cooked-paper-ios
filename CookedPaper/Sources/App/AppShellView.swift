@@ -239,16 +239,14 @@ private struct FloatingTabBar: View {
     }
 }
 
-/// Liquid Glass on iOS 26, a solid elevated capsule with a hairline before that.
+/// A solid elevated capsule with a hairline. Not glass: a translucent bar let the rows
+/// scrolling beneath it show through its icons.
 private struct TabBarBackground: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.glassEffect(.regular, in: Capsule())
-        } else {
-            content
-                .background(Color.appSurfaceElevated, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.appSeparator, lineWidth: 1))
-        }
+        content
+            .background(Color.appSurfaceElevated, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.appSeparator, lineWidth: 1))
+            .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
     }
 }
 

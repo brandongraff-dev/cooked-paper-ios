@@ -15,9 +15,6 @@ struct SquadsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.section) {
                 VStack(alignment: .leading, spacing: Space.s8) {
-                    Text("Trade as a squad")
-                        .font(.appLargeTitle)
-                        .foregroundStyle(Color.textPrimary)
                     Text("One $10K portfolio, 3–5 friends. Every trade is a vote.")
                         .font(.body)
                         .foregroundStyle(Color.textSecondary)

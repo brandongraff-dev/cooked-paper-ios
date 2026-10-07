@@ -76,9 +76,6 @@ struct RoomsView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Space.s8) {
-            Text("Trade the moment, together")
-                .font(.appLargeTitle)
-                .foregroundStyle(Color.textPrimary)
             Text("Same $10K, same window. Best return wins.")
                 .font(.body)
                 .foregroundStyle(Color.textSecondary)

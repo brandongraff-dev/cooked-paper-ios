@@ -89,9 +89,6 @@ struct ChallengesView: View {
     private func tierPicker(_ response: ChallengeListResponse) -> some View {
         VStack(alignment: .leading, spacing: Space.s16) {
             VStack(alignment: .leading, spacing: Space.s8) {
-                Text("Pass a prop challenge")
-                    .font(.appLargeTitle)
-                    .foregroundStyle(Color.textPrimary)
                 Text("+8% to pass. −5% and you\u{2019}re out. 30 days.")
                     .font(.body)
                     .foregroundStyle(Color.textSecondary)
@@ -309,19 +306,11 @@ struct ChallengeShareCard: View {
     }
 }
 
-/// A challenge tier as a solid metal account card: the size, big; a stripe in the
-/// tier's color; and the rail from the fail line to the pass line.
+/// A challenge tier as a solid metal account card: the size, big, and the rail from
+/// the fail line to the pass line.
 private struct ChallengeTierCard: View {
     let tier: ChallengeTierOffer
     let isStarting: Bool
-
-    private var glow: Color {
-        switch tier.tier {
-        case "100k": .tileYellow
-        case "50k": .tileIndigo
-        default: .tileTeal
-        }
-    }
 
     var body: some View {
         let start = tier.startingBalanceUsd
@@ -362,24 +351,17 @@ private struct ChallengeTierCard: View {
                         }
                     }
                 HStack {
-                    Label(PriceFormat.usd(fail), systemImage: "xmark")
-                        .foregroundStyle(Color.negative)
+                    Text("Out at \(PriceFormat.compact(fail))")
+                        .foregroundStyle(Color.textSecondary)
                     Spacer()
-                    Label(PriceFormat.usd(pass), systemImage: "flag.checkered")
-                        .foregroundStyle(Color.positive)
+                    Text("Pass at \(PriceFormat.compact(pass))")
+                        .foregroundStyle(Color.textPrimary)
                 }
                 .font(.caption13Digits)
             }
         }
         .padding(Space.s20)
         .metalSurface(shape)
-        .overlay(alignment: .leading) {
-            // The tier's color as a solid edge stripe.
-            Rectangle()
-                .fill(glow)
-                .frame(width: 4)
-                .clipShape(shape)
-        }
     }
 }
 

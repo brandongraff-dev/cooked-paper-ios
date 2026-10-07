@@ -29,17 +29,13 @@ struct SettingsView: View {
             }
             .listRowBackground(GlassRowBackground())
 
-            Section("Notifications") {
+            Section {
                 NavigationLink {
                     AlertsListView()
                 } label: {
                     SettingsRow(symbol: "bell.fill", title: "Price alerts", tint: .tileOrange)
                 }
                 .accessibilityIdentifier("settings.alerts")
-            }
-            .listRowBackground(GlassRowBackground())
-
-            Section("Streaming") {
                 NavigationLink {
                     StreamerModeView()
                 } label: {

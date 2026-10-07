@@ -429,7 +429,7 @@ private struct PlayGrid: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Space.s16)
-            .glassCard(tint: mode.color)
+            .glassCard()
         }
         .buttonStyle(.pressable)
         .accessibilityLabel(mode.title)
