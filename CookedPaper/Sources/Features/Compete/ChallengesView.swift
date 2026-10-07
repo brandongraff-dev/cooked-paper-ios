@@ -119,9 +119,7 @@ struct ChallengesView: View {
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     HStack(spacing: Space.s12) {
-                        Image(systemName: item.status == "passed" ? "checkmark.seal.fill" : "xmark.circle")
-                            .foregroundStyle(item.status == "passed" ? Color.positive : Color.textTertiary)
-                            .accessibilityHidden(true)
+                        TierEmblem(level: ChallengeRank.level(item.tier), size: 34, lit: item.status == "passed")
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(item.tierLabel) · \(item.statusTitle)")
                                 .font(.rowTitle)
@@ -199,16 +197,24 @@ struct ChallengesView: View {
     }
 }
 
-/// The running challenge: equity, return, and a bar from the fail line to the pass line.
+/// The running challenge: its rank badge, equity, return, and the rail from the fail
+/// line to the pass line.
 struct ChallengeProgressCard: View {
     let challenge: Challenge
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s16) {
-            HStack {
-                Text("\(challenge.tierLabel) Challenge")
-                    .font(.sectionHeader)
-                    .foregroundStyle(Color.textPrimary)
+            HStack(spacing: Space.s12) {
+                TierEmblem(level: ChallengeRank.level(challenge.tier), size: 40)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(ChallengeRank.name(challenge.tier).uppercased())
+                        .font(.caption.weight(.bold))
+                        .tracking(1.2)
+                        .foregroundStyle(Color.textSecondary)
+                    Text("\(challenge.tierLabel) Challenge")
+                        .font(.sectionHeader)
+                        .foregroundStyle(Color.textPrimary)
+                }
                 Spacer()
                 if let end = challenge.endDate {
                     CountdownText(end: end)
@@ -221,24 +227,14 @@ struct ChallengeProgressCard: View {
                 ChangeText(percent: challenge.returnPct, font: .rowValue)
             }
             VStack(spacing: Space.s8) {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.appSeparator)
-                        Capsule()
-                            .fill((challenge.progress ?? 0) >= 0.5 ? Color.positive : Color.negative)
-                            .frame(width: geo.size.width * (challenge.progress ?? 0))
-                    }
-                }
-                .frame(height: 10)
+                ChallengeRail(marker: challenge.progress ?? 0, fill: true)
                 .accessibilityElement()
                 .accessibilityLabel("Progress from the fail line to the pass line")
                 .accessibilityValue("\(Int(((challenge.progress ?? 0) * 100).rounded())) percent")
                 HStack {
-                    Text("Fail \(PriceFormat.usd(challenge.floorEquityUsd))")
+                    Text("Out \(PriceFormat.compact(challenge.floorEquityUsd))")
                     Spacer()
-                    Text("Start \(PriceFormat.usd(challenge.startingBalanceUsd))")
-                    Spacer()
-                    Text("Pass \(PriceFormat.usd(challenge.targetEquityUsd))")
+                    Text("Pass \(PriceFormat.compact(challenge.targetEquityUsd))")
                 }
                 .font(.caption13Digits)
                 .foregroundStyle(Color.textSecondary)
@@ -306,8 +302,8 @@ struct ChallengeShareCard: View {
     }
 }
 
-/// A challenge tier as a solid metal account card: the size, big, and the rail from
-/// the fail line to the pass line.
+/// A tier to start: its rank badge and name, the balance, and the rail from the fail
+/// line to the pass line with a marker where you'd begin.
 private struct ChallengeTierCard: View {
     let tier: ChallengeTierOffer
     let isStarting: Bool
@@ -316,62 +312,40 @@ private struct ChallengeTierCard: View {
         let start = tier.startingBalanceUsd
         let pass = start * (1 + tier.rules.profitTargetPct / 100)
         let fail = start * (1 - tier.rules.maxLossPct / 100)
-        let shape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+        let ratio = NSDecimalNumber(decimal: (start - fail) / max(pass - fail, 1)).doubleValue
         VStack(alignment: .leading, spacing: Space.s16) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(tier.tierLabel)
-                    .font(.system(size: 34, weight: .heavy).monospacedDigit())
-                    .foregroundStyle(Color.textPrimary)
-                Text("ACCOUNT")
-                    .font(.caption.weight(.heavy))
-                    .tracking(1.4)
-                    .foregroundStyle(Color.textSecondary)
+            HStack(spacing: Space.s16) {
+                TierEmblem(level: ChallengeRank.level(tier.tier), size: 52)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ChallengeRank.name(tier.tier).uppercased())
+                        .font(.caption.weight(.bold))
+                        .tracking(1.2)
+                        .foregroundStyle(Color.textSecondary)
+                    Text(tier.tierLabel)
+                        .font(.system(size: 30, weight: .bold).monospacedDigit())
+                        .foregroundStyle(Color.textPrimary)
+                }
                 Spacer()
                 if isStarting {
                     ProgressView()
                 } else {
-                    Image(systemName: "arrow.right")
-                        .font(.footnote.weight(.bold))
-                        .foregroundStyle(Color.accentInk)
-                        .frame(width: 32, height: 32)
-                        .background(Color.accent, in: Circle())
+                    Image(systemName: "chevron.right")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.textTertiary)
                 }
             }
-            VStack(spacing: Space.s4) {
-                FailPassRail()
-                    .frame(height: 5)
-                    .overlay(alignment: .leading) {
-                        GeometryReader { geometry in
-                            // Where the start sits between fail and pass.
-                            let ratio = NSDecimalNumber(decimal: (start - fail) / max(pass - fail, 1)).doubleValue
-                            Circle()
-                                .fill(.white)
-                                .frame(width: 12, height: 12)
-                                .offset(x: geometry.size.width * ratio - 6, y: -3.5)
-                        }
-                    }
+            VStack(spacing: Space.s8) {
+                ChallengeRail(marker: ratio)
                 HStack {
-                    Text("Out at \(PriceFormat.compact(fail))")
-                        .foregroundStyle(Color.textSecondary)
+                    Text("Out \(PriceFormat.compact(fail))")
                     Spacer()
-                    Text("Pass at \(PriceFormat.compact(pass))")
-                        .foregroundStyle(Color.textPrimary)
+                    Text("Pass \(PriceFormat.compact(pass))")
                 }
                 .font(.caption13Digits)
+                .foregroundStyle(Color.textSecondary)
             }
         }
         .padding(Space.s20)
-        .metalSurface(shape)
-    }
-}
-
-/// Three solid segments, red to amber to green: the fail line to the pass line.
-struct FailPassRail: View {
-    var body: some View {
-        HStack(spacing: 2) {
-            Capsule().fill(Color.negative)
-            Capsule().fill(Color.tileYellow)
-            Capsule().fill(Color.positive)
-        }
+        .glassCard()
     }
 }

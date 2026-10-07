@@ -459,24 +459,11 @@ private struct ModeArt: View {
         .accessibilityHidden(true)
     }
 
-    /// −5% … +8%: a red-to-green rail with a glowing marker past the middle and a flag
-    /// at the finish.
+    /// A rank badge and the rail, two thirds of the way to the pass line.
     private var challengeMeter: some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            ZStack(alignment: .leading) {
-                FailPassRail()
-                    .frame(height: 6)
-                Circle()
-                    .fill(.white)
-                    .frame(width: 14, height: 14)
-                    .offset(x: width * 0.66 - 7)
-                Image(systemName: "flag.fill")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.positive)
-                    .offset(x: width - 12, y: -12)
-            }
-            .frame(maxHeight: .infinity)
+        HStack(spacing: Space.s12) {
+            TierEmblem(level: 2, size: 30)
+            ChallengeRail(marker: 0.66, fill: true)
         }
     }
 
