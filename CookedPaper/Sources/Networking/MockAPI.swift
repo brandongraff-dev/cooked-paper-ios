@@ -467,7 +467,12 @@ nonisolated enum MockAPI {
     // MARK: - Leaderboard
 
     private static func leaderboard(window: String) -> [String: Any] {
-        let names = ["degenwizard", "solsniper", "paperhands", "moonboi", "rugsurvivor", "chartooor", "cryptocarl", "bagholder", "wenlambo", "gmgn", "cookedcat", "fomo_fren", "diamondpaws"]
+        var names = ["degenwizard", "solsniper", "paperhands", "moonboi", "rugsurvivor", "chartooor", "cryptocarl", "bagholder", "wenlambo", "gmgn", "cookedcat", "fomo_fren", "diamondpaws"]
+        // In the 24h window the demo user is off the podium, so the pinned "your spot" bar shows.
+        if window == "24h" {
+            names.remove(at: 2)
+            names.insert("paperhands", at: 8)
+        }
         let returns = ["184.21", "122.40", "97.12", "74.55", "61.02", "48.90", "38.20", "33.14", "21.70", "12.49", "4.02", "-3.88", "-12.40"]
         let entries: [[String: Any]] = names.enumerated().map { i, name in
             leaderboardEntry(rank: i + 1, username: name, returnPct: returns[i], roundTrips: 24 - i)

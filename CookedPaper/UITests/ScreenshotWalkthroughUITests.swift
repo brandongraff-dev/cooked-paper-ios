@@ -281,7 +281,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
             leaderboardSegment.tap()
             Thread.sleep(forTimeInterval: 1.5)
             attach(app, name: "40-leaderboard")
-            let row = app.buttons["leaderboard.row.0"]
+            let row = app.descendants(matching: .any)["leaderboard.row.0"].firstMatch
             if row.waitForExistence(timeout: 5) {
                 if !row.isHittable { app.swipeUp() }
                 row.tap()
@@ -292,6 +292,17 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
                 Thread.sleep(forTimeInterval: 1.2)
             } else {
                 unreached.append("no leaderboard row")
+            }
+            // The 24h window ranks the demo user 9th: the pinned "your spot" bar.
+            let dayChip = app.buttons["24h"].firstMatch
+            if dayChip.waitForExistence(timeout: 3) {
+                dayChip.tap()
+                Thread.sleep(forTimeInterval: 1.5)
+                attach(app, name: "40b-leaderboard-your-spot")
+                if app.buttons["This month"].firstMatch.exists { app.buttons["This month"].firstMatch.tap() }
+                Thread.sleep(forTimeInterval: 1)
+            } else {
+                unreached.append("no 24h chip")
             }
         } else {
             unreached.append("Leaderboard segment never appeared")
@@ -335,6 +346,17 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
                     app.swipeDown()
                     Thread.sleep(forTimeInterval: 1)
                     attach(app, name: "43b-challenge-tiers")
+                    // Tapping a tier opens the start sheet; dismiss it without starting.
+                    let pro = app.buttons["challenge.start.50k"].firstMatch
+                    if pro.isHittable {
+                        pro.tap()
+                        if app.buttons["challenge.confirm"].waitForExistence(timeout: 3) {
+                            Thread.sleep(forTimeInterval: 0.8)
+                            attach(app, name: "43c-challenge-start-sheet")
+                        }
+                        app.swipeDown(velocity: .fast)
+                        Thread.sleep(forTimeInterval: 1)
+                    }
                 }
             }
             goBack(app)

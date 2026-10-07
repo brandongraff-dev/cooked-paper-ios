@@ -411,13 +411,10 @@ private struct PlayGrid: View {
     private func tile(_ mode: Mode) -> some View {
         NavigationLink(value: mode.route) {
             VStack(alignment: .leading, spacing: Space.s4) {
-                HStack(alignment: .top) {
-                    IconTile(symbol: mode.symbol, color: mode.color, size: 40)
-                    Spacer(minLength: 0)
-                }
-                ModeArt(mode: mode.id, color: mode.color)
-                    .frame(height: 34)
-                    .padding(.vertical, Space.s8)
+                ModeIcon(mode: mode.id)
+                    .frame(height: 56, alignment: .bottomLeading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, Space.s16)
                 Text(mode.title)
                     .font(.rowTitle)
                     .foregroundStyle(Color.textPrimary)
@@ -429,6 +426,9 @@ private struct PlayGrid: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Space.s16)
+            .overlay(alignment: .topTrailing) {
+                if mode.id == "season.rooms" { LiveTag().padding(Space.s12) }
+            }
             .glassCard()
         }
         .buttonStyle(.pressable)
@@ -438,86 +438,53 @@ private struct PlayGrid: View {
     }
 }
 
-/// A small picture of what each mode is: the challenge meter, a live pulse, a squad's
-/// faces, a crash line.
-private struct ModeArt: View {
+/// Each mode's drawn icon: a coin stack, a live beacon, a squad's faces, a crash.
+private struct ModeIcon: View {
     let mode: String
-    let color: Color
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
 
     var body: some View {
         Group {
             switch mode {
-            case "season.challenges": challengeMeter
-            case "season.rooms": livePulse
+            case "season.challenges": CoinStackIcon(height: 50)
+            case "season.rooms": LiveBeaconIcon(height: 46)
             case "season.squads": squadFaces
-            default: crashLine
+            default: CrashScreenIcon(height: 50)
             }
         }
         .accessibilityHidden(true)
     }
 
-    /// A rank badge and the rail, two thirds of the way to the pass line.
-    private var challengeMeter: some View {
-        HStack(spacing: Space.s12) {
-            TierEmblem(level: 2, size: 30)
-            ChallengeRail(marker: 0.66, fill: true)
-        }
-    }
-
-    /// A LIVE badge with a dot that breathes.
-    private var livePulse: some View {
-        HStack(spacing: Space.s8) {
-            ZStack {
-                Circle()
-                    .fill(Color.negative.opacity(0.35))
-                    .frame(width: 18, height: 18)
-                    .scaleEffect(pulse ? 1.4 : 0.8)
-                    .opacity(pulse ? 0 : 1)
-                Circle().fill(Color.negative).frame(width: 9, height: 9)
-            }
-            Text("LIVE")
-                .font(.caption.weight(.heavy))
-                .tracking(1.2)
-                .foregroundStyle(Color.textPrimary)
-            Spacer(minLength: 0)
-        }
-        .onAppear {
-            guard !reduceMotion, ProcessInfo.processInfo.environment["UITEST_STILL_FRAMES"] != "1" else { return }
-            withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { pulse = true }
-        }
-    }
-
     /// Three friends' avatars, overlapping, and a +2.
     private var squadFaces: some View {
-        HStack(spacing: -10) {
+        HStack(spacing: -12) {
             ForEach(["ada", "kai", "zoe"], id: \.self) { seed in
-                ProfileAvatar(seed: seed, name: seed, size: 30)
-                    .overlay(Circle().strokeBorder(Color.appBackground, lineWidth: 2))
+                ProfileAvatar(seed: seed, name: seed, size: 40)
+                    .overlay(Circle().strokeBorder(Color.appSurface, lineWidth: 2.5))
             }
             Text("+2")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Color.textPrimary)
-                .frame(width: 30, height: 30)
+                .frame(width: 40, height: 40)
                 .metalSurface(Circle())
-            Spacer(minLength: 0)
+                .padding(.leading, 16)
         }
     }
+}
 
-    /// A drift, a cliff, a dead-cat bounce, in red.
-    private var crashLine: some View {
-        Canvas { context, size in
-            let shape: [CGFloat] = [0.2, 0.25, 0.18, 0.3, 0.26, 0.85, 0.95, 0.7, 0.78]
-            var path = Path()
-            for (i, y) in shape.enumerated() {
-                let point = CGPoint(x: size.width * CGFloat(i) / CGFloat(shape.count - 1), y: size.height * y)
-                if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
-            }
-            context.stroke(path, with: .color(Color(red: 1, green: 0.27, blue: 0.23)),
-                           style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+/// "● LIVE" on a red-tinted pill.
+private struct LiveTag: View {
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle().fill(Color.negative).frame(width: 6, height: 6)
+            Text("LIVE")
+                .font(.caption2.weight(.heavy))
+                .tracking(1)
         }
+        .foregroundStyle(Color.negative)
+        .padding(.horizontal, Space.s8)
+        .padding(.vertical, 4)
+        .background(Color.negative.opacity(0.16), in: Capsule())
+        .accessibilityHidden(true)
     }
 }
 
