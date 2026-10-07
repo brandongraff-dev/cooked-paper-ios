@@ -255,7 +255,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         }
     }
 
-    /// The growth features: Beat the Monkey and a top trader's positions on the
+    /// The growth features: a top trader's positions on the
     /// Leaderboard; Challenges, event rooms, Squads, Crash Replay and the monthly recap
     /// from Season; and Streamer mode from Settings. Served by MockAPI/MockContests.
     @MainActor
@@ -275,12 +275,12 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         app.buttons["tab.compete"].tap()
         Thread.sleep(forTimeInterval: 1)
 
-        // Leaderboard: the monkey card, then a trader's (blurred for free) positions.
+        // Leaderboard, then a trader's (blurred for free) positions.
         let leaderboardSegment = app.buttons["compete.segment.leaderboard"]
         if leaderboardSegment.waitForExistence(timeout: 5) {
             leaderboardSegment.tap()
             Thread.sleep(forTimeInterval: 1.5)
-            attach(app, name: "40-leaderboard-beat-the-monkey")
+            attach(app, name: "40-leaderboard")
             let row = app.buttons["leaderboard.row.0"]
             if row.waitForExistence(timeout: 5) {
                 if !row.isHittable { app.swipeUp() }
