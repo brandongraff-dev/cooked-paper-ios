@@ -32,8 +32,8 @@ struct LeaderboardView: View {
     }
 
     /// The best return on the board, which each row's bar is measured against.
-    private var leaderPct: Decimal? {
-        entries.compactMap { $0.shownPct }.max()
+    private var leaderValue: Decimal? {
+        entries.compactMap { $0.rankValue }.max()
     }
 
     var body: some View {
@@ -163,7 +163,7 @@ struct LeaderboardView: View {
                             LeaderboardRow(
                                 entry: entry,
                                 isMe: entry.username == myEntry?.username,
-                                leaderPct: leaderPct
+                                leaderValue: leaderValue
                             )
                             .contentShape(Rectangle())
                         }
@@ -214,6 +214,58 @@ extension PaperLeaderboardEntry {
     /// keeps a malformed response from ever printing 0% for "no data".
     var shownPct: Decimal? {
         returnPct.unavailable == nil ? returnPct.pct : nil
+    }
+
+    /// The dollar move, when the server measured one.
+    var shownUsd: Decimal? {
+        guard let pnlUsd, pnlUsd.unavailable == nil else { return nil }
+        return pnlUsd.usd
+    }
+
+    /// What the board shows and measures gaps in: dollars, or the percentage from a
+    /// server that doesn't send dollars. Everyone ranked starts with the same $10K, so
+    /// the two order the board the same way.
+    var rankValue: Decimal? { shownUsd ?? shownPct }
+
+    /// "+$18,421", or "+184.21%" without dollars.
+    var pnlLabel: String {
+        if let usd = shownUsd { return LeaderboardMoney.signed(usd) }
+        return PriceFormat.change(shownPct)
+    }
+}
+
+/// Whole dollars for the board: +$18,421 / −$412.
+enum LeaderboardMoney {
+    static func signed(_ value: Decimal) -> String {
+        (value < 0 ? "\u{2212}" : "+") + whole(value.magnitude)
+    }
+
+    static func whole(_ value: Decimal) -> String {
+        value.formatted(.currency(code: "USD").precision(.fractionLength(0)))
+    }
+
+    /// The gap to the trader above, in the board's unit.
+    static func gap(_ me: PaperLeaderboardEntry, _ above: PaperLeaderboardEntry) -> String? {
+        if let mine = me.shownUsd, let theirs = above.shownUsd {
+            return whole(max(theirs - mine, 1))
+        }
+        guard let mine = me.shownPct, let theirs = above.shownPct else { return nil }
+        return NSDecimalNumber(decimal: max(theirs - mine, 0.01)).doubleValue
+            .formatted(.number.precision(.fractionLength(2))) + "%"
+    }
+}
+
+/// An entry's move, green or red: dollars when known.
+struct PnlText: View {
+    let entry: PaperLeaderboardEntry
+    var font: Font = .rowSubvalue
+
+    var body: some View {
+        Text(entry.pnlLabel)
+            .font(font)
+            .monospacedDigit()
+            .foregroundStyle(Color.direction(entry.rankValue))
+            .contentTransition(.numericText())
     }
 }
 
@@ -314,7 +366,7 @@ private struct Podium: View {
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                    ChangeText(percent: entry.shownPct, font: .rowValue)
+                    PnlText(entry: entry, font: .rowValue)
                 }
                 UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16, style: .continuous)
                     .fill(color.opacity(0.14))
@@ -338,7 +390,7 @@ private struct Podium: View {
         }
         .buttonStyle(.pressable)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(Ordinal.string(rank)), \(isMe ? "you" : entry.username), \(PriceFormat.change(entry.shownPct))")
+        .accessibilityLabel("\(Ordinal.string(rank)), \(isMe ? "you" : entry.username), \(entry.pnlLabel)")
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Shows what this trader holds")
         .accessibilityIdentifier("leaderboard.row.\(rank - 1)")
@@ -368,36 +420,32 @@ private struct NextPlaceNudge: View {
 }
 
 enum NextPlace {
-    /// The pinned bar's version: "11.44% to pass #8".
+    /// The pinned bar's version: "$2,528 to pass #8".
     static func short(me: PaperLeaderboardEntry, above: PaperLeaderboardEntry?) -> String {
         guard let above else { return "You\u{2019}re in 1st" }
-        guard let mine = me.shownPct, let theirs = above.shownPct else { return "Next up: #\(above.rank)" }
-        let points = NSDecimalNumber(decimal: max(theirs - mine, 0.01)).doubleValue
-            .formatted(.number.precision(.fractionLength(2)))
-        return "\(points)% to pass #\(above.rank)"
+        guard let gap = LeaderboardMoney.gap(me, above) else { return "Next up: #\(above.rank)" }
+        return "\(gap) to pass #\(above.rank)"
     }
 
-    /// The gap to the trader above, in return points, as one line.
+    /// "$2,528 more to pass solsniper for 2nd".
     static func text(me: PaperLeaderboardEntry, above: PaperLeaderboardEntry?) -> String {
         guard let above else { return "You\u{2019}re in 1st. Hold it." }
-        guard let mine = me.shownPct, let theirs = above.shownPct else {
+        guard let gap = LeaderboardMoney.gap(me, above) else {
             return "Next up: \(above.username) in \(Ordinal.string(above.rank))"
         }
-        let gap = max(theirs - mine, 0.01)
-        let points = NSDecimalNumber(decimal: gap).doubleValue.formatted(.number.precision(.fractionLength(2)))
-        return "\(points)% more to pass \(above.username) for \(Ordinal.string(above.rank))"
+        return "\(gap) more to pass \(above.username) for \(Ordinal.string(above.rank))"
     }
 }
 
-/// rank | avatar | name and trips over a bar toward the leader | return %.
+/// rank | avatar | name and trips over a bar toward the leader | P&L.
 private struct LeaderboardRow: View {
     let entry: PaperLeaderboardEntry
     let isMe: Bool
-    let leaderPct: Decimal?
+    let leaderValue: Decimal?
 
     private var fraction: Double {
-        guard let pct = entry.shownPct, let leaderPct, leaderPct > 0 else { return 0 }
-        return min(1, max(0, NSDecimalNumber(decimal: pct / leaderPct).doubleValue))
+        guard let value = entry.rankValue, let leaderValue, leaderValue > 0 else { return 0 }
+        return min(1, max(0, NSDecimalNumber(decimal: value / leaderValue).doubleValue))
     }
 
     var body: some View {
@@ -418,7 +466,7 @@ private struct LeaderboardRow: View {
                         .foregroundStyle(Color.textTertiary)
                         .lineLimit(1)
                     Spacer(minLength: Space.s8)
-                    ChangeText(percent: entry.shownPct, font: .rowValue)
+                    PnlText(entry: entry, font: .rowValue)
                 }
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
@@ -481,7 +529,7 @@ private struct YourSpotBar: View {
                 }
                 Spacer(minLength: Space.s8)
                 if let entry {
-                    ChangeText(percent: entry.shownPct, font: .rowValue)
+                    PnlText(entry: entry, font: .rowValue)
                 }
             }
             .padding(.horizontal, Space.s16)

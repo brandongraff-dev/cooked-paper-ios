@@ -86,7 +86,7 @@ struct ChallengesView: View {
                     }
                 }
             }
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.height(520), .large])
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showsPaywall) {
@@ -434,21 +434,24 @@ private struct ChallengeStartSheet: View {
         let start = tier.startingBalanceUsd
         let target = start * tier.rules.profitTargetPct / 100
         let loss = start * tier.rules.maxLossPct / 100
-        VStack(spacing: Space.s20) {
-            VStack(spacing: Space.s8) {
-                TierEmblem(level: ChallengeRank.level(tier.tier), size: 64)
-                Text(ChallengeRank.name(tier.tier).uppercased())
-                    .font(.caption.weight(.bold))
-                    .tracking(1.2)
-                    .foregroundStyle(Color.textSecondary)
-                Text(whole(start))
-                    .font(.system(size: 40, weight: .bold).monospacedDigit())
-                    .foregroundStyle(Color.textPrimary)
-                Text("Starting balance")
-                    .font(.caption13)
-                    .foregroundStyle(Color.textTertiary)
+        VStack(alignment: .leading, spacing: Space.s20) {
+            // The same header as the tier's card, so the sheet reads as that card opened.
+            HStack(spacing: Space.s16) {
+                TierEmblem(level: ChallengeRank.level(tier.tier), size: 56)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(ChallengeRank.name(tier.tier).uppercased()) CHALLENGE")
+                        .font(.caption.weight(.bold))
+                        .tracking(1.2)
+                        .foregroundStyle(Color.textSecondary)
+                    Text(whole(start))
+                        .font(.system(size: 34, weight: .bold).monospacedDigit())
+                        .foregroundStyle(Color.textPrimary)
+                    Text("Starting balance")
+                        .font(.caption13)
+                        .foregroundStyle(Color.textTertiary)
+                }
             }
-            .padding(.top, Space.s24)
+            .padding(.top, Space.s32)
 
             VStack(spacing: 0) {
                 rule("flag.fill", "Profit target", "+\(whole(target))", detail: "Pass at \(PriceFormat.compact(start + target))")
@@ -496,7 +499,7 @@ private struct ChallengeStartSheet: View {
         HStack(spacing: Space.s12) {
             Image(systemName: symbol)
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(Color.textPrimary)
+                .foregroundStyle(Color.accent)
                 .frame(width: 32, height: 32)
                 .metalSurface(RoundedRectangle(cornerRadius: 9, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {

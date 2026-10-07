@@ -487,6 +487,8 @@ nonisolated enum MockAPI {
         [
             "rank": rank, "portfolioId": "lb-\(rank)", "username": username, "provenance": "PAPER · SIMULATED",
             "returnPct": ["pct": returnPct, "sampleSize": roundTrips, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
+            // Everyone ranked starts with $10,000, so the dollar move is the percentage of that.
+            "pnlUsd": ["usd": String(format: "%.2f", (Double(returnPct) ?? 0) * 100), "sampleSize": roundTrips, "sampleOf": "round_trips", "unavailable": NSNull()] as [String: Any],
             "roundTripCount": roundTrips, "resetCount": rank % 3 == 0 ? 1 : 0, "createdAt": iso(daysFromNow: -20),
             "isBot": false,
         ]

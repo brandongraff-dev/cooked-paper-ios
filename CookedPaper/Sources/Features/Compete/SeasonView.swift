@@ -445,7 +445,12 @@ private struct ModeIcon: View {
     var body: some View {
         Group {
             switch mode {
-            case "season.challenges": CoinStackIcon(height: 56)
+            case "season.challenges":
+                // A rank badge and the rail, two thirds of the way to the pass line.
+                HStack(spacing: Space.s12) {
+                    TierEmblem(level: 2, size: 40)
+                    ChallengeRail(marker: 0.66, fill: true)
+                }
             case "season.rooms": LiveBeaconIcon(height: 46)
             case "season.squads": squadFaces
             default: CrashScreenIcon(height: 50)

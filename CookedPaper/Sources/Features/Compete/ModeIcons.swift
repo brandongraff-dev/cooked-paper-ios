@@ -1,60 +1,10 @@
 import SwiftUI
 
-// Drawn icons for the Play tiles: a coin stack, a live beacon, a crash on a screen.
+// Drawn icons for the Play tiles: a live beacon and a crash on a screen.
 // Flat solid colors (a lighter face and a darker edge for shape), no gradients, no grain.
 
 private extension Color {
-    static let coinFace = Color(rgb: 0xF5C343)
-    static let coinEdge = Color(rgb: 0xC98F12)
-    static let coinInk = Color(rgb: 0x9A6A00)
     static let liveRed = Color(rgb: 0xFF3B30)
-}
-
-/// Three coins stacked flat, and one standing in front with a dollar sign.
-struct CoinStackIcon: View {
-    var height: CGFloat = 52
-
-    var body: some View {
-        let w = height * 1.25
-        let coinW = w * 0.72, coinH = height * 0.26, band = height * 0.12
-        ZStack(alignment: .bottomLeading) {
-            ForEach(0..<3, id: \.self) { i in
-                flatCoin(width: coinW, height: coinH, band: band)
-                    .offset(x: CGFloat(i % 2) * w * 0.03, y: -CGFloat(i) * band * 1.15)
-            }
-            standingCoin(size: height * 0.56)
-                .offset(x: w * 0.56, y: 0)
-        }
-        .frame(width: w + height * 0.2, height: height, alignment: .bottomLeading)
-        .accessibilityHidden(true)
-    }
-
-    private func flatCoin(width: CGFloat, height: CGFloat, band: CGFloat) -> some View {
-        ZStack(alignment: .top) {
-            // The edge: a band under the face.
-            Capsule()
-                .fill(Color.coinEdge)
-                .frame(width: width, height: height)
-                .offset(y: band)
-            Ellipse()
-                .fill(Color.coinFace)
-                .overlay(Ellipse().strokeBorder(Color.coinEdge, lineWidth: 1.5).padding(height * 0.16))
-                .frame(width: width, height: height)
-        }
-        .frame(width: width, height: height + band, alignment: .top)
-    }
-
-    private func standingCoin(size: CGFloat) -> some View {
-        ZStack {
-            Circle().fill(Color.coinEdge).offset(x: size * 0.06)
-            Circle().fill(Color.coinFace)
-            Circle().strokeBorder(Color.coinEdge, lineWidth: max(1.5, size * 0.07)).padding(size * 0.12)
-            Text("$")
-                .font(.system(size: size * 0.42, weight: .heavy, design: .rounded))
-                .foregroundStyle(Color.coinInk)
-        }
-        .frame(width: size, height: size)
-    }
 }
 
 /// A red dot with radio waves either side; the dot breathes unless motion is reduced.
