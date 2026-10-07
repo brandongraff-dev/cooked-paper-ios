@@ -368,6 +368,15 @@ private struct NextPlaceNudge: View {
 }
 
 enum NextPlace {
+    /// The pinned bar's version: "11.44% to pass #8".
+    static func short(me: PaperLeaderboardEntry, above: PaperLeaderboardEntry?) -> String {
+        guard let above else { return "You\u{2019}re in 1st" }
+        guard let mine = me.shownPct, let theirs = above.shownPct else { return "Next up: #\(above.rank)" }
+        let points = NSDecimalNumber(decimal: max(theirs - mine, 0.01)).doubleValue
+            .formatted(.number.precision(.fractionLength(2)))
+        return "\(points)% to pass #\(above.rank)"
+    }
+
     /// The gap to the trader above, in return points, as one line.
     static func text(me: PaperLeaderboardEntry, above: PaperLeaderboardEntry?) -> String {
         guard let above else { return "You\u{2019}re in 1st. Hold it." }
@@ -464,7 +473,7 @@ private struct YourSpotBar: View {
                     Text("Your spot")
                         .font(.rowTitle)
                         .foregroundStyle(Color.textPrimary)
-                    Text(entry.map { NextPlace.text(me: $0, above: nextAbove) } ?? "Close a trade to get ranked")
+                    Text(entry.map { NextPlace.short(me: $0, above: nextAbove) } ?? "Close a trade to get ranked")
                         .font(.caption13)
                         .foregroundStyle(entry == nil ? Color.textSecondary : Color.accentViolet)
                         .lineLimit(1)

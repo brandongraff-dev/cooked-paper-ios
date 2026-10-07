@@ -441,7 +441,7 @@ private struct ChallengeStartSheet: View {
                     .font(.caption.weight(.bold))
                     .tracking(1.2)
                     .foregroundStyle(Color.textSecondary)
-                Text(PriceFormat.usd(start))
+                Text(whole(start))
                     .font(.system(size: 40, weight: .bold).monospacedDigit())
                     .foregroundStyle(Color.textPrimary)
                 Text("Starting balance")
@@ -451,9 +451,9 @@ private struct ChallengeStartSheet: View {
             .padding(.top, Space.s24)
 
             VStack(spacing: 0) {
-                rule("flag.fill", "Profit target", "+\(PriceFormat.usd(target))", detail: "Pass at \(PriceFormat.compact(start + target))")
+                rule("flag.fill", "Profit target", "+\(whole(target))", detail: "Pass at \(PriceFormat.compact(start + target))")
                 RowSeparator(leadingInset: 44)
-                rule("shield.fill", "Max loss", "\u{2212}\(PriceFormat.usd(loss))", detail: "Out at \(PriceFormat.compact(start - loss))")
+                rule("shield.fill", "Max loss", "\u{2212}\(whole(loss))", detail: "Out at \(PriceFormat.compact(start - loss))")
                 RowSeparator(leadingInset: 44)
                 rule("clock.fill", "Time limit", "\(tier.rules.days) days", detail: nil)
             }
@@ -485,6 +485,11 @@ private struct ChallengeStartSheet: View {
         .frame(maxWidth: .infinity)
         .screenBackground()
         .preferredColorScheme(.dark)
+    }
+
+    /// $50,000, no cents: these are round rule amounts.
+    private func whole(_ value: Decimal) -> String {
+        value.formatted(.currency(code: "USD").precision(.fractionLength(0)))
     }
 
     private func rule(_ symbol: String, _ title: String, _ value: String, detail: String?) -> some View {

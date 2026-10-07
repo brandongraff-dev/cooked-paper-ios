@@ -445,7 +445,7 @@ private struct ModeIcon: View {
     var body: some View {
         Group {
             switch mode {
-            case "season.challenges": CoinStackIcon(height: 50)
+            case "season.challenges": CoinStackIcon(height: 56)
             case "season.rooms": LiveBeaconIcon(height: 46)
             case "season.squads": squadFaces
             default: CrashScreenIcon(height: 50)
