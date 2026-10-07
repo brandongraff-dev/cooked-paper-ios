@@ -255,7 +255,7 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         }
     }
 
-    /// The growth features: Beat the Monkey and a top trader's positions on the
+    /// The growth features: a top trader's positions on the
     /// Leaderboard; Challenges, event rooms, Squads, Crash Replay and the monthly recap
     /// from Season; and Streamer mode from Settings. Served by MockAPI/MockContests.
     @MainActor
@@ -275,13 +275,13 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         app.buttons["tab.compete"].tap()
         Thread.sleep(forTimeInterval: 1)
 
-        // Leaderboard: the monkey card, then a trader's (blurred for free) positions.
+        // Leaderboard, then a trader's (blurred for free) positions.
         let leaderboardSegment = app.buttons["compete.segment.leaderboard"]
         if leaderboardSegment.waitForExistence(timeout: 5) {
             leaderboardSegment.tap()
             Thread.sleep(forTimeInterval: 1.5)
-            attach(app, name: "40-leaderboard-beat-the-monkey")
-            let row = app.buttons["leaderboard.row.0"]
+            attach(app, name: "40-leaderboard")
+            let row = app.descendants(matching: .any)["leaderboard.row.0"].firstMatch
             if row.waitForExistence(timeout: 5) {
                 if !row.isHittable { app.swipeUp() }
                 row.tap()
@@ -292,6 +292,17 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
                 Thread.sleep(forTimeInterval: 1.2)
             } else {
                 unreached.append("no leaderboard row")
+            }
+            // The 24h window ranks the demo user 9th: the pinned "your spot" bar.
+            let dayChip = app.buttons["24h"].firstMatch
+            if dayChip.waitForExistence(timeout: 3) {
+                dayChip.tap()
+                Thread.sleep(forTimeInterval: 1.5)
+                attach(app, name: "40b-leaderboard-your-spot")
+                if app.buttons["This month"].firstMatch.exists { app.buttons["This month"].firstMatch.tap() }
+                Thread.sleep(forTimeInterval: 1)
+            } else {
+                unreached.append("no 24h chip")
             }
         } else {
             unreached.append("Leaderboard segment never appeared")
@@ -304,17 +315,50 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
         }
         // The sheet above can still be animating away; retry until Season shows.
         let seasonHeader = app.descendants(matching: .any)["season.header"].firstMatch
-        for _ in 0..<3 where !app.buttons["season.challenges"].exists {
+        for _ in 0..<3 where !app.descendants(matching: .any)["season.challenges"].firstMatch.exists {
             seasonSegment.tap()
             if seasonHeader.waitForExistence(timeout: 5) { break }
         }
         Thread.sleep(forTimeInterval: 1.2)
         attach(app, name: "42-season-new-cards")
+        // The game-mode grid sits below the Daily Call cards.
+        let grid = app.descendants(matching: .any)["season.challenges"].firstMatch
+        var gridSwipes = 0
+        while !(grid.exists && grid.isHittable) && gridSwipes < 4 {
+            app.swipeUp()
+            gridSwipes += 1
+        }
+        Thread.sleep(forTimeInterval: 1)
+        attach(app, name: "42b-season-play-grid")
 
         if openFromSeason(app, id: "season.challenges", unreached: &unreached) {
             _ = app.buttons["challenge.start.10k"].waitForExistence(timeout: 5)
             Thread.sleep(forTimeInterval: 1)
             attach(app, name: "43-challenges")
+            // The demo account has a challenge running; abandon it to see the tiers.
+            let abandon = app.buttons["Abandon challenge"].firstMatch
+            if abandon.waitForExistence(timeout: 3) {
+                if !abandon.isHittable { app.swipeUp() }
+                abandon.tap()
+                let confirm = app.buttons["Abandon"].firstMatch
+                if confirm.waitForExistence(timeout: 3) { confirm.tap() }
+                if app.buttons["challenge.start.10k"].waitForExistence(timeout: 5) {
+                    app.swipeDown()
+                    Thread.sleep(forTimeInterval: 1)
+                    attach(app, name: "43b-challenge-tiers")
+                    // Tapping a tier opens the start sheet; dismiss it without starting.
+                    let pro = app.buttons["challenge.start.50k"].firstMatch
+                    if pro.isHittable {
+                        pro.tap()
+                        if app.buttons["challenge.confirm"].waitForExistence(timeout: 3) {
+                            Thread.sleep(forTimeInterval: 0.8)
+                            attach(app, name: "43c-challenge-start-sheet")
+                        }
+                        app.swipeDown(velocity: .fast)
+                        Thread.sleep(forTimeInterval: 1)
+                    }
+                }
+            }
             goBack(app)
         }
 
@@ -363,8 +407,10 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
                     app.buttons["Sell 50%"].firstMatch.tap()
                     Thread.sleep(forTimeInterval: 1)
                     attach(app, name: "49-crash-replay-playing")
-                    app.buttons["1×"].firstMatch.tap()
-                    if app.descendants(matching: .any)["replay.verdict"].firstMatch.waitForExistence(timeout: 60) {
+                    // 3× plays the 97 candles in ~20 s; 1× would take a minute.
+                    let speed = app.buttons["1×"].firstMatch
+                    if speed.waitForExistence(timeout: 3) { speed.tap() }
+                    if app.descendants(matching: .any)["replay.verdict"].firstMatch.waitForExistence(timeout: 120) {
                         Thread.sleep(forTimeInterval: 1.5)
                         attach(app, name: "50-crash-replay-result")
                         let done = app.buttons["Done"].firstMatch
@@ -413,12 +459,18 @@ nonisolated final class ScreenshotWalkthroughUITests: XCTestCase {
     /// Scrolls the Season page until the entry is tappable, then opens it.
     @MainActor
     private func openFromSeason(_ app: XCUIApplication, id: String, unreached: inout [String]) -> Bool {
-        let entry = app.buttons[id]
-        guard entry.waitForExistence(timeout: 5) else {
+        let entry = app.descendants(matching: .any)[id].firstMatch
+        var swipes = 0
+        // Scroll it into being if it is below the fold.
+        while !entry.waitForExistence(timeout: 2) && swipes < 4 {
+            app.swipeUp()
+            swipes += 1
+        }
+        guard entry.exists else {
             unreached.append("no \(id) on the Season page")
             return false
         }
-        var swipes = 0
+        swipes = 0
         while !entry.isHittable && swipes < 4 {
             app.swipeUp()
             swipes += 1

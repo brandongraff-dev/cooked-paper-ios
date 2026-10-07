@@ -423,14 +423,13 @@ struct TokenDetailView: View {
         .padding(.top, Space.s24)
         .padding(.bottom, Space.s8)
         .background(
-            // The fade the spec asks for: transparent at the top edge to solid black
-            // behind the buttons.
-            LinearGradient(
-                stops: [.init(color: Color.appBackground.opacity(0), location: 0), .init(color: Color.appBackground, location: 0.35)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea(edges: .bottom)
+            // Solid black behind the buttons, so the chart never shows through them,
+            // and a hairline where the scrolling content meets it.
+            Color.appBackground
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Color.appSeparator).frame(height: 1)
+                }
+                .ignoresSafeArea(edges: .bottom)
         )
     }
 

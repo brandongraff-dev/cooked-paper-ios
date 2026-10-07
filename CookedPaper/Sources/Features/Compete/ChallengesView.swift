@@ -17,6 +17,8 @@ struct ChallengesView: View {
     @State private var confirmsAbandon = false
     @State private var showsPaywall = false
     @State private var actionError: String?
+    /// The tier tapped, waiting on the start sheet.
+    @State private var pendingTier: ChallengeTierOffer?
 
     var body: some View {
         ScrollView {
@@ -71,6 +73,22 @@ struct ChallengesView: View {
         } message: {
             Text("It ends now at its current equity and counts as an attempt.")
         }
+        .sheet(item: $pendingTier) { tier in
+            ChallengeStartSheet(tier: tier, attemptsNote: response.flatMap { attemptsNote($0) }, isStarting: isStarting) {
+                guard let response else { return }
+                Task {
+                    let error = await start(tier, response: response)
+                    pendingTier = nil
+                    // Show a failure once the sheet is gone, so the alert isn't lost behind it.
+                    if let error {
+                        try? await Task.sleep(for: .milliseconds(450))
+                        actionError = error
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showsPaywall) {
             PaywallView(reason: .locked("More challenge attempts")) { showsPaywall = false }
         }
@@ -88,28 +106,30 @@ struct ChallengesView: View {
 
     private func tierPicker(_ response: ChallengeListResponse) -> some View {
         VStack(alignment: .leading, spacing: Space.s16) {
-            VStack(alignment: .leading, spacing: Space.s8) {
-                Text("Pass a prop challenge")
-                    .font(.appLargeTitle)
-                    .foregroundStyle(Color.textPrimary)
-                Text("+8% to pass. −5% and you\u{2019}re out. 30 days.")
-                    .font(.body)
-                    .foregroundStyle(Color.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if response.attempts > 0 {
-                    Text("Passed \(response.passed) of \(response.attempts) attempts")
+            VStack(alignment: .leading, spacing: Space.s12) {
+                if let rules = response.tiers.first?.rules {
+                    RulePills(rules: rules)
+                }
+                if let note = attemptsNote(response) {
+                    Label(note, systemImage: FreeTier.shared.isPro ? "infinity" : "ticket.fill")
                         .font(.caption13)
                         .foregroundStyle(Color.textSecondary)
                 }
             }
             ForEach(response.tiers) { tier in
                 Button {
-                    Task { await start(tier, response: response) }
+                    Haptics.tap()
+                    if needsPaywall(response) {
+                        showsPaywall = true
+                    } else {
+                        pendingTier = tier
+                    }
                 } label: {
                     ChallengeTierCard(tier: tier, isStarting: isStarting)
                 }
                 .buttonStyle(.pressable)
                 .disabled(isStarting)
+                .accessibilityLabel("\(tier.tierLabel) challenge")
                 .accessibilityIdentifier("challenge.start.\(tier.tier)")
             }
         }
@@ -117,13 +137,11 @@ struct ChallengesView: View {
 
     private func history(_ items: [Challenge]) -> some View {
         VStack(alignment: .leading, spacing: Space.headerGap) {
-            SectionHeader(title: "Past challenges")
+            SectionHeader(title: "Past challenges", caption: passedCaption(items))
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     HStack(spacing: Space.s12) {
-                        Image(systemName: item.status == "passed" ? "checkmark.seal.fill" : "xmark.circle")
-                            .foregroundStyle(item.status == "passed" ? Color.positive : Color.textTertiary)
-                            .accessibilityHidden(true)
+                        TierEmblem(level: ChallengeRank.level(item.tier), size: 34, lit: item.status == "passed")
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(item.tierLabel) · \(item.statusTitle)")
                                 .font(.rowTitle)
@@ -140,6 +158,20 @@ struct ChallengesView: View {
                 }
             }
         }
+    }
+
+    private func passedCaption(_ items: [Challenge]) -> String {
+        let passed = items.filter { $0.status == "passed" }.count
+        return "\(passed) of \(items.count) passed"
+    }
+
+    /// Free: how many of this month's attempts are left. Pro: unlimited.
+    private func attemptsNote(_ response: ChallengeListResponse) -> String? {
+        if FreeTier.shared.isPro { return "Unlimited attempts with Pro" }
+        let left = max(0, Self.freeAttemptsPerMonth - attemptsThisMonth(response))
+        return left > 0
+            ? "\(left) free \(left == 1 ? "attempt" : "attempts") left this month"
+            : "Free attempt used this month. Pro gets unlimited."
     }
 
     // MARK: - Actions
@@ -172,22 +204,24 @@ struct ChallengesView: View {
         }.count
     }
 
-    private func start(_ tier: ChallengeTierOffer, response: ChallengeListResponse) async {
-        guard !isStarting else { return }
-        if !FreeTier.shared.isPro, attemptsThisMonth(response) >= Self.freeAttemptsPerMonth {
-            showsPaywall = true
-            return
-        }
+    private func needsPaywall(_ response: ChallengeListResponse) -> Bool {
+        !FreeTier.shared.isPro && attemptsThisMonth(response) >= Self.freeAttemptsPerMonth
+    }
+
+    /// Starts `tier`; returns the error to show, if any.
+    private func start(_ tier: ChallengeTierOffer, response: ChallengeListResponse) async -> String? {
+        guard !isStarting else { return nil }
         isStarting = true
+        defer { isStarting = false }
         Haptics.commit()
         do {
             _ = try await ChallengeAPI.start(tier: tier.tier)
             Haptics.success()
             await load()
+            return nil
         } catch {
-            actionError = CompeteErrorText.message(for: error)
+            return CompeteErrorText.message(for: error)
         }
-        isStarting = false
     }
 
     private func abandon() async {
@@ -201,16 +235,24 @@ struct ChallengesView: View {
     }
 }
 
-/// The running challenge: equity, return, and a bar from the fail line to the pass line.
+/// The running challenge: its rank badge, equity, return, and the rail from the fail
+/// line to the pass line.
 struct ChallengeProgressCard: View {
     let challenge: Challenge
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s16) {
-            HStack {
-                Text("\(challenge.tierLabel) Challenge")
-                    .font(.sectionHeader)
-                    .foregroundStyle(Color.textPrimary)
+            HStack(spacing: Space.s12) {
+                TierEmblem(level: ChallengeRank.level(challenge.tier), size: 40)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(ChallengeRank.name(challenge.tier).uppercased())
+                        .font(.caption.weight(.bold))
+                        .tracking(1.2)
+                        .foregroundStyle(Color.textSecondary)
+                    Text("\(challenge.tierLabel) Challenge")
+                        .font(.sectionHeader)
+                        .foregroundStyle(Color.textPrimary)
+                }
                 Spacer()
                 if let end = challenge.endDate {
                     CountdownText(end: end)
@@ -223,24 +265,14 @@ struct ChallengeProgressCard: View {
                 ChangeText(percent: challenge.returnPct, font: .rowValue)
             }
             VStack(spacing: Space.s8) {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.appSeparator)
-                        Capsule()
-                            .fill((challenge.progress ?? 0) >= 0.5 ? Color.positive : Color.negative)
-                            .frame(width: geo.size.width * (challenge.progress ?? 0))
-                    }
-                }
-                .frame(height: 10)
+                ChallengeRail(marker: challenge.progress ?? 0, fill: true)
                 .accessibilityElement()
                 .accessibilityLabel("Progress from the fail line to the pass line")
                 .accessibilityValue("\(Int(((challenge.progress ?? 0) * 100).rounded())) percent")
                 HStack {
-                    Text("Fail \(PriceFormat.usd(challenge.floorEquityUsd))")
+                    Text("Out \(PriceFormat.compact(challenge.floorEquityUsd))")
                     Spacer()
-                    Text("Start \(PriceFormat.usd(challenge.startingBalanceUsd))")
-                    Spacer()
-                    Text("Pass \(PriceFormat.usd(challenge.targetEquityUsd))")
+                    Text("Pass \(PriceFormat.compact(challenge.targetEquityUsd))")
                 }
                 .font(.caption13Digits)
                 .foregroundStyle(Color.textSecondary)
@@ -277,7 +309,6 @@ struct ChallengeShareCard: View {
     var body: some View {
         ZStack {
             ShareCardStyle.background
-            RadialGradient(colors: [ShareCardStyle.glow.opacity(0.35), .clear], center: .top, startRadius: 0, endRadius: 320)
             VStack(alignment: .leading, spacing: 16) {
                 Text("PROP CHALLENGE")
                     .font(.system(size: 13, weight: .bold))
@@ -309,79 +340,176 @@ struct ChallengeShareCard: View {
     }
 }
 
-/// A challenge tier as a brushed-metal account card: the size, big; a glow in the
-/// tier's color; and the rail from the fail line to the pass line.
+/// A tier to start: its rank badge and name, the balance, and the rail from the fail
+/// line to the pass line with a marker where you'd begin.
 private struct ChallengeTierCard: View {
     let tier: ChallengeTierOffer
     let isStarting: Bool
-
-    private var glow: Color {
-        switch tier.tier {
-        case "100k": .tileYellow
-        case "50k": .tileIndigo
-        default: .tileTeal
-        }
-    }
 
     var body: some View {
         let start = tier.startingBalanceUsd
         let pass = start * (1 + tier.rules.profitTargetPct / 100)
         let fail = start * (1 - tier.rules.maxLossPct / 100)
-        let shape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+        let ratio = NSDecimalNumber(decimal: (start - fail) / max(pass - fail, 1)).doubleValue
         VStack(alignment: .leading, spacing: Space.s16) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(tier.tierLabel)
-                    .font(.system(size: 34, weight: .heavy).monospacedDigit())
-                    .foregroundStyle(
-                        LinearGradient(colors: [.white, glow.blended(with: .white, by: 0.5)], startPoint: .top, endPoint: .bottom)
-                    )
-                Text("ACCOUNT")
-                    .font(.caption.weight(.heavy))
-                    .tracking(1.4)
-                    .foregroundStyle(Color.textSecondary)
+            HStack(spacing: Space.s16) {
+                TierEmblem(level: ChallengeRank.level(tier.tier), size: 52)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ChallengeRank.name(tier.tier).uppercased())
+                        .font(.caption.weight(.bold))
+                        .tracking(1.2)
+                        .foregroundStyle(Color.textSecondary)
+                    Text(tier.tierLabel)
+                        .font(.system(size: 30, weight: .bold).monospacedDigit())
+                        .foregroundStyle(Color.textPrimary)
+                }
                 Spacer()
                 if isStarting {
                     ProgressView()
                 } else {
-                    Image(systemName: "arrow.right")
-                        .font(.footnote.weight(.bold))
-                        .foregroundStyle(Color.accentInk)
-                        .frame(width: 32, height: 32)
-                        .background(LinearGradient.brand, in: Circle())
+                    Image(systemName: "chevron.right")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.textTertiary)
                 }
             }
-            VStack(spacing: Space.s4) {
-                Capsule()
-                    .fill(LinearGradient(colors: [.negative, .tileYellow, .positive], startPoint: .leading, endPoint: .trailing))
-                    .frame(height: 5)
-                    .overlay(alignment: .leading) {
-                        GeometryReader { geometry in
-                            // Where the start sits between fail and pass.
-                            let ratio = NSDecimalNumber(decimal: (start - fail) / max(pass - fail, 1)).doubleValue
-                            Circle()
-                                .fill(.white)
-                                .frame(width: 12, height: 12)
-                                .shadow(color: .white.opacity(0.8), radius: 5)
-                                .offset(x: geometry.size.width * ratio - 6, y: -3.5)
-                        }
-                    }
+            VStack(spacing: Space.s8) {
+                ChallengeRail(marker: ratio)
                 HStack {
-                    Label(PriceFormat.usd(fail), systemImage: "xmark")
-                        .foregroundStyle(Color.negative)
+                    Text("Out \(PriceFormat.compact(fail))")
                     Spacer()
-                    Label(PriceFormat.usd(pass), systemImage: "flag.checkered")
-                        .foregroundStyle(Color.positive)
+                    Text("Pass \(PriceFormat.compact(pass))")
                 }
                 .font(.caption13Digits)
+                .foregroundStyle(Color.textSecondary)
             }
         }
         .padding(Space.s20)
-        .background {
-            RadialGradient(colors: [glow.opacity(0.35), .clear], center: .topLeading, startRadius: 0, endRadius: 220)
-                .clipShape(shape)
+        .glassCard()
+    }
+}
+
+/// The rules at a glance: target, max loss, time.
+private struct RulePills: View {
+    let rules: ChallengeRules
+
+    var body: some View {
+        HStack(spacing: Space.s8) {
+            pill("flag.fill", "+\(percent(rules.profitTargetPct)) target")
+            pill("shield.fill", "\u{2212}\(percent(rules.maxLossPct)) max loss")
+            pill("clock.fill", "\(rules.days) days")
         }
-        .metalSurface(shape)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(tier.tierLabel) challenge. Pass at \(PriceFormat.usd(pass)), fail at \(PriceFormat.usd(fail)).")
+        .accessibilityElement(children: .combine)
+    }
+
+    private func pill(_ symbol: String, _ text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.accent)
+            Text(text)
+                .font(.caption13)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, Space.s12)
+        .frame(height: 32)
+        .background(Color.appSurface, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+    }
+
+    private func percent(_ value: Decimal) -> String {
+        NSDecimalNumber(decimal: value).doubleValue.formatted(.number.precision(.fractionLength(0...1))) + "%"
+    }
+}
+
+/// What you're about to start: the rank badge, the balance, the three rules in
+/// dollars, and one button. Starting can't be undone without it counting as an attempt.
+private struct ChallengeStartSheet: View {
+    let tier: ChallengeTierOffer
+    let attemptsNote: String?
+    let isStarting: Bool
+    let onStart: () -> Void
+
+    var body: some View {
+        let start = tier.startingBalanceUsd
+        let target = start * tier.rules.profitTargetPct / 100
+        let loss = start * tier.rules.maxLossPct / 100
+        VStack(spacing: Space.s20) {
+            VStack(spacing: Space.s8) {
+                TierEmblem(level: ChallengeRank.level(tier.tier), size: 64)
+                Text(ChallengeRank.name(tier.tier).uppercased())
+                    .font(.caption.weight(.bold))
+                    .tracking(1.2)
+                    .foregroundStyle(Color.textSecondary)
+                Text(PriceFormat.usd(start))
+                    .font(.system(size: 40, weight: .bold).monospacedDigit())
+                    .foregroundStyle(Color.textPrimary)
+                Text("Starting balance")
+                    .font(.caption13)
+                    .foregroundStyle(Color.textTertiary)
+            }
+            .padding(.top, Space.s24)
+
+            VStack(spacing: 0) {
+                rule("flag.fill", "Profit target", "+\(PriceFormat.usd(target))", detail: "Pass at \(PriceFormat.compact(start + target))")
+                RowSeparator(leadingInset: 44)
+                rule("shield.fill", "Max loss", "\u{2212}\(PriceFormat.usd(loss))", detail: "Out at \(PriceFormat.compact(start - loss))")
+                RowSeparator(leadingInset: 44)
+                rule("clock.fill", "Time limit", "\(tier.rules.days) days", detail: nil)
+            }
+            .padding(.horizontal, Space.s16)
+            .glassCard()
+
+            Spacer(minLength: 0)
+
+            VStack(spacing: Space.s12) {
+                Button(action: onStart) {
+                    if isStarting {
+                        ProgressView().tint(Color.accentInk)
+                    } else {
+                        Text("Start \(tier.tierLabel) Challenge")
+                    }
+                }
+                .buttonStyle(.accent)
+                .disabled(isStarting)
+                .accessibilityIdentifier("challenge.confirm")
+                if let attemptsNote {
+                    Text(attemptsNote)
+                        .font(.caption13)
+                        .foregroundStyle(Color.textTertiary)
+                }
+            }
+        }
+        .padding(.horizontal, Space.margin)
+        .padding(.bottom, Space.s16)
+        .frame(maxWidth: .infinity)
+        .screenBackground()
+        .preferredColorScheme(.dark)
+    }
+
+    private func rule(_ symbol: String, _ title: String, _ value: String, detail: String?) -> some View {
+        HStack(spacing: Space.s12) {
+            Image(systemName: symbol)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Color.textPrimary)
+                .frame(width: 32, height: 32)
+                .metalSurface(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.rowTitle)
+                    .foregroundStyle(Color.textPrimary)
+                if let detail {
+                    Text(detail)
+                        .font(.caption13Digits)
+                        .foregroundStyle(Color.textTertiary)
+                }
+            }
+            Spacer()
+            Text(value)
+                .font(.rowValue.monospacedDigit())
+                .foregroundStyle(Color.textSecondary)
+        }
+        .frame(minHeight: 56)
+        .accessibilityElement(children: .combine)
     }
 }

@@ -15,9 +15,6 @@ struct SquadsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.section) {
                 VStack(alignment: .leading, spacing: Space.s8) {
-                    Text("Trade as a squad")
-                        .font(.appLargeTitle)
-                        .foregroundStyle(Color.textPrimary)
                     Text("One $10K portfolio, 3–5 friends. Every trade is a vote.")
                         .font(.body)
                         .foregroundStyle(Color.textSecondary)
@@ -48,7 +45,7 @@ struct SquadsView: View {
                                                     .foregroundStyle(Color.accentInk)
                                                     .padding(.horizontal, Space.s8)
                                                     .padding(.vertical, 3)
-                                                    .background(LinearGradient.brand, in: Capsule())
+                                                    .background(Color.accent, in: Capsule())
                                             }
                                             Image(systemName: "chevron.right")
                                                 .foregroundStyle(Color.textTertiary)

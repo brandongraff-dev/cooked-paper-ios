@@ -150,42 +150,15 @@ struct ShareCardCanvas<Content: View>: View {
     }
 }
 
-/// Near-black with a soft violet bloom top-right, a fainter one bottom-left, and a
-/// thin ribbon of light sweeping across: the landing page's silk, held still.
+/// Near-black with a thin line of violet light across it: the landing page's silk,
+/// held still and flat.
 struct ShareCardBackground: View {
     var body: some View {
         ZStack {
             ShareCardStyle.background
-            RadialGradient(
-                colors: [ShareCardStyle.glow.opacity(0.30), ShareCardStyle.glow.opacity(0)],
-                center: UnitPoint(x: 0.95, y: 0.02),
-                startRadius: 0,
-                endRadius: 300
-            )
-            RadialGradient(
-                colors: [ShareCardStyle.glow.opacity(0.12), ShareCardStyle.glow.opacity(0)],
-                center: UnitPoint(x: 0.0, y: 1.0),
-                startRadius: 0,
-                endRadius: 260
-            )
             ShareCardRibbon()
-                .stroke(ribbonGradient(peak: 0.35), lineWidth: 26)
-                .blur(radius: 18)
-            ShareCardRibbon()
-                .stroke(ribbonGradient(peak: 0.45), lineWidth: 1)
+                .stroke(ShareCardStyle.glow.opacity(0.4), lineWidth: 1)
         }
-    }
-
-    private func ribbonGradient(peak: Double) -> LinearGradient {
-        LinearGradient(
-            colors: [
-                ShareCardStyle.glow.opacity(0),
-                ShareCardStyle.glow.opacity(peak),
-                ShareCardStyle.glow.opacity(0),
-            ],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
     }
 }
 

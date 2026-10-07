@@ -123,7 +123,6 @@ struct ReplayClipFrame: View {
     var body: some View {
         ZStack {
             ShareCardStyle.background
-            RadialGradient(colors: [ShareCardStyle.glow.opacity(0.3), .clear], center: .top, startRadius: 0, endRadius: 360)
             VStack(alignment: .leading, spacing: 14) {
                 Text(showsVerdict ? result.reveal.name.uppercased() : "MYSTERY CRASH #\(number)")
                     .font(.system(size: 15, weight: .bold))

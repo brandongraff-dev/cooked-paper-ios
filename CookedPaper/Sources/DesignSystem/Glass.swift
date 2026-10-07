@@ -1,14 +1,14 @@
 import SwiftUI
 import UIKit
 
-// The depth layer: a lit backdrop behind every screen, frosted glass cards over it,
-// and colored icon tiles so a row reads at a glance before its words do. Gains and
+// The depth layer: frosted glass cards over a black, lightly grained backdrop, and
+// solid colored icon tiles so a row reads at a glance before its words do. No gradients. Gains and
 // losses keep green and red to themselves; the tile palette never uses either.
 
 // MARK: - Palette
 
 extension Color {
-    /// Second brand color, paired with `accent` in the brand gradient.
+    /// Second brand color.
     static let accentViolet = Color(rgb: 0x8B7BFF)
 
     // Icon tile colors (iOS-style squircles). Never green or red: those mean up and down.
@@ -22,26 +22,6 @@ extension Color {
     static let tileGray = Color(rgb: 0x6B6B73)
 }
 
-@MainActor
-extension LinearGradient {
-    /// Blue into violet: the paywall's CTA, the PRO badge, the brand moments.
-    static var brand: LinearGradient {
-        LinearGradient(
-            colors: [Color.accent, Color.accentViolet],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    /// A tile's fill: the color, lit from the top-left.
-    static func tile(_ color: Color) -> LinearGradient {
-        LinearGradient(
-            colors: [color.blended(with: .white, by: 0.22), color, color.blended(with: .black, by: 0.18)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-}
 
 extension Color {
     /// Linear sRGB mix — `Color.mix(with:by:)` is iOS 18+ (hence the different name), and this app supports 17.
@@ -76,24 +56,6 @@ struct ScreenBackdrop: View {
     var body: some View {
         ZStack {
             Color.appBackground
-            RadialGradient(
-                colors: [Color.accent.opacity(0.20), .clear],
-                center: UnitPoint(x: 0.1, y: -0.05),
-                startRadius: 0,
-                endRadius: 420
-            )
-            RadialGradient(
-                colors: [Color.accentViolet.opacity(0.16), .clear],
-                center: UnitPoint(x: 0.95, y: 0.08),
-                startRadius: 0,
-                endRadius: 380
-            )
-            RadialGradient(
-                colors: [Color.tileTeal.opacity(0.07), .clear],
-                center: UnitPoint(x: 0, y: 0.85),
-                startRadius: 0,
-                endRadius: 360
-            )
             GrainOverlay(opacity: 0.05)
         }
         .ignoresSafeArea()
@@ -123,28 +85,14 @@ private struct GlassCard: ViewModifier {
                     shape.fill(.ultraThinMaterial)
                     shape.fill(Color.appSurface.opacity(0.62))
                     if let tint {
-                        shape.fill(
-                            LinearGradient(
-                                colors: [tint.opacity(0.22), tint.opacity(0.04)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        shape.fill(tint.opacity(0.12))
                     }
                     GrainOverlay(opacity: 0.08).clipShape(shape)
                 }
                 .environment(\.colorScheme, .dark)
             }
             .overlay {
-                // A lit top edge fading out toward the bottom: the glass's rim.
-                shape.strokeBorder(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.16), Color.white.opacity(0.04)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
+                shape.strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
     }
@@ -160,9 +108,8 @@ extension View {
 
 // MARK: - Icon tile
 
-/// A glossy app-icon-style tile: a lit, colored squircle with a glass highlight across
-/// its top, a bevel, and the symbol embossed in white with a tinted drop. Bounces once
-/// when it first appears (not under Reduce Motion).
+/// A white SF Symbol on a solid colored squircle, the way iOS Settings marks a row.
+/// Bounces once when it first appears (not under Reduce Motion).
 struct IconTile: View {
     let symbol: String
     var color: Color = .tileBlue
@@ -174,42 +121,17 @@ struct IconTile: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
         shape
-            .fill(LinearGradient.tile(color))
+            .fill(color)
             .overlay {
-                // The gloss: a soft white dome over the top half.
-                Ellipse()
-                    .fill(
-                        LinearGradient(
-                            colors: [.white.opacity(0.42), .white.opacity(0)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(width: size * 1.3, height: size * 0.75)
-                    .offset(y: -size * 0.32)
-                    .clipShape(shape)
-            }
-            .overlay {
-                shape.strokeBorder(
-                    LinearGradient(
-                        colors: [.white.opacity(0.45), .white.opacity(0.05), .black.opacity(0.25)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: max(0.5, size / 48)
-                )
+                shape.strokeBorder(Color.white.opacity(0.15), lineWidth: max(0.5, size / 48))
             }
             .frame(width: size, height: size)
             .overlay {
                 Image(systemName: symbol)
                     .font(.system(size: size * 0.5, weight: .bold))
-                    .foregroundStyle(
-                        LinearGradient(colors: [.white, .white.opacity(0.82)], startPoint: .top, endPoint: .bottom)
-                    )
-                    .shadow(color: color.blended(with: .black, by: 0.5).opacity(0.6), radius: 0, y: size / 40)
+                    .foregroundStyle(.white)
                     .symbolEffect(.bounce, value: appeared)
             }
-            .shadow(color: color.opacity(0.35), radius: size * 0.18, y: size * 0.08)
             .accessibilityHidden(true)
             .onAppear {
                 guard !reduceMotion, !appeared else { return }
@@ -220,16 +142,16 @@ struct IconTile: View {
 
 // MARK: - Badges
 
-/// "PRO" on the brand gradient.
+/// "PRO" on the accent color.
 struct ProBadge: View {
     var body: some View {
         Text("PRO")
             .font(.caption2.weight(.heavy))
             .tracking(0.8)
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.accentInk)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .background(LinearGradient.brand, in: Capsule())
+            .background(Color.accent, in: Capsule())
             .accessibilityLabel("Pro")
     }
 }

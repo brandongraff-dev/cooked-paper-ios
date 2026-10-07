@@ -15,7 +15,7 @@ struct TraderPositionsSheet: View {
     @State private var showsPaywall = false
 
     private var isPro: Bool { FreeTier.shared.isPro }
-    private var title: String { entry.isHouseBot ? "The Monkey 🐒" : "@\(entry.username)" }
+    private var title: String { "@\(entry.username)" }
 
     var body: some View {
         NavigationStack {

@@ -60,14 +60,7 @@ struct TierBadge: View {
 
     var body: some View {
         HStack(spacing: Space.s8) {
-            Circle()
-                .fill(tier.color.opacity(0.16))
-                .frame(width: size, height: size)
-                .overlay(
-                    Image(systemName: CompeteSymbol.resolved(tier.symbol, fallback: "circle"))
-                        .font(.system(size: size * 0.46, weight: .semibold))
-                        .foregroundStyle(tier.color)
-                )
+            medal
             if let name {
                 Text(name)
                     .font(.rowTitle)
@@ -77,6 +70,27 @@ struct TierBadge: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(name ?? tier.defaultName)
+    }
+
+    /// A flat medal: a solid disc in the tier's color with a darker rim and a dark
+    /// glyph. Unranked tiers are gunmetal with a gray glyph.
+    private var medal: some View {
+        let ranked = tier != .unranked && tier != .unknown && tier != .prepCook
+        let fill = ranked ? tier.color : Color.metalMid
+        return Circle()
+            .fill(fill)
+            .overlay(
+                Circle().strokeBorder(
+                    ranked ? fill.blended(with: .black, by: 0.3) : Color.white.opacity(0.14),
+                    lineWidth: max(1.5, size * 0.07)
+                )
+            )
+            .overlay(
+                Image(systemName: CompeteSymbol.resolved(tier.symbol, fallback: "circle"))
+                    .font(.system(size: size * 0.44, weight: .bold))
+                    .foregroundStyle(ranked ? Color.black.opacity(0.68) : Color.textSecondary)
+            )
+            .frame(width: size, height: size)
     }
 }
 

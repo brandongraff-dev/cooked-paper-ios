@@ -1,6 +1,10 @@
 import Foundation
 import SwiftUI
 
+/// The paper leaderboard: where you stand as a headline, the top three on a podium,
+/// how far it is to the next place, then everyone else with a bar for how close they
+/// are to the leader. When you're below the podium, a card pinned above the tab bar
+/// shows your spot and jumps to your row.
 struct LeaderboardView: View {
     /// The navigation title; Compete shows this list under its own "Compete".
     var title = "Leaderboard"
@@ -13,46 +17,65 @@ struct LeaderboardView: View {
     @State private var selectedEntry: PaperLeaderboardEntry?
 
     private var entries: [PaperLeaderboardEntry] { response?.entries ?? [] }
+    private var podium: [PaperLeaderboardEntry] { entries.count >= 3 ? Array(entries.prefix(3)) : [] }
+    private var rest: [PaperLeaderboardEntry] { Array(entries.dropFirst(podium.count)) }
 
     private var myEntry: PaperLeaderboardEntry? {
         guard let username = SessionStore.shared.username else { return nil }
         return entries.first { $0.username == username }
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Space.headerGap) {
-                SimulatedCaption()
-                    .padding(.horizontal, Space.margin)
+    /// The trader one place above you, for "x% more to pass them".
+    private var nextAbove: PaperLeaderboardEntry? {
+        guard let myEntry, myEntry.rank > 1 else { return nil }
+        return entries.last { $0.rank < myEntry.rank }
+    }
 
-                ScrollView(.horizontal) {
-                    HStack(spacing: Space.s8) {
-                        ForEach(LeaderboardWindow.allCases) { candidate in
-                            Chip(title: candidate.label, isSelected: candidate == window) {
-                                window = candidate
+    /// The best return on the board, which each row's bar is measured against.
+    private var leaderPct: Decimal? {
+        entries.compactMap { $0.shownPct }.max()
+    }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.s20) {
+                    header
+                        .padding(.horizontal, Space.margin)
+
+                    ScrollView(.horizontal) {
+                        HStack(spacing: Space.s8) {
+                            ForEach(LeaderboardWindow.allCases) { candidate in
+                                Chip(title: candidate.label, isSelected: candidate == window) {
+                                    window = candidate
+                                }
                             }
                         }
+                        .padding(.horizontal, Space.margin)
+                    }
+                    .scrollIndicators(.hidden)
+
+                    content
+                        .padding(.horizontal, Space.margin)
+                }
+                .padding(.top, Space.s8)
+                .padding(.bottom, Space.s24)
+            }
+            .scrollIndicators(.hidden)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !isLoading && errorMessage == nil && !entries.isEmpty && (myEntry?.rank ?? .max) > podium.count {
+                    YourSpotBar(entry: myEntry, nextAbove: nextAbove) {
+                        guard let myEntry else { return }
+                        Haptics.tap()
+                        withAnimation(Motion.standard) { proxy.scrollTo(myEntry.id, anchor: .center) }
                     }
                     .padding(.horizontal, Space.margin)
+                    .padding(.bottom, Space.s8)
                 }
-                .scrollIndicators(.hidden)
-
-                BeatTheMonkeyCard(window: window, myEntry: myEntry)
-                    .padding(.horizontal, Space.margin)
-
-                list
-                    .padding(.horizontal, Space.margin)
             }
-            .padding(.bottom, Space.s24)
         }
-        .scrollIndicators(.hidden)
         .screenBackground()
         .refreshable { await load() }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !isLoading && errorMessage == nil && !entries.isEmpty {
-                myRankBar
-            }
-        }
         .reservesTabBarSpace()
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.large)
@@ -66,8 +89,52 @@ struct LeaderboardView: View {
         }
     }
 
+    // MARK: - Header
+
+    private var windowPhrase: String {
+        switch window {
+        case .day: "in the last 24 hours"
+        case .week: "in the last 7 days"
+        case .month: "in the last 30 days"
+        case .all: "this month"
+        }
+    }
+
     @ViewBuilder
-    private var list: some View {
+    private var header: some View {
+        let ranked = response?.rankedCount ?? entries.count
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: Space.s4) {
+                Text(myEntry.map { "You\u{2019}re \(Ordinal.string($0.rank))" } ?? "Top traders")
+                    .font(.system(size: 40, weight: .heavy))
+                    .tracking(-1.2)
+                    .foregroundStyle(Color.textPrimary)
+                    .contentTransition(.numericText())
+                    .accessibilityIdentifier("leaderboard.headline")
+                Text(isLoading && response == nil
+                     ? "Paper money"
+                     : "of \(ranked) traders \(windowPhrase), with paper money")
+                    .font(.rowSubtitle)
+                    .foregroundStyle(Color.textSecondary)
+            }
+            Spacer(minLength: Space.s8)
+            if let myEntry {
+                ShareLink(item: "I\u{2019}m \(Ordinal.string(myEntry.rank)) of \(ranked) traders on Cooked \(windowPhrase). Paper trading. cooked.trade") {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.textPrimary)
+                        .frame(width: 40, height: 40)
+                        .metalSurface(Circle())
+                }
+                .accessibilityLabel("Share your rank")
+            }
+        }
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private var content: some View {
         if isLoading {
             VStack(spacing: 0) {
                 ForEach(0..<8, id: \.self) { _ in SkeletonRow() }
@@ -83,57 +150,36 @@ struct LeaderboardView: View {
                 detail: "Check back once more portfolios have a qualifying track record."
             )
         } else {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                    Button {
-                        Haptics.tap()
-                        selectedEntry = entry
-                    } label: {
-                        LeaderboardRow(entry: entry)
+            VStack(spacing: Space.s20) {
+                if !podium.isEmpty {
+                    Podium(entries: podium, me: myEntry?.username) { select($0) }
+                }
+                if let myEntry, myEntry.rank <= podium.count {
+                    NextPlaceNudge(me: myEntry, above: nextAbove)
+                }
+                LazyVStack(spacing: Space.s4) {
+                    ForEach(rest) { entry in
+                        Button { select(entry) } label: {
+                            LeaderboardRow(
+                                entry: entry,
+                                isMe: entry.username == myEntry?.username,
+                                leaderPct: leaderPct
+                            )
                             .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Shows what this trader holds")
-                    .accessibilityIdentifier("leaderboard.row.\(index)")
-                    if index < entries.count - 1 {
-                        RowSeparator(leadingInset: LeaderboardRow.textInset)
+                        }
+                        .buttonStyle(.pressable)
+                        .accessibilityHint("Shows what this trader holds")
+                        .accessibilityIdentifier("leaderboard.row.\(entry.rank - 1)")
+                        .id(entry.id)
                     }
                 }
             }
-            .glassList()
         }
     }
 
-    /// Pinned above the tab bar: where the current user stands.
-    private var myRankBar: some View {
-        VStack(spacing: 0) {
-            Rectangle().fill(Color.appSeparator).frame(height: 1)
-            Group {
-                if let myEntry {
-                    LeaderboardRow(entry: myEntry, titleOverride: "You")
-                } else {
-                    HStack(spacing: Space.s12) {
-                        Text("—")
-                            .font(.rowSubvalue)
-                            .foregroundStyle(Color.textTertiary)
-                            .frame(width: LeaderboardRow.rankWidth, alignment: .leading)
-                        MonogramAvatar(text: SessionStore.shared.username ?? "You")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("You")
-                                .font(.rowTitle)
-                                .foregroundStyle(Color.textPrimary)
-                            Text("Close a trade to get ranked")
-                                .font(.rowSubtitle)
-                                .foregroundStyle(Color.textSecondary)
-                        }
-                        Spacer()
-                    }
-                    .frame(height: Metrics.rowHeight)
-                }
-            }
-            .padding(.horizontal, Space.margin)
-        }
-        .background(Color.appSurface)
+    private func select(_ entry: PaperLeaderboardEntry) {
+        Haptics.tap()
+        selectedEntry = entry
     }
 
     private func load() async {
@@ -160,65 +206,287 @@ struct LeaderboardView: View {
     }
 }
 
-/// rank | avatar | username over round trips | return %.
-private struct LeaderboardRow: View {
-    let entry: PaperLeaderboardEntry
-    var titleOverride: String? = nil
+// MARK: - Pieces
 
-    static let rankWidth: CGFloat = 24
-    static let textInset: CGFloat = rankWidth + Space.s12 + Metrics.avatar + Metrics.avatarGap
-
+extension PaperLeaderboardEntry {
     /// A stated `unavailable` reason means this trader has no qualifying sample yet —
     /// forcing the value to nil here (rather than trusting `pct` to already be null)
     /// keeps a malformed response from ever printing 0% for "no data".
-    private var displayedReturnPct: Decimal? {
-        entry.returnPct.unavailable == nil ? entry.returnPct.pct : nil
+    var shownPct: Decimal? {
+        returnPct.unavailable == nil ? returnPct.pct : nil
+    }
+}
+
+/// 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st.
+enum Ordinal {
+    static func string(_ n: Int) -> String {
+        let tens = n % 100
+        let suffix: String
+        if (11...13).contains(tens) {
+            suffix = "th"
+        } else {
+            switch n % 10 {
+            case 1: suffix = "st"
+            case 2: suffix = "nd"
+            case 3: suffix = "rd"
+            default: suffix = "th"
+            }
+        }
+        return "\(n)\(suffix)"
+    }
+}
+
+/// Gold, silver, bronze.
+enum Medal {
+    static func color(_ rank: Int) -> Color {
+        switch rank {
+        case 1: AchievementTier.gold.color
+        case 2: AchievementTier.silver.color
+        default: AchievementTier.bronze.color
+        }
+    }
+}
+
+/// A flat medal: a solid disc with a darker rim and the place on it.
+struct MedalDisc: View {
+    let rank: Int
+    var size: CGFloat = 26
+
+    var body: some View {
+        let color = Medal.color(rank)
+        Circle()
+            .fill(color)
+            .overlay(Circle().strokeBorder(color.blended(with: .black, by: 0.3), lineWidth: max(1.5, size * 0.09)))
+            .overlay(
+                Text("\(rank)")
+                    .font(.system(size: size * 0.48, weight: .heavy).monospacedDigit())
+                    .foregroundStyle(Color.black.opacity(0.7))
+            )
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}
+
+/// 2nd, 1st, 3rd, left to right: rings in medal colors, a crown on the leader, and
+/// the steps underneath.
+private struct Podium: View {
+    let entries: [PaperLeaderboardEntry]
+    let me: String?
+    let onSelect: (PaperLeaderboardEntry) -> Void
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: Space.s8) {
+            ForEach([1, 0, 2], id: \.self) { index in
+                if entries.indices.contains(index) {
+                    column(entries[index])
+                }
+            }
+        }
     }
 
-    private var isTopThree: Bool { entry.rank <= 3 }
-
-    /// Gold, silver, bronze.
-    private var medalColor: Color {
-        switch entry.rank {
-        case 1: Color(rgb: 0xFFC83D)
-        case 2: Color(rgb: 0xC9D1DC)
-        default: Color(rgb: 0xE08A4B)
+    private func column(_ entry: PaperLeaderboardEntry) -> some View {
+        let rank = entry.rank
+        let color = Medal.color(rank)
+        let avatar: CGFloat = rank == 1 ? 84 : 64
+        let step: CGFloat = rank == 1 ? 110 : (rank == 2 ? 82 : 64)
+        let isMe = entry.username == me
+        return Button { onSelect(entry) } label: {
+            VStack(spacing: Space.s8) {
+                VStack(spacing: Space.s4) {
+                    if rank == 1 {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundStyle(color)
+                    }
+                    ProfileAvatar(seed: entry.username, name: entry.username, size: avatar)
+                        .padding(4)
+                        .overlay(Circle().strokeBorder(isMe ? Color.accent : color, lineWidth: 3))
+                        .shadow(color: color.opacity(rank == 1 ? 0.45 : 0), radius: 18)
+                        .overlay(alignment: .bottom) {
+                            MedalDisc(rank: rank, size: rank == 1 ? 30 : 26)
+                                .offset(y: 12)
+                        }
+                        .padding(.bottom, 12)
+                }
+                VStack(spacing: 2) {
+                    Text(isMe ? "You" : entry.username)
+                        .font(.rowTitle)
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    ChangeText(percent: entry.shownPct, font: .rowValue)
+                }
+                UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16, style: .continuous)
+                    .fill(color.opacity(0.14))
+                    .overlay(alignment: .top) {
+                        UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16, style: .continuous)
+                            .stroke(color.opacity(0.7), lineWidth: 2)
+                            .frame(height: 24)
+                            .mask(alignment: .top) { Rectangle().frame(height: 12) }
+                    }
+                    .overlay(alignment: .top) {
+                        Text(Ordinal.string(rank))
+                            .font(.system(size: rank == 1 ? 34 : 28, weight: .heavy))
+                            .tracking(-1)
+                            .foregroundStyle(color)
+                            .padding(.top, Space.s12)
+                    }
+                    .frame(height: step)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.pressable)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(Ordinal.string(rank)), \(isMe ? "you" : entry.username), \(PriceFormat.change(entry.shownPct))")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Shows what this trader holds")
+        .accessibilityIdentifier("leaderboard.row.\(rank - 1)")
+    }
+}
+
+/// "↑ 25.28% more to pass solsniper for 2nd", or a line for holding first.
+private struct NextPlaceNudge: View {
+    let me: PaperLeaderboardEntry
+    let above: PaperLeaderboardEntry?
+
+    var body: some View {
+        HStack(spacing: Space.s12) {
+            Image(systemName: above == nil ? "crown.fill" : "arrow.up")
+                .font(.body.weight(.bold))
+            Text(NextPlace.text(me: me, above: above))
+                .font(.rowSubvalue)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Color.accentViolet)
+        .padding(.horizontal, Space.s16)
+        .padding(.vertical, Space.s16)
+        .background(Color.accentViolet.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+enum NextPlace {
+    /// The gap to the trader above, in return points, as one line.
+    static func text(me: PaperLeaderboardEntry, above: PaperLeaderboardEntry?) -> String {
+        guard let above else { return "You\u{2019}re in 1st. Hold it." }
+        guard let mine = me.shownPct, let theirs = above.shownPct else {
+            return "Next up: \(above.username) in \(Ordinal.string(above.rank))"
+        }
+        let gap = max(theirs - mine, 0.01)
+        let points = NSDecimalNumber(decimal: gap).doubleValue.formatted(.number.precision(.fractionLength(2)))
+        return "\(points)% more to pass \(above.username) for \(Ordinal.string(above.rank))"
+    }
+}
+
+/// rank | avatar | name and trips over a bar toward the leader | return %.
+private struct LeaderboardRow: View {
+    let entry: PaperLeaderboardEntry
+    let isMe: Bool
+    let leaderPct: Decimal?
+
+    private var fraction: Double {
+        guard let pct = entry.shownPct, let leaderPct, leaderPct > 0 else { return 0 }
+        return min(1, max(0, NSDecimalNumber(decimal: pct / leaderPct).doubleValue))
     }
 
     var body: some View {
         HStack(spacing: Space.s12) {
             Text("\(entry.rank)")
-                .font(isTopThree ? .rowValue : .rowSubvalue)
-                .foregroundStyle(isTopThree ? medalColor : Color.textTertiary)
-                .frame(width: Self.rankWidth, alignment: .leading)
-
-            ListRow(
-                title: titleOverride ?? (entry.isHouseBot ? "The Monkey 🐒" : entry.username),
-                subtitle: entry.isHouseBot
-                    ? "Bot · trades at random · \(entry.roundTripCount) round trips"
-                    : "\(entry.roundTripCount) round trips"
-            ) {
-                ProfileAvatar(seed: entry.username, name: entry.username)
-                    .overlay {
-                        if isTopThree {
-                            Circle().strokeBorder(medalColor, lineWidth: 2)
-                        }
+                .font(.rowValue.monospacedDigit())
+                .foregroundStyle(isMe ? Color.accent : Color.textTertiary)
+                .frame(width: 28, alignment: .leading)
+            ProfileAvatar(seed: entry.username, name: entry.username)
+            VStack(alignment: .leading, spacing: Space.s8) {
+                HStack(alignment: .firstTextBaseline, spacing: Space.s8) {
+                    Text(isMe ? "You" : entry.username)
+                        .font(.rowTitle)
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                    Text("\(entry.roundTripCount) trips")
+                        .font(.caption13)
+                        .foregroundStyle(Color.textTertiary)
+                        .lineLimit(1)
+                    Spacer(minLength: Space.s8)
+                    ChangeText(percent: entry.shownPct, font: .rowValue)
+                }
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.08))
+                        Capsule()
+                            .fill(isMe ? Color.accent : Color.white.opacity(0.28))
+                            .frame(width: max(4, geometry.size.width * fraction))
                     }
-                    .overlay(alignment: .bottomTrailing) {
-                        if isTopThree {
-                            Image(systemName: "medal.fill")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(medalColor)
-                                .padding(Space.s4)
-                                .background(Color.appBackground, in: Circle())
-                                .offset(x: Space.s4, y: Space.s4)
-                        }
-                    }
-            } trailing: {
-                ChangeText(percent: displayedReturnPct, font: .rowValue)
+                }
+                .frame(height: 4)
+            }
+        }
+        .padding(.horizontal, isMe ? Space.s12 : 0)
+        .padding(.vertical, Space.s12)
+        .background {
+            if isMe {
+                RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                    .fill(Color.accent.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                            .strokeBorder(Color.accent.opacity(0.5), lineWidth: 1)
+                    )
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Pinned above the tab bar while you're below the podium (or not ranked yet): your
+/// place, the gap to the next one, and a tap that scrolls to your row.
+private struct YourSpotBar: View {
+    let entry: PaperLeaderboardEntry?
+    let nextAbove: PaperLeaderboardEntry?
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: Space.s12) {
+                if let entry {
+                    Text("#\(entry.rank)")
+                        .font(.system(size: 22, weight: .heavy).monospacedDigit())
+                        .foregroundStyle(Color.accent)
+                        .frame(minWidth: 44, alignment: .leading)
+                } else {
+                    Text("—")
+                        .font(.system(size: 22, weight: .heavy))
+                        .foregroundStyle(Color.textTertiary)
+                        .frame(minWidth: 44, alignment: .leading)
+                }
+                ProfileAvatar(seed: SessionStore.shared.username ?? "you", name: SessionStore.shared.username ?? "You")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Your spot")
+                        .font(.rowTitle)
+                        .foregroundStyle(Color.textPrimary)
+                    Text(entry.map { NextPlace.text(me: $0, above: nextAbove) } ?? "Close a trade to get ranked")
+                        .font(.caption13)
+                        .foregroundStyle(entry == nil ? Color.textSecondary : Color.accentViolet)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                Spacer(minLength: Space.s8)
+                if let entry {
+                    ChangeText(percent: entry.shownPct, font: .rowValue)
+                }
+            }
+            .padding(.horizontal, Space.s16)
+            .padding(.vertical, Space.s12)
+            .background(Color.appSurfaceElevated, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .strokeBorder(Color.accent.opacity(0.6), lineWidth: 1.5)
+            )
+            .shadow(color: .black.opacity(0.45), radius: 16, y: 6)
+        }
+        .buttonStyle(.pressable)
+        .disabled(entry == nil)
+        .accessibilityHint(entry == nil ? "" : "Scrolls to your row")
+        .accessibilityIdentifier("leaderboard.yourSpot")
     }
 }

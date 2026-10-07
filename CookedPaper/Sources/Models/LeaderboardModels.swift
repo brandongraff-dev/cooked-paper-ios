@@ -31,11 +31,9 @@ struct PaperLeaderboardEntry: Decodable, Identifiable {
     let roundTripCount: Int
     let resetCount: Int
     let createdAt: String
-    /// The house bot ("The Monkey", trades at random). Optional so an older server
+    /// A house account rather than a person (none today). Optional so an older server
     /// that doesn't send it still decodes.
     let isBot: Bool?
-
-    var isHouseBot: Bool { isBot == true }
 }
 
 /// `GET /paper/recap`: one month of your main portfolio, percentages only.
@@ -55,10 +53,6 @@ struct PaperRecap: Decodable {
         let title: String
         let description: String
     }
-    struct Monkey: Decodable, Hashable {
-        @DecimalString var returnPct: Decimal
-        let beatMonkey: Bool?
-    }
     struct DailyCall: Decodable, Hashable {
         let played: Int
         let correct: Int
@@ -74,7 +68,6 @@ struct PaperRecap: Decodable {
     let mostTraded: MostTraded?
     let avgHoldMinutes: Int?
     let personality: Personality
-    let monkey: Monkey?
     let dailyCall: DailyCall
 }
 
@@ -94,17 +87,6 @@ struct PaperTraderPositions: Decodable {
     let positions: [PaperTraderPosition]
     @DecimalString var cashSharePct: Decimal
     let sampleSize: Int
-}
-
-/// `GET /paper/leaderboard/monkey`: how many ranked people beat the house bot.
-struct PaperMonkeyStanding: Decodable {
-    let window: String
-    /// Nil while the monkey hasn't closed enough round trips to rank.
-    let monkey: PaperLeaderboardEntry?
-    /// People ranked in the window (the monkey isn't one).
-    let sampleSize: Int
-    let beatingMonkey: Int?
-    @OptionalDecimalString var beatingPct: Decimal?
 }
 
 struct PaperLeaderboardResponse: Decodable {

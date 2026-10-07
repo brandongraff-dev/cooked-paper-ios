@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Compete → Season → Your monthly recap: one month of the main portfolio, built to be
 /// posted. A trader type, the month's return, best and worst trade, the Daily Call
-/// record and whether you beat the monkey, plus a 9:16 story card to share.
+/// record, plus a 9:16 story card to share.
 struct RecapView: View {
     /// UTC months, newest first: this one and the five before it.
     private static let months: [String] = {
@@ -111,12 +111,6 @@ struct RecapStoryCard: View {
     var body: some View {
         ZStack {
             ShareCardStyle.background
-            RadialGradient(
-                colors: [ShareCardStyle.glow.opacity(0.35), .clear],
-                center: .top,
-                startRadius: 0,
-                endRadius: 380
-            )
             VStack(alignment: .leading, spacing: 18) {
                 Text(monthLabel.uppercased())
                     .font(.system(size: 13, weight: .bold))
@@ -155,13 +149,6 @@ struct RecapStoryCard: View {
                     if recap.dailyCall.played > 0 {
                         statRow("Daily Call", "\(recap.dailyCall.correct) of \(recap.dailyCall.played)")
                     }
-                }
-
-                if let monkey = recap.monkey, let beat = monkey.beatMonkey {
-                    Text(beat ? "🐒 Beat the monkey (\(ShareCardFormat.pnl(monkey.returnPct)))"
-                              : "🐒 The monkey won (\(ShareCardFormat.pnl(monkey.returnPct)))")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(beat ? Color.positive : Color.negative)
                 }
 
                 Spacer(minLength: 0)

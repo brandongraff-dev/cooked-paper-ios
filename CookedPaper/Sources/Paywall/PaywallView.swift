@@ -60,16 +60,9 @@ struct PaywallView: View {
                 .padding(.bottom, Space.s16)
             }
             .scrollIndicators(.hidden)
-            .overlay(alignment: .bottom) {
-                // Soft edge where content scrolls under the footer, instead of a hard cut.
-                LinearGradient(colors: [Color.appBackground.opacity(0), Color.appBackground], startPoint: .top, endPoint: .bottom)
-                    .frame(height: Space.s24)
-                    .allowsHitTesting(false)
-            }
 
             footer
         }
-        .background(alignment: .top) { backdrop }
         .screenBackground()
         .overlay(alignment: .topTrailing) {
             Button("Restore") { Task { await store.restore() } }
@@ -143,19 +136,6 @@ struct PaywallView: View {
                 selectedProductID = first.id
             }
         }
-    }
-
-    /// A faint blue light behind the logo — the one decorative touch on this screen.
-    private var backdrop: some View {
-        RadialGradient(
-            colors: [Color.accent.opacity(0.14), Color.accent.opacity(0)],
-            center: .top,
-            startRadius: 0,
-            endRadius: 360
-        )
-        .frame(height: 420)
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
     }
 
     // MARK: - Sections
@@ -708,7 +688,7 @@ private struct PlanRow: View {
                                 .foregroundStyle(Color.accentInk)
                                 .padding(.horizontal, Space.s8)
                                 .padding(.vertical, 3)
-                                .background(LinearGradient.brand, in: Capsule())
+                                .background(Color.accent, in: Capsule())
                         }
                     }
                     Text(subtitle)
@@ -735,10 +715,9 @@ private struct PlanRow: View {
             .glassCard(tint: isSelected ? .accent : nil)
             .overlay {
                 if isSelected {
-                    shape.strokeBorder(LinearGradient.brand, lineWidth: 2)
+                    shape.strokeBorder(Color.accent, lineWidth: 2)
                 }
             }
-            .shadow(color: isSelected ? Color.accent.opacity(0.3) : .clear, radius: 16)
         }
         .buttonStyle(.pressable)
         .accessibilityElement(children: .combine)

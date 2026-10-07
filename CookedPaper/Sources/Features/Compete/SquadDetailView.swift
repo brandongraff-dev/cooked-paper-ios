@@ -370,7 +370,6 @@ struct VoteMeter: View {
                     Capsule()
                         .fill(index < yes ? AnyShapeStyle(Color.positive) : AnyShapeStyle(Color.white.opacity(0.12)))
                         .frame(width: 22, height: 8)
-                        .shadow(color: index < yes ? Color.positive.opacity(0.6) : .clear, radius: 4)
                 }
             }
             Text("\(yes)/\(needed)")

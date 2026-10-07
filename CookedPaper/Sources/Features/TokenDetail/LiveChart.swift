@@ -266,11 +266,7 @@ final class LiveChartRenderer {
         fill.closeSubpath()
         graphics.fill(
             fill,
-            with: .linearGradient(
-                Gradient(colors: [color.opacity(0.28), color.opacity(0)]),
-                startPoint: CGPoint(x: 0, y: top),
-                endPoint: CGPoint(x: 0, y: size.height)
-            )
+            with: .color(color.opacity(0.12))
         )
         graphics.stroke(line, with: .color(color), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
     }

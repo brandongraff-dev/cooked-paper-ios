@@ -3,7 +3,7 @@ import SwiftUI
 
 // The core visual language: color, type, spacing, motion, number formats. Green and
 // red mean up and down and nothing else. Depth (the lit backdrop, glass cards, icon
-// tiles, the blue-to-violet brand gradient) lives in `Glass.swift`.
+// tiles) lives in `Glass.swift` and `Texture.swift`.
 
 // MARK: - Color
 

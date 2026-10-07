@@ -93,7 +93,7 @@ struct OneTimeOfferView: View {
                     .glassCard(tint: .accent)
                     .overlay {
                         RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                            .strokeBorder(LinearGradient.brand, lineWidth: 2)
+                            .strokeBorder(Color.accent, lineWidth: 2)
                     }
 
                     Text("We'll only show this once.")
