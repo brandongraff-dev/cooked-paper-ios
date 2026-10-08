@@ -12,6 +12,9 @@ struct ProfileView: View {
     @State private var user: PublicUser?
     @State private var showEdit = false
     @State private var didCopyCode = false
+    /// The highest prop-challenge tier this account has passed ("10k", "50k",
+    /// "100k"); nil until loaded, or when it hasn't passed one.
+    @State private var bestChallengeTier: String?
 
     var body: some View {
         List {
@@ -111,7 +114,11 @@ struct ProfileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await refresh() }
         .task { await achievements.load() }
-        .refreshable { await refresh() }
+        .task { await loadChallengeRank() }
+        .refreshable {
+            await refresh()
+            await loadChallengeRank()
+        }
         .sheet(isPresented: $showEdit) {
             EditProfileView()
         }
@@ -130,6 +137,9 @@ struct ProfileView: View {
                         .font(.rowSubtitle)
                         .foregroundStyle(Color.textSecondary)
                 }
+            }
+            if let tier = bestChallengeTier {
+                ChallengeRankPill(tier: tier)
             }
         }
         .frame(maxWidth: .infinity)
@@ -159,6 +169,15 @@ struct ProfileView: View {
               let date = Self.isoFractional.date(from: createdAt) ?? Self.isoPlain.date(from: createdAt)
         else { return nil }
         return date.formatted(.dateTime.month(.wide).year())
+    }
+
+    /// The best challenge passed, from the challenge history. A failed load leaves
+    /// whatever was shown; no passes hides the pill.
+    private func loadChallengeRank() async {
+        guard let response = try? await ChallengeAPI.list() else { return }
+        let passed = response.history.filter { $0.status == "passed" }
+        let best = passed.max { ChallengeRank.level($0.tier) < ChallengeRank.level($1.tier) }
+        withAnimation(Motion.standard) { bestChallengeTier = best?.tier }
     }
 
     private func refresh() async {
@@ -245,6 +264,29 @@ struct EditProfileView: View {
     private var previewName: String {
         let name = form.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? form.username : name
+    }
+}
+
+/// The highest challenge rank passed: its emblem and "Pro · $50K passed", on a pill.
+private struct ChallengeRankPill: View {
+    let tier: String
+
+    var body: some View {
+        HStack(spacing: Space.s8) {
+            TierEmblem(level: ChallengeRank.level(tier), size: 24)
+            Text("\(ChallengeRank.name(tier)) · $\(tier.uppercased()) passed")
+                .font(.caption13)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+        }
+        .padding(.leading, Space.s8)
+        .padding(.trailing, Space.s12)
+        .frame(height: Metrics.chipHeight)
+        .background(Color.appSurface, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Challenge rank: \(ChallengeRank.name(tier)), passed the $\(tier.uppercased()) challenge")
+        .accessibilityIdentifier("profile.challengeRank")
     }
 }
 
