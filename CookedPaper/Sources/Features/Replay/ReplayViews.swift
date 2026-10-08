@@ -509,30 +509,34 @@ struct ReplayResultView: View {
         VStack(alignment: .leading, spacing: Space.s12) {
             ReplayRevealChart(curves: curves, drawn: drawn)
                 .frame(height: 190)
-                .accessibilityLabel("Your account against buy and hold over the whole crash")
-            HStack(spacing: Space.s16) {
-                legend(Color.accent, "You", result.returnPct)
-                legend(Color.white.opacity(0.55), "Hold", result.holdReturnPct)
-                Spacer(minLength: 0)
-                HStack(spacing: 4) {
-                    dot(.positive); Text("Buy").foregroundStyle(Color.textTertiary)
-                    dot(.negative).padding(.leading, 4); Text("Sell").foregroundStyle(Color.textTertiary)
+                .padding(.top, Space.s20)
+                .overlay(alignment: .topTrailing) {
+                    HStack(spacing: Space.s8) {
+                        HStack(spacing: 4) { dot(.positive); Text("Buy") }
+                        HStack(spacing: 4) { dot(.negative); Text("Sell") }
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(Color.textTertiary)
                 }
-                .font(.caption2)
+                .accessibilityLabel("Your account against buy and hold over the whole crash")
+            HStack(spacing: Space.s20) {
+                legend(Color.accent, "You", result.returnPct)
+                legend(Color.white.opacity(0.55), "Buy & hold", result.holdReturnPct)
+                Spacer(minLength: 0)
             }
             .lineLimit(1)
-            .minimumScaleFactor(0.85)
         }
         .padding(Space.s16)
         .glassCard()
     }
 
     private func legend(_ color: Color, _ label: String, _ pct: Decimal) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s8) {
             Capsule().fill(color).frame(width: 14, height: 3)
             Text(label).font(.caption13).foregroundStyle(Color.textSecondary)
             ChangeText(percent: pct, font: .caption13Digits.weight(.semibold))
         }
+        .fixedSize()
     }
 
     private func dot(_ color: Color) -> some View {
