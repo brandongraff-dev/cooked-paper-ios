@@ -512,14 +512,16 @@ struct ReplayResultView: View {
                 .accessibilityLabel("Your account against buy and hold over the whole crash")
             HStack(spacing: Space.s16) {
                 legend(Color.accent, "You", result.returnPct)
-                legend(Color.white.opacity(0.55), "Buy & hold", result.holdReturnPct)
+                legend(Color.white.opacity(0.55), "Hold", result.holdReturnPct)
                 Spacer(minLength: 0)
-                HStack(spacing: Space.s8) {
+                HStack(spacing: 4) {
                     dot(.positive); Text("Buy").foregroundStyle(Color.textTertiary)
-                    dot(.negative); Text("Sell").foregroundStyle(Color.textTertiary)
+                    dot(.negative).padding(.leading, 4); Text("Sell").foregroundStyle(Color.textTertiary)
                 }
                 .font(.caption2)
             }
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
         }
         .padding(Space.s16)
         .glassCard()
