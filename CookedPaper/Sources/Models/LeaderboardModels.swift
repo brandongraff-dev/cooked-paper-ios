@@ -28,6 +28,8 @@ struct PaperLeaderboardEntry: Decodable, Identifiable {
     let username: String
     let provenance: String
     let returnPct: MeasuredPct
+    /// The same window's move in dollars. Optional so an older server still decodes.
+    let pnlUsd: MeasuredUsd?
     let roundTripCount: Int
     let resetCount: Int
     let createdAt: String
