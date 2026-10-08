@@ -11,12 +11,7 @@ struct ReplayListView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.section) {
-                VStack(alignment: .leading, spacing: Space.s8) {
-                    Text("Real crashes. Names hidden. $10K to survive.")
-                        .font(.body)
-                        .foregroundStyle(Color.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                header
                 if let response {
                     VStack(spacing: Space.s12) {
                         ForEach(response.scenarios) { scenario in
@@ -61,16 +56,66 @@ struct ReplayListView: View {
         }
     }
 
+    /// "1 of 4 played · best +4.12%" over the rules as pills, like the challenge ladder.
+    private var header: some View {
+        let scenarios = response?.scenarios ?? []
+        let played = scenarios.filter { $0.bestReturnPct != nil }
+        let best = played.compactMap(\.bestReturnPct).max()
+        return VStack(alignment: .leading, spacing: Space.s12) {
+            if !scenarios.isEmpty {
+                HStack(spacing: Space.s8) {
+                    Text("\(played.count) of \(scenarios.count) played")
+                        .foregroundStyle(Color.textPrimary)
+                    if let best {
+                        Text("·").foregroundStyle(Color.textTertiary)
+                        Text("best").foregroundStyle(Color.textSecondary)
+                        ChangeText(percent: best, font: .rowTitle)
+                    }
+                }
+                .font(.rowTitle)
+            }
+            HStack(spacing: Space.s8) {
+                pill("dollarsign.circle.fill", "$10K start")
+                pill("eye.slash.fill", "Names hidden")
+            }
+        }
+    }
+
+    private func pill(_ symbol: String, _ text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.accent)
+            Text(text)
+                .font(.caption13)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, Space.s12)
+        .frame(height: 32)
+        .background(Color.appSurface, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+    }
+
     private func row(_ scenario: ReplaySummary) -> some View {
         let locked = scenario.number > 1 && !FreeTier.shared.isPro
         return VStack(alignment: .leading, spacing: Space.s12) {
-            Text("Crash #\(scenario.number)")
-                .font(.rowTitle)
-                .foregroundStyle(Color.textPrimary)
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(scenario.difficulty.uppercased())
+                        .font(.caption.weight(.bold))
+                        .tracking(1.2)
+                        .foregroundStyle(Color.textSecondary)
+                    Text("Crash #\(scenario.number)")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(locked ? Color.textTertiary : Color.textPrimary)
+                }
+                Spacer()
+                DifficultyFlames(difficulty: scenario.difficulty)
+            }
             TeaserChart(values: scenario.teaser ?? [])
                 .frame(height: 80)
             HStack(alignment: .center, spacing: Space.s12) {
-                DifficultyFlames(difficulty: scenario.difficulty)
                 Label("\(scenario.players)", systemImage: "person.2.fill")
                     .font(.caption13Digits)
                     .foregroundStyle(Color.textSecondary)
@@ -396,8 +441,9 @@ struct CrashReplayChart: View {
     }
 }
 
-/// The reveal: SURVIVED or COOKED, your return against buy-and-hold, what the crash
-/// was, your rank, and the clip to post.
+/// The reveal. A headline verdict, then the whole crash drawn at last: the price (what
+/// buy-and-hold got) against your account, both from the same start, with every buy
+/// and sell on it. Then the numbers, what the crash was, and the clip to post.
 struct ReplayResultView: View {
     let scenario: ReplayScenario
     let actions: [ReplayAction]
@@ -407,96 +453,181 @@ struct ReplayResultView: View {
     @State private var clipURL: URL?
     @State private var isExporting = false
     @State private var exportError: String?
-    @State private var stamped = false
+    @State private var drawn: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var verdictColor: Color { result.survived ? .positive : .negative }
+    private var curves: ReplayCurves { ReplayCurves(candles: scenario.candles, actions: actions) }
+    private var edge: Decimal { result.returnPct - result.holdReturnPct }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: Space.s20) {
-                // The verdict lands like a stamp: big, tilted, then settles.
-                Text(result.survived ? "SURVIVED" : "COOKED")
-                    .font(.system(size: 46, weight: .black))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, Space.s24)
-                    .padding(.vertical, Space.s8)
-                    .background(
-                        result.survived ? Color.positive : Color.negative,
-                        in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                    )
-                    .rotationEffect(.degrees(-6))
-                    .scaleEffect(stamped || reduceMotion ? 1 : 1.8)
-                    .opacity(stamped || reduceMotion ? 1 : 0)
-                    .padding(.top, Space.s16)
-                    .accessibilityIdentifier("replay.verdict")
-                    .onAppear {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.55)) { stamped = true }
-                        if result.survived { Haptics.success() }
-                    }
-                HStack(spacing: Space.s24) {
-                    VStack(spacing: 2) {
-                        ChangeText(percent: result.returnPct, font: .system(size: 28, weight: .bold).monospacedDigit())
-                        Text("you").font(.caption13).foregroundStyle(Color.textSecondary)
-                    }
-                    VStack(spacing: 2) {
-                        ChangeText(percent: result.holdReturnPct, font: .system(size: 28, weight: .bold).monospacedDigit())
-                        Text("buy & hold").font(.caption13).foregroundStyle(Color.textSecondary)
-                    }
-                }
-                Text("#\(result.rank) of \(result.sampleSize) players")
-                    .font(.rowTitle)
-                    .foregroundStyle(Color.textPrimary)
-
-                VStack(alignment: .leading, spacing: Space.s8) {
-                    Text("It was \(result.reveal.name)")
-                        .font(.sectionHeader)
-                        .foregroundStyle(Color.textPrimary)
-                    Text(result.reveal.date)
-                        .font(.rowSubtitle)
-                        .foregroundStyle(Color.textSecondary)
-                    Text(result.reveal.story)
-                        .font(.body)
-                        .foregroundStyle(Color.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(Space.s16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .glassCard()
-
-                if let clipURL {
-                    ShareLink(item: clipURL) {
-                        Label("Share your clip", systemImage: "square.and.arrow.up")
-                    }
-                    .buttonStyle(.accent)
-                } else {
-                    Button {
-                        Task { await export() }
-                    } label: {
-                        if isExporting {
-                            ProgressView()
-                        } else {
-                            Label("Make a 15-second clip", systemImage: "film")
-                        }
-                    }
-                    .buttonStyle(.accent)
-                    .disabled(isExporting)
-                    .accessibilityIdentifier("replay.export")
-                }
-                if let exportError {
-                    Text(exportError)
-                        .font(.caption13)
-                        .foregroundStyle(Color.negative)
-                }
-                ProUpsellCard(
-                    symbol: "chart.line.downtrend.xyaxis",
-                    color: .tileTeal,
-                    title: result.survived ? "Try a harder crash" : "Run it back",
-                    detail: "FTX and LUNA are waiting. Every crash replay comes with Pro.",
-                    reason: .locked("Every crash replay")
-                )
-                Button("Done", action: onDone)
-                    .buttonStyle(.secondary)
+            VStack(alignment: .leading, spacing: Space.s20) {
+                header
+                chartCard
+                statTiles
+                revealCard
+                actionsBlock
             }
-            .padding(.vertical, Space.s16)
+            .padding(.vertical, Space.s8)
+        }
+        .scrollIndicators(.hidden)
+        .onAppear {
+            let still = reduceMotion || ProcessInfo.processInfo.environment["UITEST_STILL_FRAMES"] == "1"
+            if still { drawn = 1 } else { withAnimation(.easeInOut(duration: 1.4)) { drawn = 1 } }
+        }
+    }
+
+    // MARK: - Pieces
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: Space.s8) {
+            HStack(spacing: 6) {
+                Image(systemName: result.survived ? "checkmark.seal.fill" : "flame.fill")
+                Text(result.survived ? "SURVIVED" : "COOKED")
+                    .tracking(1.4)
+            }
+            .font(.caption.weight(.heavy))
+            .foregroundStyle(verdictColor)
+            .padding(.horizontal, Space.s12)
+            .padding(.vertical, 6)
+            .background(verdictColor.opacity(0.15), in: Capsule())
+            .accessibilityIdentifier("replay.verdict")
+
+            Text(result.survived ? "You made it out" : "You got cooked")
+                .font(.system(size: 36, weight: .heavy))
+                .tracking(-1)
+                .foregroundStyle(Color.textPrimary)
+            Text("#\(result.rank) of \(result.sampleSize) players on this crash")
+                .font(.rowSubtitle)
+                .foregroundStyle(Color.textSecondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var chartCard: some View {
+        VStack(alignment: .leading, spacing: Space.s12) {
+            ReplayRevealChart(curves: curves, drawn: drawn)
+                .frame(height: 190)
+                .accessibilityLabel("Your account against buy and hold over the whole crash")
+            HStack(spacing: Space.s16) {
+                legend(Color.accent, "You", result.returnPct)
+                legend(Color.white.opacity(0.55), "Buy & hold", result.holdReturnPct)
+                Spacer(minLength: 0)
+                HStack(spacing: Space.s8) {
+                    dot(.positive); Text("Buy").foregroundStyle(Color.textTertiary)
+                    dot(.negative); Text("Sell").foregroundStyle(Color.textTertiary)
+                }
+                .font(.caption2)
+            }
+        }
+        .padding(Space.s16)
+        .glassCard()
+    }
+
+    private func legend(_ color: Color, _ label: String, _ pct: Decimal) -> some View {
+        HStack(spacing: 6) {
+            Capsule().fill(color).frame(width: 14, height: 3)
+            Text(label).font(.caption13).foregroundStyle(Color.textSecondary)
+            ChangeText(percent: pct, font: .caption13Digits.weight(.semibold))
+        }
+    }
+
+    private func dot(_ color: Color) -> some View {
+        Circle().fill(color).frame(width: 7, height: 7)
+    }
+
+    private var statTiles: some View {
+        HStack(spacing: Space.s8) {
+            tile("You", PriceFormat.change(result.returnPct), Color.direction(result.returnPct))
+            tile("vs hold", PriceFormat.change(edge), Color.direction(edge))
+            tile("Trades", "\(actions.count)", Color.textPrimary)
+        }
+    }
+
+    private func tile(_ title: String, _ value: String, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: Space.s4) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(1)
+                .foregroundStyle(Color.textTertiary)
+            Text(value)
+                .font(.system(size: 20, weight: .bold).monospacedDigit())
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.s12)
+        .glassCard(cornerRadius: Radius.small)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var revealCard: some View {
+        VStack(alignment: .leading, spacing: Space.s8) {
+            Text("IT WAS")
+                .font(.caption.weight(.bold))
+                .tracking(1.2)
+                .foregroundStyle(Color.textSecondary)
+            HStack(alignment: .firstTextBaseline, spacing: Space.s8) {
+                Text(result.reveal.name)
+                    .font(.sectionHeader)
+                    .foregroundStyle(Color.textPrimary)
+                Text(result.reveal.symbol)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.textSecondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .metalSurface(Capsule())
+            }
+            Text(result.reveal.date)
+                .font(.caption13)
+                .foregroundStyle(Color.textTertiary)
+            Text(result.reveal.story)
+                .font(.rowSubtitle)
+                .foregroundStyle(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(Space.s16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassCard()
+    }
+
+    private var actionsBlock: some View {
+        VStack(spacing: Space.s12) {
+            if let clipURL {
+                ShareLink(item: clipURL) {
+                    Label("Share your clip", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.accent)
+            } else {
+                Button {
+                    Task { await export() }
+                } label: {
+                    if isExporting {
+                        ProgressView()
+                    } else {
+                        Label("Make a 15-second clip", systemImage: "film")
+                    }
+                }
+                .buttonStyle(.accent)
+                .disabled(isExporting)
+                .accessibilityIdentifier("replay.export")
+            }
+            if let exportError {
+                Text(exportError)
+                    .font(.caption13)
+                    .foregroundStyle(Color.negative)
+            }
+            ProUpsellCard(
+                symbol: "chart.line.downtrend.xyaxis",
+                color: .tileTeal,
+                title: result.survived ? "Try a harder crash" : "Run it back",
+                detail: "FTX and LUNA are waiting. Every crash replay comes with Pro.",
+                reason: .locked("Every crash replay")
+            )
+            Button("Done", action: onDone)
+                .buttonStyle(.secondary)
         }
     }
 
@@ -512,6 +643,118 @@ struct ReplayResultView: View {
             )
         } catch {
             exportError = "Couldn't make the clip. Try again."
+        }
+    }
+}
+
+/// The run replayed from the candles and your moves: the price and your account, each
+/// as a percentage from the first close, hour by hour. The same arithmetic the player
+/// uses (a move fills at that hour's close), so the end points match the score.
+struct ReplayCurves {
+    let price: [Double]
+    let you: [Double]
+    /// (hour, side) for every move, to mark on the price line.
+    let moves: [(Int, String)]
+
+    init(candles: [[Double]], actions: [ReplayAction]) {
+        let closes = candles.map { $0[3] }
+        guard let first = closes.first, first > 0 else {
+            price = []; you = []; moves = []; return
+        }
+        let byHour = Dictionary(grouping: actions, by: \.candle)
+        var cash = 10_000.0, units = 0.0
+        var priceCurve: [Double] = [], youCurve: [Double] = []
+        for (hour, close) in closes.enumerated() {
+            for action in byHour[hour] ?? [] {
+                if action.side == "buy" {
+                    let spend = cash * action.fraction
+                    units += spend / close
+                    cash -= spend
+                } else {
+                    let sold = units * action.fraction
+                    cash += sold * close
+                    units -= sold
+                }
+            }
+            priceCurve.append((close / first - 1) * 100)
+            youCurve.append(((cash + units * close) / 10_000 - 1) * 100)
+        }
+        price = priceCurve
+        you = youCurve
+        moves = actions.map { ($0.candle, $0.side) }
+    }
+}
+
+/// Both curves over a zero line, drawn in from the left as `drawn` goes 0 → 1, with a
+/// dot at each move and at each line's end.
+struct ReplayRevealChart: View {
+    let curves: ReplayCurves
+    var drawn: CGFloat = 1
+
+    var body: some View {
+        GeometryReader { geometry in
+            let size = geometry.size
+            let all = curves.price + curves.you + [0]
+            let top = (all.max() ?? 1) + 2
+            let bottom = (all.min() ?? -1) - 2
+            let span = max(top - bottom, 0.0001)
+            let count = max(curves.price.count - 1, 1)
+            let point = { (i: Int, v: Double) in
+                CGPoint(x: size.width * CGFloat(i) / CGFloat(count),
+                        y: size.height * CGFloat((top - v) / span))
+            }
+            ZStack {
+                // Zero: where both started.
+                Path { p in
+                    let y = point(0, 0).y
+                    p.move(to: CGPoint(x: 0, y: y))
+                    p.addLine(to: CGPoint(x: size.width, y: y))
+                }
+                .stroke(Color.white.opacity(0.15), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+
+                CurveShape(values: curves.price, top: top, span: span)
+                    .trim(from: 0, to: drawn)
+                    .stroke(Color.white.opacity(0.55), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                CurveShape(values: curves.you, top: top, span: span)
+                    .trim(from: 0, to: drawn)
+                    .stroke(Color.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+
+                ForEach(Array(curves.moves.enumerated()), id: \.offset) { _, move in
+                    if curves.price.indices.contains(move.0) {
+                        Circle()
+                            .fill(move.1 == "buy" ? Color.positive : Color.negative)
+                            .overlay(Circle().strokeBorder(Color.appBackground, lineWidth: 1.5))
+                            .frame(width: 10, height: 10)
+                            .position(point(move.0, curves.price[move.0]))
+                            .opacity(CGFloat(move.0) / CGFloat(count) <= drawn ? 1 : 0)
+                    }
+                }
+                if let last = curves.you.last, drawn >= 1 {
+                    Circle().fill(Color.accent).frame(width: 9, height: 9)
+                        .position(point(curves.you.count - 1, last))
+                }
+                if let last = curves.price.last, drawn >= 1 {
+                    Circle().fill(Color.white.opacity(0.7)).frame(width: 7, height: 7)
+                        .position(point(curves.price.count - 1, last))
+                }
+            }
+        }
+    }
+
+    private struct CurveShape: Shape {
+        let values: [Double]
+        let top: Double
+        let span: Double
+
+        func path(in rect: CGRect) -> Path {
+            var path = Path()
+            let count = max(values.count - 1, 1)
+            for (i, v) in values.enumerated() {
+                let p = CGPoint(x: rect.width * CGFloat(i) / CGFloat(count),
+                                y: rect.height * CGFloat((top - v) / span))
+                if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
+            }
+            return path
         }
     }
 }
