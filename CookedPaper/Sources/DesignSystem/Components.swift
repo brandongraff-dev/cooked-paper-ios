@@ -349,6 +349,87 @@ struct Segment: View {
     }
 }
 
+// MARK: - Info pills
+
+/// A rule or fact at a glance: an accent SF Symbol and a short caption on a flat
+/// capsule with a hairline ("$10K start", "30 days"). Not tappable.
+struct InfoPill: View {
+    let symbol: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.accent)
+                .accessibilityHidden(true)
+            Text(text)
+                .font(.caption13)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, Space.s12)
+        .frame(height: Metrics.chipHeight)
+        .background(Color.appSurface, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+    }
+}
+
+/// A row of `InfoPill`s under a screen's headline, read by VoiceOver as one line.
+struct InfoPillRow: View {
+    /// (symbol, text) pairs, left to right.
+    let pills: [(symbol: String, text: String)]
+
+    var body: some View {
+        HStack(spacing: Space.s8) {
+            ForEach(Array(pills.enumerated()), id: \.offset) { _, pill in
+                InfoPill(symbol: pill.symbol, text: pill.text)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A screen's big headline over a one-line summary — the Leaderboard's "You're 9th"
+/// style. 40 heavy, tight tracking.
+struct ScreenHeadline: View {
+    let title: String
+    var subtitle: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.s4) {
+            Text(title)
+                .font(.system(size: 40, weight: .heavy))
+                .tracking(-1.2)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .contentTransition(.numericText())
+                .accessibilityAddTraits(.isHeader)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.rowSubtitle)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A small uppercase label above a card's title ("ROOKIE · +8% / −5%").
+struct Kicker: View {
+    let text: String
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.caption.weight(.bold))
+            .tracking(1.2)
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(1)
+    }
+}
+
 // MARK: - Layout pieces
 
 /// 20 semibold, sentence case, on the screen margin.

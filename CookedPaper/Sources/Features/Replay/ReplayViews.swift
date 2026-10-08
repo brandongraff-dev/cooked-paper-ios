@@ -74,27 +74,11 @@ struct ReplayListView: View {
                 }
                 .font(.rowTitle)
             }
-            HStack(spacing: Space.s8) {
-                pill("dollarsign.circle.fill", "$10K start")
-                pill("eye.slash.fill", "Names hidden")
-            }
+            InfoPillRow(pills: [
+                (symbol: "dollarsign.circle.fill", text: "$10K start"),
+                (symbol: "eye.slash.fill", text: "Names hidden"),
+            ])
         }
-    }
-
-    private func pill(_ symbol: String, _ text: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(Color.accent)
-            Text(text)
-                .font(.caption13)
-                .foregroundStyle(Color.textPrimary)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, Space.s12)
-        .frame(height: 32)
-        .background(Color.appSurface, in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 
     private func row(_ scenario: ReplaySummary) -> some View {

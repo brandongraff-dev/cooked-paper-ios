@@ -109,7 +109,10 @@ struct ChallengesView: View {
     private func tierPicker(_ response: ChallengeListResponse) -> some View {
         VStack(alignment: .leading, spacing: Space.s16) {
             VStack(alignment: .leading, spacing: Space.s12) {
-                LadderPills(days: response.tiers.first?.rules.days ?? 30)
+                InfoPillRow(pills: [
+                    (symbol: "arrow.up.forward", text: "Pass one to unlock the next"),
+                    (symbol: "clock.fill", text: "\(response.tiers.first?.rules.days ?? 30) days"),
+                ])
                 if let note = attemptsNote(response) {
                     Label(note, systemImage: FreeTier.shared.isPro ? "infinity" : "ticket.fill")
                         .font(.caption13)
@@ -397,36 +400,6 @@ private struct ChallengeTierCard: View {
     static func percent(_ value: Decimal) -> String {
         NSDecimalNumber(decimal: value).doubleValue.formatted(.number.precision(.fractionLength(0...1))) + "%"
     }
-}
-
-/// How the ladder works, at a glance.
-private struct LadderPills: View {
-    let days: Int
-
-    var body: some View {
-        HStack(spacing: Space.s8) {
-            pill("arrow.up.forward", "Pass one to unlock the next")
-            pill("clock.fill", "\(days) days")
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private func pill(_ symbol: String, _ text: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(Color.accent)
-            Text(text)
-                .font(.caption13)
-                .foregroundStyle(Color.textPrimary)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, Space.s12)
-        .frame(height: 32)
-        .background(Color.appSurface, in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-    }
-
 }
 
 /// What you're about to start: the rank badge, the balance, the three rules in
