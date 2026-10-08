@@ -17,7 +17,9 @@ struct CompeteView: View {
         .safeAreaInset(edge: .top, spacing: 0) { picker }
         .screenBackground()
         .navigationTitle("Compete")
-        .navigationBarTitleDisplayMode(.large)
+        // Inline: each tab leads with its own headline, and a large title here
+        // left an empty band above the segments on some of them.
+        .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: CompeteRoute.self) { route in
             route.destination
         }
