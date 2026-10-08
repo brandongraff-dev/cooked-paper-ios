@@ -45,7 +45,21 @@ struct ChallengesView: View {
                     } else {
                         tierPicker(response)
                     }
-                    if !response.history.isEmpty { history(response.history) }
+                    if !response.history.isEmpty {
+                        history(response.history)
+                    } else if response.active == nil, let first = response.tiers.first(where: \.isUnlocked) {
+                        EmptyStateView(
+                            symbol: "flag.checkered",
+                            title: "No challenges yet",
+                            action: EmptyStateAction(
+                                title: "Start the \(first.tierLabel) Challenge",
+                                identifier: "challenge.firstStart"
+                            ) {
+                                choose(first, response: response)
+                            },
+                            compact: true
+                        )
+                    }
                     Text(response.disclaimer ?? "Paper challenge: simulated prices, no real money, no prizes.")
                         .font(.caption13)
                         .foregroundStyle(Color.textTertiary)
@@ -122,11 +136,7 @@ struct ChallengesView: View {
             ForEach(response.tiers) { tier in
                 Button {
                     Haptics.tap()
-                    if needsPaywall(response) {
-                        showsPaywall = true
-                    } else {
-                        pendingTier = tier
-                    }
+                    choose(tier, response: response)
                 } label: {
                     ChallengeTierCard(tier: tier, isStarting: isStarting)
                 }
@@ -161,6 +171,15 @@ struct ChallengesView: View {
                     if index < items.count - 1 { RowSeparator() }
                 }
             }
+        }
+    }
+
+    /// A tier tapped: the start sheet, or the paywall once the free attempt is used.
+    private func choose(_ tier: ChallengeTierOffer, response: ChallengeListResponse) {
+        if needsPaywall(response) {
+            showsPaywall = true
+        } else {
+            pendingTier = tier
         }
     }
 

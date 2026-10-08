@@ -78,6 +78,18 @@ struct ReplayListView: View {
                 (symbol: "dollarsign.circle.fill", text: "$10K start"),
                 (symbol: "eye.slash.fill", text: "Names hidden"),
             ])
+            // Nothing played yet: the free first crash, one tap away.
+            if played.isEmpty, let first = scenarios.first(where: { $0.number == 1 }) ?? scenarios.first {
+                Button {
+                    Haptics.tap()
+                    playing = first
+                } label: {
+                    Label("Play Crash #\(first.number)", systemImage: "play.fill")
+                }
+                .buttonStyle(.accent)
+                .padding(.top, Space.s8)
+                .accessibilityIdentifier("replay.firstPlay")
+            }
         }
     }
 

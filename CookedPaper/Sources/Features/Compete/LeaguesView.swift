@@ -66,33 +66,60 @@ struct LeaguesView: View {
     private func content(_ leagues: [League]) -> some View {
         VStack(alignment: .leading, spacing: Space.section) {
             if leagues.isEmpty {
-                VStack(spacing: Space.s16) {
+                VStack(spacing: 0) {
                     EmptyStateView(
-                        symbol: "person.3",
+                        symbol: "person.3.fill",
                         title: "No leagues yet",
-                        detail: "Start a private leaderboard for your group chat, or join one with an invite code. Free, no stakes."
+                        action: EmptyStateAction(title: "Create a league", symbol: "plus", identifier: "leagues.create") {
+                            showsCreate = true
+                        }
                     )
+                    Button {
+                        Haptics.tap()
+                        showsJoin = true
+                    } label: {
+                        Text("Have a code? Join")
+                            .font(.rowSubtitle.weight(.semibold))
+                            .foregroundStyle(Color.textSecondary)
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.pressable)
+                    .padding(.top, -Space.s24)
+                    .accessibilityIdentifier("leagues.join")
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                VStack(alignment: .leading, spacing: Space.s20) {
+                    ScreenHeadline(title: headline(leagues), subtitle: "Ranked on this season\u{2019}s paper return")
                     actionButtons
                 }
-            } else {
-                actionButtons
-                VStack(alignment: .leading, spacing: Space.headerGap) {
-                    SectionHeader(title: "Your leagues", caption: "Simulated")
-                    VStack(spacing: 0) {
-                        ForEach(Array(leagues.enumerated()), id: \.element.id) { index, league in
-                            NavigationLink(value: CompeteRoute.league(id: league.id)) {
-                                LeagueRow(league: league)
-                            }
-                            .buttonStyle(.pressable)
-                            .accessibilityIdentifier("leagues.row.\(index)")
-                            if index < leagues.count - 1 { RowSeparator() }
+                VStack(spacing: 0) {
+                    ForEach(Array(leagues.enumerated()), id: \.element.id) { index, league in
+                        NavigationLink(value: CompeteRoute.league(id: league.id)) {
+                            LeagueRow(league: league)
                         }
+                        .buttonStyle(.pressable)
+                        .accessibilityIdentifier("leagues.row.\(index)")
+                        if index < leagues.count - 1 { RowSeparator() }
                     }
                 }
+                .glassList()
             }
             CompeteLegalCaption()
         }
         .padding(.horizontal, Space.margin)
+    }
+
+    /// "#2 in Group Chat", your best placing, or how many leagues you're in.
+    private func headline(_ leagues: [League]) -> String {
+        let ranked: [(rank: Int, name: String)] = leagues.compactMap { league in
+            guard let rank = league.yourRank else { return nil }
+            return (rank: rank, name: league.name)
+        }
+        if let best = ranked.min(by: { $0.rank < $1.rank }) {
+            return "#\(best.rank) in \(best.name)"
+        }
+        return leagues.count == 1 ? "1 league" : "\(leagues.count) leagues"
     }
 
     private var actionButtons: some View {
@@ -122,9 +149,9 @@ struct LeaguesView: View {
 
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: Space.s16) {
+            SkeletonBlock(width: 200, height: 44)
             SkeletonBlock(height: Metrics.buttonHeight, cornerRadius: Metrics.buttonHeight / 2)
                 .padding(.bottom, Space.s16)
-            SkeletonBlock(width: 120, height: 18)
             ForEach(0..<3, id: \.self) { _ in SkeletonRow() }
         }
         .padding(.horizontal, Space.margin)
@@ -146,9 +173,7 @@ private struct LeagueRow: View {
                 Text("#\(rank)")
                     .font(.rowValue)
                     .foregroundStyle(Color.textPrimary)
-                Text("Your rank")
-                    .font(.rowSubvalue)
-                    .foregroundStyle(Color.textSecondary)
+                    .accessibilityLabel("Your rank \(rank)")
             } else {
                 Text("Unranked")
                     .font(.rowSubvalue)
