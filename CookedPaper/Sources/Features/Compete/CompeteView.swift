@@ -11,7 +11,7 @@ struct CompeteView: View {
             case .season: SeasonView()
             case .duels: DuelsView()
             case .leagues: LeaguesView()
-            case .leaderboard: LeaderboardView(title: "Compete")
+            case .leaderboard: LeaderboardView(title: "Compete", titleDisplayMode: .inline)
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) { picker }

@@ -58,8 +58,13 @@ struct ChallengeTierOffer: Decodable, Identifiable, Hashable {
     let tier: String
     @DecimalString var startingBalanceUsd: Decimal
     let rules: ChallengeRules
+    /// The tier to pass first (the ladder); nil for the first rung or an older server.
+    let requires: String?
+    let unlocked: Bool?
 
     var tierLabel: String { "$" + tier.uppercased() }
+    var isUnlocked: Bool { unlocked ?? true }
+    var requiresLabel: String? { requires.map { "$" + $0.uppercased() } }
 }
 
 struct ChallengeListResponse: Decodable {

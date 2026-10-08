@@ -381,8 +381,8 @@ private struct PlayGrid: View {
 
     private let modes: [Mode] = [
         Mode(id: "season.challenges", route: .challenges, symbol: "flag.checkered", color: .tileOrange,
-             title: "Challenges", caption: "+8% to pass",
-             detail: "Hit plus 8 percent before you lose 5 percent."),
+             title: "Challenges", caption: "Climb three ranks",
+             detail: "Pass Rookie, Pro and Elite: hit the target before you hit the floor."),
         Mode(id: "season.rooms", route: .rooms, symbol: "dot.radiowaves.left.and.right", color: .tilePink,
              title: "Live Rooms", caption: "CPI & Fed days",
              detail: "Trade market events with everyone, or host a room for your stream."),

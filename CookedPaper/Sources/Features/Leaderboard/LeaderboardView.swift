@@ -8,6 +8,9 @@ import SwiftUI
 struct LeaderboardView: View {
     /// The navigation title; Compete shows this list under its own "Compete".
     var title = "Leaderboard"
+    /// Inline under Compete: the headline below is the screen's big text, and a large
+    /// title there only leaves an empty band above the segments.
+    var titleDisplayMode: NavigationBarItem.TitleDisplayMode = .large
 
     @State private var window: LeaderboardWindow = .all
     @State private var response: PaperLeaderboardResponse?
@@ -78,7 +81,7 @@ struct LeaderboardView: View {
         .refreshable { await load() }
         .reservesTabBarSpace()
         .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(titleDisplayMode)
         .task { await load() }
         .onChange(of: window) { _, _ in
             Task { await load() }

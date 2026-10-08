@@ -137,12 +137,13 @@ nonisolated enum MockContests {
     private static func challenge(tier: String, status: String, returnPct: String, daysAgo: Double = 6) -> [String: Any] {
         let balance: Double = ["10k": 10_000, "50k": 50_000, "100k": 100_000][tier] ?? 50_000
         let equity = balance * (1 + (Double(returnPct) ?? 0) / 100)
+        let (target, loss): (Double, Double) = ["10k": (8, 5), "50k": (10, 5), "100k": (12, 4)][tier] ?? (8, 5)
         return [
             "id": "challenge-\(tier)-\(status)", "tier": tier, "status": status,
-            "rules": ["profitTargetPct": "8", "maxLossPct": "5", "days": 30] as [String: Any],
+            "rules": ["profitTargetPct": String(format: "%g", target), "maxLossPct": String(format: "%g", loss), "days": 30] as [String: Any],
             "startingBalanceUsd": String(format: "%.2f", balance),
-            "targetEquityUsd": String(format: "%.2f", balance * 1.08),
-            "floorEquityUsd": String(format: "%.2f", balance * 0.95),
+            "targetEquityUsd": String(format: "%.2f", balance * (1 + target / 100)),
+            "floorEquityUsd": String(format: "%.2f", balance * (1 - loss / 100)),
             "equityUsd": String(format: "%.2f", equity), "returnPct": returnPct,
             "portfolioId": "challenge-portfolio",
             "startedAt": MockAPI.iso(daysFromNow: -daysAgo),
@@ -161,9 +162,13 @@ nonisolated enum MockContests {
             ],
             "tiers": ["10k", "50k", "100k"].map { tier -> [String: Any] in
                 let balance: Double = ["10k": 10_000, "50k": 50_000, "100k": 100_000][tier]!
+                // The ladder: the demo account passed a $10K, so $50K is open and $100K is not.
+                let rules: [String: (String, String)] = ["10k": ("8", "5"), "50k": ("10", "5"), "100k": ("12", "4")]
+                let requires: [String: Any] = ["10k": NSNull(), "50k": "10k", "100k": "50k"]
                 return [
                     "tier": tier, "startingBalanceUsd": String(format: "%.2f", balance),
-                    "rules": ["profitTargetPct": "8", "maxLossPct": "5", "days": 30] as [String: Any],
+                    "rules": ["profitTargetPct": rules[tier]!.0, "maxLossPct": rules[tier]!.1, "days": 30] as [String: Any],
+                    "requires": requires[tier]!, "unlocked": tier != "100k",
                 ]
             },
             "passed": 1, "attempts": 3,

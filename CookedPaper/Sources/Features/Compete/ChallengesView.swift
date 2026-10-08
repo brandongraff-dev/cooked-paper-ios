@@ -1,7 +1,9 @@
 import SwiftUI
 
-/// Compete → Prop Challenges. Pick a tier, get a fresh portfolio at its balance, and
-/// try to reach +8% before equity touches −5%, within 30 days. The server judges it
+/// Compete → Prop Challenges. A ladder: Rookie $10K (+8% / −5%), then Pro $50K
+/// (+10% / −5%) once Rookie is passed, then Elite $100K (+12% / −4%). Each start is a
+/// fresh portfolio at the tier's balance, with 30 days to hit the target before equity
+/// touches the floor. The server judges it
 /// every minute; this screen shows where you stand between the two lines.
 ///
 /// Free accounts get one attempt a month; Pro is unlimited (the free tier is enforced
@@ -107,9 +109,7 @@ struct ChallengesView: View {
     private func tierPicker(_ response: ChallengeListResponse) -> some View {
         VStack(alignment: .leading, spacing: Space.s16) {
             VStack(alignment: .leading, spacing: Space.s12) {
-                if let rules = response.tiers.first?.rules {
-                    RulePills(rules: rules)
-                }
+                LadderPills(days: response.tiers.first?.rules.days ?? 30)
                 if let note = attemptsNote(response) {
                     Label(note, systemImage: FreeTier.shared.isPro ? "infinity" : "ticket.fill")
                         .font(.caption13)
@@ -128,8 +128,9 @@ struct ChallengesView: View {
                     ChallengeTierCard(tier: tier, isStarting: isStarting)
                 }
                 .buttonStyle(.pressable)
-                .disabled(isStarting)
+                .disabled(isStarting || !tier.isUnlocked)
                 .accessibilityLabel("\(tier.tierLabel) challenge")
+                .accessibilityHint(tier.isUnlocked ? "" : "Locked. Pass the \(tier.requiresLabel ?? "previous") challenge first.")
                 .accessibilityIdentifier("challenge.start.\(tier.tier)")
             }
         }
@@ -323,7 +324,7 @@ struct ChallengeShareCard: View {
                 Text(ShareCardFormat.pnl(challenge.returnPct))
                     .font(.system(size: 40, weight: .heavy).monospacedDigit())
                     .foregroundStyle(Color.positive)
-                Text("+8% target · 5% max loss · 30 days")
+                Text("+\(ChallengeTierCard.percent(challenge.rules.profitTargetPct)) target · \(ChallengeTierCard.percent(challenge.rules.maxLossPct)) max loss · \(challenge.rules.days) days")
                     .font(.system(size: 14))
                     .foregroundStyle(Color.white.opacity(0.7))
                 Spacer(minLength: 0)
@@ -353,50 +354,59 @@ private struct ChallengeTierCard: View {
         let ratio = NSDecimalNumber(decimal: (start - fail) / max(pass - fail, 1)).doubleValue
         VStack(alignment: .leading, spacing: Space.s16) {
             HStack(spacing: Space.s16) {
-                TierEmblem(level: ChallengeRank.level(tier.tier), size: 52)
+                TierEmblem(level: ChallengeRank.level(tier.tier), size: 52, lit: tier.isUnlocked)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(ChallengeRank.name(tier.tier).uppercased())
+                    Text("\(ChallengeRank.name(tier.tier).uppercased()) · +\(Self.percent(tier.rules.profitTargetPct)) / \u{2212}\(Self.percent(tier.rules.maxLossPct))")
                         .font(.caption.weight(.bold))
                         .tracking(1.2)
                         .foregroundStyle(Color.textSecondary)
                     Text(tier.tierLabel)
                         .font(.system(size: 30, weight: .bold).monospacedDigit())
-                        .foregroundStyle(Color.textPrimary)
+                        .foregroundStyle(tier.isUnlocked ? Color.textPrimary : Color.textTertiary)
                 }
                 Spacer()
                 if isStarting {
                     ProgressView()
                 } else {
-                    Image(systemName: "chevron.right")
+                    Image(systemName: tier.isUnlocked ? "chevron.right" : "lock.fill")
                         .font(.body.weight(.semibold))
                         .foregroundStyle(Color.textTertiary)
                 }
             }
-            VStack(spacing: Space.s8) {
-                ChallengeRail(marker: ratio)
-                HStack {
-                    Text("Out \(PriceFormat.compact(fail))")
-                    Spacer()
-                    Text("Pass \(PriceFormat.compact(pass))")
+            if tier.isUnlocked {
+                VStack(spacing: Space.s8) {
+                    ChallengeRail(marker: ratio)
+                    HStack {
+                        Text("Out \(PriceFormat.compact(fail))")
+                        Spacer()
+                        Text("Pass \(PriceFormat.compact(pass))")
+                    }
+                    .font(.caption13Digits)
+                    .foregroundStyle(Color.textSecondary)
                 }
-                .font(.caption13Digits)
-                .foregroundStyle(Color.textSecondary)
+            } else {
+                Label("Pass the \(tier.requiresLabel ?? "previous") challenge to unlock", systemImage: "lock.fill")
+                    .font(.caption13)
+                    .foregroundStyle(Color.textTertiary)
             }
         }
         .padding(Space.s20)
         .glassCard()
     }
+
+    static func percent(_ value: Decimal) -> String {
+        NSDecimalNumber(decimal: value).doubleValue.formatted(.number.precision(.fractionLength(0...1))) + "%"
+    }
 }
 
-/// The rules at a glance: target, max loss, time.
-private struct RulePills: View {
-    let rules: ChallengeRules
+/// How the ladder works, at a glance.
+private struct LadderPills: View {
+    let days: Int
 
     var body: some View {
         HStack(spacing: Space.s8) {
-            pill("flag.fill", "+\(percent(rules.profitTargetPct)) target")
-            pill("shield.fill", "\u{2212}\(percent(rules.maxLossPct)) max loss")
-            pill("clock.fill", "\(rules.days) days")
+            pill("arrow.up.forward", "Pass one to unlock the next")
+            pill("clock.fill", "\(days) days")
         }
         .accessibilityElement(children: .combine)
     }
@@ -417,9 +427,6 @@ private struct RulePills: View {
         .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 
-    private func percent(_ value: Decimal) -> String {
-        NSDecimalNumber(decimal: value).doubleValue.formatted(.number.precision(.fractionLength(0...1))) + "%"
-    }
 }
 
 /// What you're about to start: the rank badge, the balance, the three rules in
