@@ -51,9 +51,15 @@ struct PortfolioView: View {
                     SectionHeader(title: "Positions")
                     if snapshot.positions.isEmpty {
                         EmptyStateView(
-                            symbol: "chart.pie",
+                            symbol: "chart.pie.fill",
                             title: "No open positions",
-                            detail: "Find a token in Discover and make your first trade."
+                            action: EmptyStateAction(
+                                title: "Make your first trade",
+                                identifier: "portfolio.firstTrade"
+                            ) {
+                                DeepLinkRouter.shared.openTab(.discover)
+                            },
+                            compact: true
                         )
                     } else {
                         VStack(spacing: 0) {

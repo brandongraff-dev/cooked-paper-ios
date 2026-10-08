@@ -68,8 +68,12 @@ struct LeaderboardView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if !isLoading && errorMessage == nil && !entries.isEmpty && (myEntry?.rank ?? .max) > podium.count {
                     YourSpotBar(entry: myEntry, nextAbove: nextAbove) {
-                        guard let myEntry else { return }
                         Haptics.tap()
+                        guard let myEntry else {
+                            // Unranked: the way onto the board is a trade.
+                            DeepLinkRouter.shared.openTab(.discover)
+                            return
+                        }
                         withAnimation(Motion.standard) { proxy.scrollTo(myEntry.id, anchor: .center) }
                     }
                     .padding(.horizontal, Space.margin)
@@ -148,9 +152,11 @@ struct LeaderboardView: View {
             }
         } else if entries.isEmpty {
             EmptyStateView(
-                symbol: "trophy",
-                title: "No ranked traders yet",
-                detail: "Check back once more portfolios have a qualifying track record."
+                symbol: "trophy.fill",
+                title: "No one's ranked yet",
+                action: EmptyStateAction(title: "Make a trade", identifier: "leaderboard.firstTrade") {
+                    DeepLinkRouter.shared.openTab(.discover)
+                }
             )
         } else {
             VStack(spacing: Space.s20) {
@@ -499,7 +505,8 @@ private struct LeaderboardRow: View {
 }
 
 /// Pinned above the tab bar while you're below the podium (or not ranked yet): your
-/// place, the gap to the next one, and a tap that scrolls to your row.
+/// place, the gap to the next one, and a tap that scrolls to your row — or, unranked,
+/// opens Discover for the trade that gets you on the board.
 private struct YourSpotBar: View {
     let entry: PaperLeaderboardEntry?
     let nextAbove: PaperLeaderboardEntry?
@@ -533,6 +540,13 @@ private struct YourSpotBar: View {
                 Spacer(minLength: Space.s8)
                 if let entry {
                     PnlText(entry: entry, font: .rowValue)
+                } else {
+                    Text("Trade")
+                        .font(.caption13.weight(.semibold))
+                        .foregroundStyle(Color.accentInk)
+                        .padding(.horizontal, Space.s12)
+                        .frame(height: Metrics.chipHeight)
+                        .background(Color.accent, in: Capsule())
                 }
             }
             .padding(.horizontal, Space.s16)
@@ -545,8 +559,7 @@ private struct YourSpotBar: View {
             .shadow(color: .black.opacity(0.45), radius: 16, y: 6)
         }
         .buttonStyle(.pressable)
-        .disabled(entry == nil)
-        .accessibilityHint(entry == nil ? "" : "Scrolls to your row")
+        .accessibilityHint(entry == nil ? "Opens Discover to make a trade" : "Scrolls to your row")
         .accessibilityIdentifier("leaderboard.yourSpot")
     }
 }

@@ -270,6 +270,16 @@ private struct SeasonHeaderCard: View {
                 .font(.caption13Digits)
                 .foregroundStyle(Color.textSecondary)
         }
+        if left > 0 {
+            Button {
+                Haptics.tap()
+                DeepLinkRouter.shared.openTab(.discover)
+            } label: {
+                Label("Make a trade", systemImage: "arrow.left.arrow.right")
+            }
+            .buttonStyle(.accent)
+            .accessibilityIdentifier("season.firstTrade")
+        }
     }
 
     /// How far through the current tier's band toward the next one, by percentile

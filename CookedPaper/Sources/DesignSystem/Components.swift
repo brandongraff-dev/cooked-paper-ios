@@ -561,24 +561,42 @@ struct SimulatedCaption: View {
     }
 }
 
+/// An empty state's one way forward: "Make your first trade", "Start a duel".
+struct EmptyStateAction {
+    let title: String
+    var symbol: String? = nil
+    var identifier: String = "emptyState.action"
+    let run: () -> Void
+}
+
+/// One icon, one short line (an optional detail under it), and at most one way out:
+/// a call to action for an empty list, or "Try again" for an error.
 struct EmptyStateView: View {
     let symbol: String
     let title: String
-    let detail: String
+    var detail: String? = nil
     /// An error state's way out: shows a compact "Try again" button when set.
     var retry: (() -> Void)? = nil
+    /// An empty list's next step, as the screen's accent button. Ignored when `retry`
+    /// is set.
+    var action: EmptyStateAction? = nil
+    /// Less vertical room, for an empty section inside a longer screen.
+    var compact: Bool = false
 
     var body: some View {
         VStack(spacing: Space.s8) {
-            IconTile(symbol: symbol, color: .tileGray, size: 52)
+            IconTile(symbol: symbol, color: action == nil ? .tileGray : .tileBlue, size: 52)
                 .padding(.bottom, Space.s8)
             Text(title)
                 .font(.rowTitle)
                 .foregroundStyle(Color.textPrimary)
-            Text(detail)
-                .font(.rowSubtitle)
-                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
+            if let detail {
+                Text(detail)
+                    .font(.rowSubtitle)
+                    .foregroundStyle(Color.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
             if let retry {
                 Button("Try again") {
                     Haptics.tap()
@@ -587,9 +605,24 @@ struct EmptyStateView: View {
                 .buttonStyle(.compact)
                 .padding(.top, Space.s8)
                 .accessibilityIdentifier("emptyState.retry")
+            } else if let action {
+                Button {
+                    Haptics.tap()
+                    action.run()
+                } label: {
+                    if let symbol = action.symbol {
+                        Label(action.title, systemImage: symbol)
+                    } else {
+                        Text(action.title)
+                    }
+                }
+                .buttonStyle(.accent)
+                .frame(maxWidth: 280)
+                .padding(.top, Space.s12)
+                .accessibilityIdentifier(action.identifier)
             }
         }
-        .padding(.vertical, Space.s48)
+        .padding(.vertical, compact ? Space.s24 : Space.s48)
         .padding(.horizontal, Space.s24)
         .frame(maxWidth: .infinity)
     }
