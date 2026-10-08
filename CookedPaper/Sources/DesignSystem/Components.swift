@@ -309,9 +309,8 @@ struct Chip: View {
                         Capsule().fill(Color.inverseFill)
                     } else {
                         Capsule()
-                            .fill(.ultraThinMaterial)
-                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-                            .environment(\.colorScheme, .dark)
+                            .fill(Color.appSurfaceElevated)
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
                     }
                 }
         }
