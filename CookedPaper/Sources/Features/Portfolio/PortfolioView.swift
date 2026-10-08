@@ -40,7 +40,6 @@ struct PortfolioView: View {
                 header(snapshot)
 
                 VStack(alignment: .leading, spacing: Space.headerGap) {
-                    SectionHeader(title: "Stats")
                     StatGrid(items: stats(snapshot))
                     CookedMeterCard(reading: cookedMeterReading(snapshot)) {
                         showsCookedMeter = true
@@ -48,7 +47,10 @@ struct PortfolioView: View {
                 }
 
                 VStack(alignment: .leading, spacing: Space.headerGap) {
-                    SectionHeader(title: "Positions")
+                    SectionHeader(
+                        title: "Positions",
+                        caption: snapshot.positions.isEmpty ? nil : "\(snapshot.positions.count)"
+                    )
                     if snapshot.positions.isEmpty {
                         EmptyStateView(
                             symbol: "chart.pie.fill",
@@ -139,7 +141,7 @@ struct PortfolioView: View {
 
         return VStack(alignment: .leading, spacing: Space.s24) {
             VStack(alignment: .leading, spacing: Space.s8) {
-                SimulatedCaption()
+                Kicker(text: "Paper · Simulated")
                 Text(PriceFormat.usd(shownEquity))
                     .heroPriceStyle()
                     .foregroundStyle(Color.textPrimary)
