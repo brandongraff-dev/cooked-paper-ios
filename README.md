@@ -1,353 +1,272 @@
 # Cooked Paper (iOS)
 
-A native SwiftUI, paper-trading-only companion to Cooked. Free to start, with Pro at
-**$7.99/mo** or **$3.99/wk** (see "Subscriptions"). Built against the same `apps/api` backend as `apps/web` and
-`apps/mobile`. The subscription is enforced on-device via StoreKit 2, with the
-server consulted as a second opinion once its Apple billing routes are deployed
-(see "Subscriptions" below).
+A native SwiftUI, **paper-trading-only** companion to Cooked (cooked.trade). You trade
+simulated money against real Solana token prices, play against other people, and climb
+monthly seasons. No real money is ever involved. It talks to the same `apps/api`
+backend as the web and Expo apps (`https://api.cooked.trade`).
 
-It was scaffolded on a machine with no Xcode, but it is now built on every push by
-GitHub Actions on a macOS runner (`.github/workflows/ios-build-and-screenshot.yml`):
-`xcodegen generate`, a full simulator build, the unit tests, and the UI screenshot
-walkthrough against the in-app mock API. Check that workflow's latest run before
-assuming a change compiles. Read this whole file before opening the project — a few
-values are owner-provided and must be filled in before it will sign or run against
-real services.
+- iPhone only, portrait only, dark UI only. Deployment target **iOS 17**, Swift 6.
+- Free to start. **Pro** is $49.99/year (7-day free trial) or $12.99/month. See
+  "Subscriptions".
+- Dependencies: `socket.io-client-swift` (16.1+) and `GoogleSignIn-iOS` (9.0+). Nothing else.
+- CI builds on a macOS runner with Xcode 26 on every push. The sources use no
+  iOS 26-only APIs.
 
-**Requires Xcode 26+ to build**, even though the app's own deployment target stays
-iOS 17 — the UI adopts Liquid Glass (`glassEffect`, `.glassProminent`,
-`GlassEffectContainer`, all iOS 26+ only) as a progressive enhancement, and every use
-is gated behind `if #available(iOS 26.0, *)` with a pre-26 fallback. That gating still
-needs the iOS 26 SDK to be *present* to compile at all — an older Xcode without that
-SDK will fail on the `Glass`/`glassEffect` symbols regardless of the availability
-check, since the check only decides which code *runs*, not which code *compiles
-against a known symbol*. Today the only glass surface is the floating tab bar
-(`TabBarBackground` in `Sources/App/AppShellView.swift`).
+## How the app works
 
-## What's here
+**First run.** Balance ($10,000 paper) → a practice round that replays real WIF/USDT
+1-minute closes from 19 Mar 2024 → two questions (experience: Never / A little / A lot;
+goal: Learn / Test / Compete) → pick up to three coins, which are bought as real paper
+trades → your live portfolio → "Save your portfolio" sign-in → username (new accounts) →
+the paywall (closable, "Start free") → the app.
+
+Everything before sign-in runs as a **guest paper session**: `POST /paper/portfolios/starter`
+with no `Authorization` mints a 7-day guest token kept in the Keychain. Signing in claims
+it (`POST /paper/portfolios/claim`), so the onboarding positions carry over. The first
+screen has "Already have an account? Sign in". If the server refuses guests, sign-in
+moves to right after the practice round.
+
+**Navigation.** A custom floating capsule tab bar with four icon-only tabs (titles are
+accessibility labels), hidden while the keyboard is up:
+
+| Tab | What's in it |
+|---|---|
+| Discover | Token search and five feeds |
+| Portfolio | Stats, positions, recently closed, Cooked meter, leveraged positions |
+| Compete | Season · Duels · Leagues · Leaderboard, plus play modes |
+| Settings | Account, price alerts, streamer mode, subscription, legal, sign out |
+
+**Discover.** Search ("Search tokens", 300 ms debounce) and feed chips: Active, Movers,
+New, Popular, Held. Refreshes every 30 s while visible and on foreground.
+
+**Token detail.**
+- Ranges LIVE, 1H, 1D, 1W, 1M, ALL, with a line/candles toggle. Candles have a
+  long-press-then-drag crosshair (a bare drag would steal page scrolling).
+- LIVE streams trade by trade from the `/market` socket (1 s REST polling as fallback)
+  and plays the tape back slightly behind the server clock so the line moves smoothly.
+  Fills never use the delayed price. Other ranges refetch in place (1H every 15 s, 1D 30 s,
+  1W 60 s, 1M/ALL 120 s) and the header price is live on every range.
+- Your own trades appear as +/− markers; price-alert levels are drawn on the chart.
+- Stats (market cap, liquidity, 24h volume, 24h change) and "Your position" (value,
+  quantity, average cost, return, share button). Bell sets a price alert (Pro).
+- Bottom bar: Sell (if you hold it), Leverage (Pro), Buy.
+
+**Trading.** Quick amounts 25 / 50 / 75 / Max. Buys are a percentage of cash sent as
+`notionalUsd`; sells use the server's `sellPercent`. Each order carries an idempotent
+`clientOrderId` and is quoted first (`/paper/portfolios/:id/quote`).
+
+**Leverage (Pro).** Multiples, directions and minimum margin come from
+`GET /paper/leverage/config` (fallback 2×/5×/10×, long and short). Entry, size and
+liquidation price come from a server quote. The sheet states the liquidation move and
+that the most you can lose is your margin. Positions show P&L on margin, liquidation price
+and distance to it; closing past liquidation settles as "Liquidated". The server can refuse
+(Solana tokens only, thin or unknown liquidity, too close to liquidation, position limit,
+below minimum margin, price moved) and the app shows the reason.
+
+**Cooked meter.** An on-device 0–100 "how cooked is your portfolio" score from liquidation
+proximity (0–35), leverage exposure (0–15), concentration (0–25), drawdown (0–15) and thin
+liquidity (0–10). No positions is 0; negative equity with positions open is 100. For fun,
+not advice.
+
+**Compete.**
+- *Season*: a UTC calendar month ranked on main-portfolio return (duels don't count). Shows
+  tier, rank, return, distance to the next tier, the tier ladder, top 10, past seasons and
+  your monthly recap. Hosts the Daily Call, the Crowd record and a grid of play modes.
+- *Daily Call*: one featured token per UTC day; call Higher or Lower. Locks 20:00 UTC,
+  settles 00:00 UTC. A correct call extends a streak; shows the crowd split and yesterday's
+  result. Streak share card.
+- *Crowd record*: how often the Daily Call majority was right recently (up to 14 days) and
+  how fading it would have gone. Hidden until enough days are counted.
+- *Duels*: two players, a fresh $1,000 portfolio each, best return wins; 1h, 24h or 7d; by
+  username or open invite link. Accept, decline, cancel, rematch. Trades use the duel's own
+  portfolio. Result share card.
+- *Leagues*: private leaderboards by invite code, ranked on season return. Owners rename,
+  rotate the code, remove members, delete; members leave.
+- *Squads*: 3–5 friends share one portfolio; every trade is a proposal the members vote on,
+  and it runs on a majority yes.
+- *Live Rooms*: market-event rooms (CPI day, a Fed decision) anyone can join, or host your own
+  ("Beat the Streamer"). Fixed window, fresh $10,000 each, board freezes at the end.
+- *Prop Challenges*: pick a balance tier and try to reach +8% before equity touches −5%
+  within 30 days; the server judges it. Free accounts get one attempt a month.
+- *Crash Replay*: replay real historical crashes blind, an hour of candles at a time, then see
+  SURVIVED or COOKED against buy-and-hold. Scenario 1 is free; the rest are Pro. A 15-second
+  720×1280 clip can be exported and shared.
+- *Recap*: monthly recap (this month and the five before) with trader type, return, best and
+  worst trade and Daily Call record, as a 9:16 story card.
+- *Achievements*: a catalog with progress. The server decides unlocks; a toast appears live
+  (`paper:achievement`) and on foreground for anything unseen.
+- *Leaderboard*: windows 24h / 7d / 30d / This month, a top-3 podium, a pinned "your spot"
+  card, refresh every 60 s. Tapping a trader shows their positions (shares and returns only);
+  free users see it blurred behind the paywall.
+
+Everything in Compete is paper money; screens say results are simulated. A feature whose
+backend route returns 404 hides itself (Daily Call and Crowd record do this).
+
+**Profile and Settings.** Profile: avatar, name, @handle, referral code and "Invite friends",
+achievements preview. Settings: account, Price alerts, Streamer mode, Manage subscription,
+Restore purchases, Terms and Privacy links, Sign out, Delete account (App Store 5.1.1(v)),
+Reset portfolio. *Streamer mode* creates an overlay link for OBS (Browser source, 600×300);
+a ±20% sell fires a COOKING / COOKED banner showing percentages only.
+
+**Price alerts and push.** Alerts use `/social/alerts` with `price_crossed` rules (push
+channel, 5-minute cooldown); the token screen's bell prefills the price with ±10/25% chips.
+Notification permission is requested at a moment of intent (creating an alert, or after a
+trade, via a soft ask first), never at launch. The APNs token is sent to
+`POST /social/apns-tokens` (sandbox for Debug, production for Release) and revoked on sign-out.
+Push payload keys `mint`, `duelId`, `leagueId`, `achievementId` open the matching screen. The
+server refuses token registration until an APNs key is configured, which the app treats as a
+silent no-op.
+
+**Share cards** are drawn on device with `ImageRenderer`: 1080×1350 PNG (trade, duel result,
+Daily Call streak, crowd record, achievement) and 1080×1920 story cards (recap), plus the
+replay video clip. Footer: "Paper money. Results simulated. cooked.trade". Sells and closes
+also offer the server-rendered link card (`/cards/meta/…`, percentages only), hidden if the
+endpoint doesn't answer.
+
+**Review prompt.** After a profitable spot sell or leveraged close, at most once per 90 days,
+signed-in accounts only, never after a loss.
+
+**Offline.** A banner appears app-wide while the device is offline.
+
+**Deep links.** Custom scheme `cookedpaper://`: `token/<mint>`, `duel/<code>`,
+`duel-id/<id>`, `league/<code>`, `league-id/<id>`, `achievements`. Universal links:
+`https://cooked.trade/d/<code>` (duel invite) and `/l/<code>` (league invite), also on
+`www.cooked.trade`. Squads, rooms, challenges and replays have no deep link.
+
+## Principles the code follows
+
+- **Money is `Decimal`, never `Double`**, decoded from the API's decimal-string fields with
+  `@DecimalString` / `@OptionalDecimalString` (`Models/DecimalCodable.swift`).
+- **Null means "unmeasured", never zero.** Missing values render as "—".
+- **The live socket implements the server's resume protocol**: it tracks the last `seq` per
+  portfolio, resumes with `sinceSeq`, treats a `counterReset`/`truncated` gap as a fresh
+  baseline, and a heartbeat watchdog reconnects on silence. Both sockets re-read the access
+  token before each reconnect and refresh the session if the handshake is refused.
+- **One iPhone per account.** Signing in on a new iPhone ends the old phone's session
+  (`session_evicted`); that phone returns to sign-in with a note. The website isn't counted.
+- **No wallet login and no real trading** in this app.
+
+## Subscriptions
+
+Defined in `Sources/Paywall/` and enforced **on the device** with StoreKit 2; the API has no
+paywall by design, so a modified client could bypass the free-tier limits.
+
+- **Products** (`ProductID`): `app.cooked.paper.annual` ($49.99/yr, 7-day free trial, the
+  default and a computed "save N%" badge), `app.cooked.paper.monthly` ($12.99/mo, no trial),
+  `app.cooked.paper.annual.offer` ($29.99/yr, one-time offer), and `app.cooked.paper.weekly`,
+  which is only recognised so earlier weekly subscribers keep access and is **not sold** (the
+  paywall lists annual and monthly only). Prices live in App Store Connect; the local
+  `StoreKit/Products.storekit` mirrors them and still contains the weekly product
+  ($3.99, 3-day trial) for local testing.
+- **Free tier** (`FreeTier.swift`): full access for the first 3 days from account creation,
+  then 3 buys per day in the main portfolio. Selling is never limited; duel and contest trades
+  don't count. The count comes from the server's trade history, so reinstalling doesn't reset it.
+- **Pro-only:** leverage, price alerts, other traders' positions, Crash Replay scenarios 2+,
+  and unlimited Prop Challenge attempts.
+- **Paywall triggers:** after onboarding, when the day's buys run out, once when full access
+  ends, after a profitable sell, and when a Pro feature is opened.
+- **One-time offer:** closing the onboarding paywall without buying shows the $29.99/yr
+  offer once per device with the regular price struck through; no timer. If StoreKit returns
+  no offer product the paywall just closes.
+- **Trial UX:** "Start 7-day free trial", a how-it-works timeline, a soft reminder ask, and a
+  local reminder two days before the trial converts.
+- **Server sync:** every verified transaction's JWS goes to `POST /billing/apple/transactions`
+  and `GET /billing/apple/entitlement` is read back; purchases carry `appAccountToken` = the
+  account UUID. You're subscribed if StoreKit **or** the server says so; an unreachable
+  server never removes a StoreKit entitlement. Set `POST /billing/apple/notifications` as the
+  App Store Server Notifications URL in App Store Connect.
+- **Funnel:** `Funnel.swift` posts named steps (app opened, onboarding started/completed,
+  paywall shown/closed, trial started, subscribed, offer shown, upsell tapped, first trade)
+  to `POST /events` with a random per-install id, never the IDFA, so no ATT prompt.
+
+Before the app ever goes free, remember that annual plans can outlast the paid era; plan
+that with a lawyer.
+
+## Project layout
 
 ```
 CookedPaper/
-  project.yml              XcodeGen spec — the source of truth. The .xcodeproj is
-                            generated from this and gitignored.
+  project.yml           XcodeGen spec: the source of truth (.xcodeproj is gitignored)
   Sources/
-    App/                    Entry point, paywall/onboarding gate, deep-link routing,
-                            the shared portfolio store
-    DesignSystem/           Colors/type/motion ported from packages/config/design-tokens.ts,
-                            plus skeleton-loading components
-    Networking/             APIClient, Keychain session storage, the /paper and
-                            /market Socket.IO clients (with the real
-                            resume/gap/heartbeat protocol), alerts/push/billing APIs,
-                            and the DEBUG-only MockAPI the UI tests run against
-    Models/                 Codable models, incl. the DecimalString wrappers every
-                            money field on this API needs (see Models/DecimalCodable.swift)
-    Paywall/                StoreKit 2 subscription store + the paywall screen
-    Features/               Onboarding, Discover, TokenDetail
-                            (chart + trade), Trade, Leverage, Alerts, Portfolio,
-                            Leaderboard, Compete (seasons, achievements, duels),
-                            Profile, Settings
-  Resources/                Info.plist, entitlements, Assets.xcassets
-  Scripts/                  GenerateIcon.swift — renders the real app icon PNG
-  StoreKit/Products.storekit  Local StoreKit Configuration for the two subscriptions
-  Tests/                    Swift Testing unit tests (decimal codec, Base58, trade
-                            math, model decoding)
+    App/                Entry point, root gate (onboarding/sign-in/paywall), tab shell,
+                        deep links, push, stores (portfolio, duels, leagues), achievements,
+                        review prompt, network monitor
+    DesignSystem/       Tokens ported from packages/config/design-tokens.ts, components,
+                        haptics, share-card renderer
+    Networking/         APIClient, Keychain/session storage, per-area API files (Auth, Paper,
+                        Token, Leaderboard, Social, Billing, Cards, Compete), /paper and
+                        /market sockets, Funnel, and the DEBUG-only mock API
+    Models/             Codable models and the Decimal wrappers
+    Paywall/            SubscriptionStore, FreeTier, PaywallView, one-time offer
+    Features/           Auth, Onboarding, Discover, TokenDetail, Trade, Leverage, Alerts,
+                        Portfolio, Compete, Replay, Leaderboard, Profile, Settings
+  Resources/            Info.plist, entitlements, PrivacyInfo.xcprivacy, assets,
+                        PracticeReplay.json
+  Scripts/              GenerateIcon.swift, attach-storekit-to-test-action.py
+  StoreKit/             Products.storekit (local testing)
+  Tests/                Swift Testing unit tests: decimals, deep links, trade math, Cooked
+                        meter, market playback, share-card formatting, model decoding
+  UITests/              Screenshot walkthrough plus chart and trade recordings
+.github/workflows/ios-build-and-screenshot.yml
+screenshots/            Older walkthrough PNGs (onboarding to price alerts); they predate
+                        Compete and are regenerated by CI
 ```
 
 ## First-time setup
 
-1. **Install XcodeGen** (`brew install xcodegen`), then from `CookedPaper` (this
-   repo's own `apps/ios/CookedPaper` if you're reading this inside the monorepo it
-   was extracted from):
-   ```
-   xcodegen generate
-   open CookedPaper.xcodeproj
-   ```
-2. **Apple Developer / signing** (owner-provided)
-   - `DEVELOPMENT_TEAM` in `project.yml`'s `settings.base` is deliberately empty in the
-     repo: set it to your Team ID (or set it in Xcode's Signing & Capabilities tab).
-     CI doesn't need it — it builds with `CODE_SIGNING_ALLOWED=NO`.
-   - Bundle id is `app.cooked.paper`, matching the `app.cooked.mobile` convention the
-     Expo app already uses. Enable **Sign in with Apple**, **Push Notifications**
-     and **Associated Domains** on the App ID. The `aps-environment` entitlement
-     comes from the `APS_ENVIRONMENT` build setting: `development` for Debug,
-     `production` for Release.
-   - Universal links (`https://cooked.trade/d/<code>`, `/l/<code>` opening the app)
-     use the `applinks:cooked.trade` / `applinks:www.cooked.trade` entitlement in
-     `project.yml`. iOS only honours them once the web app serves
-     `/.well-known/apple-app-site-association` for this Team ID: set
-     `APPLE_TEAM_ID` (and `IOS_BUNDLE_ID` if it ever differs from
-     `app.cooked.paper`) on the web's Vercel project.
-3. **App Store Connect — subscriptions**
-   - Create a subscription group ("Cooked Paper Pro") with two auto-renewable
-     subscriptions: `app.cooked.paper.annual` ($49.99/yr, 7-day free trial) and
-     `app.cooked.paper.monthly` ($12.99/mo, no trial). These product IDs must match
-     `Sources/Paywall/SubscriptionStore.swift`'s `ProductID` exactly.
-   - `StoreKit/Products.storekit` mirrors this for local testing (Xcode scheme →
-     Options → StoreKit Configuration) without needing App Store Connect at all
-     during development. Xcode will offer to repair its internal IDs the first time
-     you open it — let it.
-4. **API base URL** — `APIConfig.baseURL` (`Sources/Networking/APIClient.swift`) reads
-   the `COOKED_API_BASE_URL` Info.plist key, which `project.yml` fills from the build
-   setting of the same name under the target's `settings.configs`. Debug and Release
-   both default to `https://api.cooked.trade` (the backend behind Cloudflare; see
-   `docs/deploy-oracle.md` in the backend repo). REST and both sockets use it.
-   - To point **Debug** at a local or staging API, change `COOKED_API_BASE_URL` under
-     `configs: Debug:` in `project.yml` (e.g. `http://localhost:3000` for an API on
-     the Mac running the simulator, or `https://staging.example.com`) and re-run
-     `xcodegen generate`. Plain `http://` is allowed only for localhost and `.local`
-     hosts (`NSAllowsLocalNetworking`); a physical phone needs your Mac's
-     `.local` name or an https tunnel. If you override it from an `.xcconfig`
-     instead, write `https:/$()/host` — `//` starts a comment there.
-   - A missing, empty or malformed value falls back to production, never to nothing.
+1. `brew install xcodegen`, then from `CookedPaper`: `xcodegen generate` and
+   `open CookedPaper.xcodeproj`.
+2. **Signing (owner-provided).** `DEVELOPMENT_TEAM` in `project.yml` is empty; set your Team
+   ID. CI builds with `CODE_SIGNING_ALLOWED=NO`. Bundle id is `app.cooked.paper`. Enable Sign
+   in with Apple, Push Notifications and Associated Domains on the App ID. `aps-environment`
+   comes from `APS_ENVIRONMENT` (`development` for Debug, `production` for Release).
+3. **Google sign-in.** `GOOGLE_IOS_CLIENT_ID` and `GOOGLE_REVERSED_CLIENT_ID` in `project.yml`
+   are `REPLACE_ME` placeholders. Fill them from Google Cloud Console (iOS client, bundle id
+   `app.cooked.paper`) and add the client id to the API's Google audiences. Until then the
+   Google button says it isn't configured.
+4. **Universal links.** The entitlement lists `applinks:cooked.trade` and
+   `applinks:www.cooked.trade`; the web app must serve `/.well-known/apple-app-site-association`
+   for your Team ID (`APPLE_TEAM_ID`, and `IOS_BUNDLE_ID` if it differs) on its Vercel project.
+5. **App Store Connect.** Create the "Cooked Paper Pro" subscription group with the product
+   IDs above, annual with a 1-week introductory free trial and monthly with none; annual.offer
+   with no introductory offer; weekly removed from sale. Product IDs must match
+   `ProductID`. Xcode may offer to repair the `.storekit` file's internal IDs; let it.
+6. **API base URL.** `APIConfig.baseURL` reads `COOKED_API_BASE_URL` from Info.plist (filled
+   from the build setting in `project.yml`); Debug and Release both default to
+   `https://api.cooked.trade`. To use a local API change it under `configs: Debug:` and re-run
+   `xcodegen generate`. Plain `http://` is allowed only for localhost and `.local` hosts. In
+   an `.xcconfig` write `https:/$()/host`. A missing or malformed value falls back to production.
 
-## Product decisions this was built against
+## Testing and CI
 
-- **Everyone signs in: Apple or Google.** No guest sessions. Sign-in
-  happens in onboarding right after the practice round; each provider proves
-  identity to `apps/api`, which mints the session (access token + a refresh token
-  returned in the body because the app sends `X-Cooked-Client: ios`, stored in the
-  Keychain). The portfolio belongs to the account, so it follows the person to any
-  device. Settings has Sign out and Delete account (App Store 5.1.1(v)). There is
-  no wallet login (Privy was removed; there is no real trading).
-  - **Google** needs the iOS OAuth client id (owner-provided): `GOOGLE_IOS_CLIENT_ID`
-    and `GOOGLE_REVERSED_CLIENT_ID` in `project.yml` are `REPLACE_ME` placeholders in
-    the repo. Fill them in from Google Cloud Console → Credentials → iOS client
-    (bundle id `app.cooked.paper`) and add that client id to the API's Google
-    audiences. Until then the Google button says it isn't configured.
-  - **Apple** needs the Sign in with Apple capability on the App ID
-    (`app.cooked.paper`); the entitlement is already in `project.yml`.
-- **One iPhone per account.** Signing in on a new iPhone ends the account's
-  session on the old one (the API's `session_evicted`, from `apps/api/src/auth/sessions.ts`).
-  The old phone's next request sends it to sign-in with a note saying another iPhone
-  signed in. The website is not counted, so the web and one phone work together.
-- **No dark patterns**, on purpose, matching `apps/api/src/paper/onboarding.ts`'s own
-  stated design: no streaks, no countdowns, no fake urgency, no score. The backend
-  structurally can't produce that data; the client doesn't invent it either.
-- **Money is `Decimal`, never `Double`**, decoded from the API's decimal-STRING
-  fields via `@DecimalString`/`@OptionalDecimalString` property wrappers. Every
-  numeric UI value should trace back to one of these — never hand-parse a price
-  string with `Double(string:)`.
-- **Null means "unmeasured," never zero** — `PnLText` and the position/round-trip
-  rows render `nil` as "—", matching the API's own convention. Don't "fix" a `nil`
-  by coalescing it to `0`.
-- **The live socket implements the server's real resume protocol**, not a
-  simplification — it tracks the last seen `seq` per portfolio, resumes with
-  `sinceSeq` on reconnect, and treats a `counterReset`/`truncated` gap as a fresh
-  baseline rather than trying to replay deltas. A heartbeat watchdog tears down and
-  reconnects the socket if `heartbeatIntervalMs` elapses with no tick.
-- **`cookedpaper://token/<mint>` opens a token's detail screen** from anywhere in the
-  app via `DeepLinkRouter`, presented as a sheet over whichever tab is active.
-- **The chart's crosshair requires a brief press before it engages** (`LongPressGesture`
-  sequenced before the drag, in `CandleChartView.crosshairGesture`), not a bare drag.
-  The chart lives inside a `ScrollView`; a bare `DragGesture` there would capture every
-  page-scroll attempt that happens to start over the chart. A quick swipe scrolls the
-  page; a deliberate press-and-hold-then-drag scrubs the chart.
+- Unit tests: `xcodebuild test -scheme CookedPaper` (Swift Testing). UI tests run against an
+  in-process mock API, enabled only in DEBUG builds with `UITEST_MOCK_API=1`
+  (`UITEST_MOCK_FRESH=1` starts signed out; `UITEST_BYPASS_PAYWALL=1` forces subscribed;
+  `UITEST_STILL_FRAMES=1` stills animations). Mocks live in `Networking/Mock*.swift`.
+- CI (`ios-build-and-screenshot.yml`, macOS 15, every push and manual dispatch): selects Xcode
+  26, installs XcodeGen, generates the project, boots an iPhone 17 Pro simulator, runs the unit
+  tests and the screenshot UI tests, then records the chart and trade UI tests as video, and
+  uploads `ui-screenshots`, `live-chart-recording` and `xcresult-bundle` artifacts. It does not
+  commit screenshots, publish to TestFlight or sign anything. Check the latest run before
+  assuming a change compiles; there is no local Mac build in the authoring loop.
 
-## Push notifications and price alerts
+## Before shipping
 
-- **Permission is asked at a moment of intent** — creating a price alert, or after a
-  trade — never at launch. Once allowed, the app registers with APNs on every launch
-  and sends the hex device token to `POST /social/apns-tokens`
-  (`{ deviceToken, environment }`, `sandbox` for Debug builds, `production` for
-  Release) after registration, on launch and after every sign-in. Sign-out revokes
-  it first with `POST /social/apns-tokens/revoke`.
-- A push whose payload has a top-level `"mint"` opens that token (the same
-  `cookedpaper://token/<mint>` path as a deep link); banners also show while the app
-  is open.
-- **Price alerts** use the existing `GET/POST/PATCH/DELETE /social/alerts` routes
-  with `price_crossed` rules (channel `push`, 5-minute cooldown): the bell on a
-  token's screen sets one (price prefilled, ±10/25% chips, above/below inferred from
-  the target), active levels are drawn on the candle chart, and Settings → Price
-  alerts lists, pauses and deletes them.
-- **Status:** the alert and `/social/apns-tokens` routes exist in the backend; the
-  server refuses token registration (`bad_request`) until an APNs key is configured
-  on the deployment, which the app treats as a silent no-op. Guests' tokens are held
-  and registered after sign-in.
+- Owner-provided values: `DEVELOPMENT_TEAM`, the Google client ids, App ID capabilities, an APNs
+  key on the backend, `APPLE_TEAM_ID` on the web app.
+- Guest onboarding needs `PAPER_GUEST_SESSIONS_ENABLED=true` on the API (default false); without
+  it the app signs in right after the practice round.
+- A returning account owner who taps "Save your portfolio" gets the guest portfolio claimed, but
+  the app keeps trading their oldest portfolio, so onboarding positions don't show there.
+  "Already have an account? Sign in" avoids this.
+- Numerals use the system monospaced design, not IBM Plex Mono as on web and Expo.
+- Legal pages (`https://cooked.trade/legal/terms`, `/legal/privacy`) are linked from
+  `LegalLinks.swift`. The sign-in screen states that continuing means acceptance and confirms
+  18+. Before submitting, confirm the operator entity is active, `support@cooked.trade` is a live
+  mailbox, the App Store privacy URL matches, the age rating is 17+ or higher, and
+  `PrivacyInfo.xcprivacy` / App Privacy answers list push token and purchase history.
 
-## Compete: seasons, achievements, duels
+## App icon
 
-The fourth tab is **Compete** (it replaced Leaderboard, which lives on inside it):
-a segmented Season · Duels · Leagues · Leaderboard screen. Everything is paper money with no
-stakes, and the season and duel screens say "No stakes. Paper money only. Results
-are simulated."
-
-- **Seasons** (`GET /paper/seasons/current`, `/history`, `/:id/results`): this
-  month's tier, rank, return, a live countdown and how far to the next tier (or
-  what it takes to qualify), the tier ladder, the top 10, and past seasons.
-- **Achievements** (`GET /paper/achievements`, `POST /paper/achievements/seen`):
-  a grid in Profile and on the Season page. Unlocks are decided by the server and
-  celebrated with a toast — live from `paper:achievement` on the `/paper` socket,
-  and on every return to the foreground for anything still `seen: false`.
-- **Duels** (`/paper/duels…`): head-to-head with a fresh $1,000 paper portfolio
-  each, by username or an open invite link (`https://cooked.trade/d/<code>`,
-  `cookedpaper://duel/<code>`), for 1h, 24h or 7d. A duel's Trade button opens the
-  normal buy/sell/leverage tickets with `TradePortfolioContext.duel`, so duel
-  trades only ever touch that duel's portfolio. Detail refreshes every ~5 s and on
-  `paper:duel` socket events.
-- **Friend leagues** (`/paper/leagues…`): private leaderboards joined by invite
-  code (`https://cooked.trade/l/<code>`, `cookedpaper://league/<code>`), ranked on
-  the same season return. Create, join with a code, standings (ranked, then not yet
-  qualified), invite sharing; the owner can rename, rotate the code, remove members
-  and delete; members can leave.
-- Deep links and pushes: `https://cooked.trade/d/<code>` and `/l/<code>` open the
-  duel / league invite as universal links (same as `cookedpaper://duel/<code>` and
-  `cookedpaper://league/<code>`); `cookedpaper://duel-id/<id>` or a push with
-  `duelId` opens a duel; `leagueId` opens a league; a push with `achievementId` opens the
-  achievements grid.
-- **Status:** the backend routes are being built to the shared compete spec. Until
-  they're deployed, a 404 hides the feature behind a calm "coming soon" state; the
-  DEBUG mock (`MockCompete`) serves all of it for the UI tests and screenshots.
-
-## Subscriptions
-
-**Free tier** (`Sources/Paywall/FreeTier.swift`). The paywall shows once after sign-in
-and can be closed ("Start free"). A free account gets full access for its first 3 days
-(counted from the account's `createdAt`), then 3 buys a day in its main portfolio.
-Selling is never limited, and duel trades don't count. Today's count comes from the
-portfolio's trade history on the server, so reinstalling doesn't reset it. Leverage
-and price alerts are Pro-only (`ProGate`). The paywall comes back, with its own
-headline, when the day's buys run out, once when full access ends, after a profitable
-sell on the free tier, and when a Pro feature is opened.
-
-The limit is enforced in the app only, like the subscription. The API has no paywall
-by design (`packages/billing/src/entitlements.ts` in the main repo), so a modified
-client could trade without limits. Enforcing it server-side means deliberately
-changing that guard.
-
-**Annual and monthly.** Annual ($49.99) is the default and carries the 7-day free
-trial; monthly ($12.99, no trial) is the price anchor that makes annual read as "save
-68%". No lifetime purchase. `ProductID.weekly` stays recognised so a weekly subscription
-bought earlier keeps working; it is not offered.
-
-**Before the app goes free:** an annual plan can outlast the paid era. Stop selling
-annual (remove it from sale in App Store Connect) about a year before paper trading
-goes free, or keep a Pro tier with real value (for example lower swap fees once live
-trading launches) for anyone still inside a paid year. Check the plan with a lawyer
-before it ships.
-
-**Prices and trials are set in App Store Connect**, not here; `StoreKit/Products.storekit`
-(local testing only) matches. In App Store Connect: annual $49.99 with a 1-week free
-introductory offer, monthly $12.99 with no introductory offer, weekly removed from sale,
-and `app.cooked.paper.annual.offer` at $29.99/year (no introductory offer) in the same
-group.
-
-**One-time offer.** Closing the onboarding paywall without buying shows
-`OneTimeOfferView` once per device: the offer plan at $29.99/year, with the regular
-annual price struck through beside it. It says it is shown once, and it is (see
-`OneTimeOffer`); there is no timer. If StoreKit doesn't return the offer product, the
-paywall simply closes.
-
-**Conversion funnel.** `Funnel` (Sources/Networking/Funnel.swift) sends a few named
-steps to `POST /events` on the API: app opened, onboarding started/completed, paywall
-shown/closed (with its reason), trial started, subscribed, offer shown, upsell tapped,
-first trade. Events carry a random per-install id, never the IDFA, so no App Tracking
-Transparency prompt is needed. The API's `docs/funnel.md` has the query that turns
-them into a funnel.
-
-StoreKit 2 decides on the device as before. In addition, every verified
-transaction's signed JWS is sent to `POST /billing/apple/transactions`
-(`{ signedTransaction }`) — after a purchase or renewal, on restore, and for current
-entitlements on launch and after sign-in — and `GET /billing/apple/entitlement` is
-read back. Purchases carry `appAccountToken` = the account id when it's a UUID (a
-guest buying before sign-in has none; the transaction is sent once they sign in).
-The person is subscribed if StoreKit says so **or** the server says active; an
-unreachable server, a 404 or an inactive answer never takes away a StoreKit
-entitlement.
-
-The annual plan has a 7-day free trial. When the Apple
-ID is eligible, the paywall says "Start 7-day free trial", shows a three-step "how
-your trial works" timeline, offers a soft "want a reminder?" ask before the purchase,
-and schedules a local reminder two days before the trial converts.
-
-## Known gaps / what to do before shipping
-
-- **Guest onboarding needs `PAPER_GUEST_SESSIONS_ENABLED=true` on the API.** It
-  defaults to `false` (and production's example env says `false`); with guests off
-  the app falls back to signing in right after the practice round, as before.
-- **A returning account owner who taps "Save your portfolio"** gets the guest
-  portfolio claimed into their account, but the app keeps trading their oldest
-  portfolio, so the onboarding positions don't show there. "Already have an
-  account? Sign in" on the first screen avoids this.
-- **Owner-provided values:** `DEVELOPMENT_TEAM`, `GOOGLE_IOS_CLIENT_ID` /
-  `GOOGLE_REVERSED_CLIENT_ID` (see First-time setup), plus the App ID capabilities
-  (Sign in with Apple, Push Notifications, Associated Domains), an APNs key on the
-  backend, and `APPLE_TEAM_ID` on the web app for universal links.
-- **Numerals use SF Mono, not IBM Plex Mono.** The web/Expo apps both set prices in
-  IBM Plex Mono; this port uses the system monospaced design (`.monospacedDigit()` in
-  `Sources/DesignSystem/DesignSystem.swift`) instead of bundling the font files. Swap
-  in the real TTFs under a new `Resources/Fonts` if exact brand parity matters more
-  than the dependency.
-- **Legal documents.** The app links to `https://cooked.trade/legal/terms` and
-  `/legal/privacy` (`Sources/App/LegalLinks.swift`), which are in force (v1.0, paper-only,
-  operator ZEVRON LLC). The sign-in screen states that continuing with Apple or Google is
-  acceptance and confirms the user is 18+. Before submitting: the LLC must show as active
-  on Sunbiz, `support@cooked.trade` must be a live mailbox, App Store Connect's privacy
-  policy URL must be the one above, the App Store age rating must be 17+ (or higher) to
-  match the 18+ term, and `Resources/PrivacyInfo.xcprivacy` / the App Privacy answers
-  should list push token and purchase history, which the Privacy Policy discloses.
-- **App Store Server Notifications** go to `POST /billing/apple/notifications`;
-  set that URL in App Store Connect so the server learns about renewals and refunds
-  without the device.
-- **CI is the only compiler in the loop.** The project is generated and built on a
-  macOS runner on every push; there's no local Mac build in the authoring loop, so a
-  red CI run is the first place to look after any change.
-
-## What was deliberately left out of v1
-
-No social/community feed, no multiple-portfolio management UI (the app always trades
-the caller's one "starter" portfolio), no watchlist. Leaderboard, onboarding, deep
-linking, leverage and price alerts all shipped despite the original "don't need a ton
-of features" framing — each was cheap given how much the backend already provides,
-and none of them touch the paper-trading-only, no-real-money scope.
-
-## First run
-
-Balance → practice round → two questions (experience, goal) → pick three coins →
-live portfolio → "Save your portfolio" sign-in → paywall → the app. Sign-in comes
-after the guest has traded but before the purchase, so every subscription belongs to
-an account. Everything before sign-in runs as a **guest paper session** (`POST /paper/portfolios/starter`
-with no `Authorization` mints a 7-day guest token, kept in the Keychain); signing in
-claims it (`POST /paper/portfolios/claim`) so the positions carry over. The first
-screen has "Already have an account? Sign in". After
-the first fill, a soft card asks whether to send price notifications (the system
-prompt only follows a yes). The paywall headline follows the goal answer and shows
-this month's top trader from the public leaderboard when there's a positive one.
-
-A profitable sell or leveraged close asks for an App Store review (at most once per
-90 days, never after a loss). Sells and closes offer a share button for the
-server-rendered P&L card (`/cards/meta/…`, percentages only), hidden when the card
-endpoint doesn't answer.
-
-Share cards are also drawn on device (`DesignSystem/ShareCardRenderer.swift`):
-`ImageRenderer` turns a 360×450pt SwiftUI card into a 1080×1350 PNG that `ShareLink`
-shares with a line ending in cooked.trade. No endpoint: only the token logo is
-fetched. Trade card (Token Detail's "Your position", and a sell's confirmation in
-place of the link card), duel result card (a finished duel), and Daily Call streak
-card (the icon in the Daily Call header).
-
-## Live data
-
-- Token charts: LIVE streams trade by trade from the `/market` socket (1 s REST
-  polling as a fallback). Other ranges refetch their candles in place while on screen
-  (1H every 15 s, 1D every 30 s, 1W every 60 s, 1M/ALL every 120 s), fold the live
-  price into the current candle, and the header price is live on every range.
-- Discover refreshes every 30 s and Leaderboard every 60 s while visible, silently,
-  and on returning to the foreground.
-- Both sockets re-read the access token before every reconnect and, if a handshake
-  is refused, refresh the session the same way a REST 401 does.
-- A small banner appears app-wide while the device is offline.
-
-## Generating the app icon
-
-`Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png` is checked in. To
-regenerate it after changing the design, on a Mac, from `CookedPaper`, run:
-
-```
-swift Scripts/GenerateIcon.swift
-```
-
-This renders `Scripts/GenerateIcon.swift`'s SwiftUI view (a candlestick pair in the
-app's brand colors) via `ImageRenderer` and writes a real, opaque, alpha-free
-1024×1024 PNG straight to
-`Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png`. Re-run it any time to
-regenerate the icon after changing the design in that script.
+`Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png` is checked in. To regenerate it
+after editing the design, on a Mac from `CookedPaper` run `swift Scripts/GenerateIcon.swift`.
