@@ -20,10 +20,25 @@ struct RoomsView: View {
                 if isLoading && response == nil {
                     SkeletonBlock(height: 160, cornerRadius: Radius.card)
                 } else if let response {
-                    section("Live now", rooms: response.live, empty: "No event room is live right now.")
-                    section("Coming up", rooms: response.upcoming, empty: "Nothing scheduled yet. Check back before the next big market event.")
-                    if !response.mine.isEmpty {
-                        section("Your rooms", rooms: response.mine, empty: "")
+                    if hasNoRooms {
+                        EmptyStateView(
+                            symbol: "dot.radiowaves.left.and.right",
+                            title: "No rooms right now",
+                            action: EmptyStateAction(title: "Host a room", symbol: "video.badge.plus", identifier: "rooms.hostEmpty") {
+                                showsHost = true
+                            },
+                            compact: true
+                        )
+                    } else {
+                        if !response.live.isEmpty {
+                            section("Live now", rooms: response.live)
+                        }
+                        if !response.upcoming.isEmpty {
+                            section("Coming up", rooms: response.upcoming)
+                        }
+                        if !response.mine.isEmpty {
+                            section("Your rooms", rooms: response.mine)
+                        }
                     }
                 } else {
                     EmptyStateView(
@@ -35,13 +50,15 @@ struct RoomsView: View {
                     }
                 }
                 joinByCode
-                Button {
-                    showsHost = true
-                } label: {
-                    Label("Host a room", systemImage: "video.badge.plus")
+                if !hasNoRooms {
+                    Button {
+                        showsHost = true
+                    } label: {
+                        Label("Host a room", systemImage: "video.badge.plus")
+                    }
+                    .buttonStyle(.secondary)
+                    .accessibilityIdentifier("rooms.host")
                 }
-                .buttonStyle(.secondary)
-                .accessibilityIdentifier("rooms.host")
                 CompeteLegalCaption()
             }
             .padding(.horizontal, Space.margin)
@@ -74,49 +91,64 @@ struct RoomsView: View {
         }
     }
 
+    /// Nothing live, nothing scheduled, nothing of yours: the empty state offers hosting.
+    private var hasNoRooms: Bool {
+        guard let response else { return false }
+        return response.live.isEmpty && response.upcoming.isEmpty && response.mine.isEmpty
+    }
+
+    /// "2 live · 3 coming up" over the format as pills.
     private var header: some View {
-        VStack(alignment: .leading, spacing: Space.s8) {
-            Text("Same $10K, same window. Best return wins.")
-                .font(.body)
-                .foregroundStyle(Color.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: Space.s12) {
+            if let response, !(response.live.isEmpty && response.upcoming.isEmpty) {
+                HStack(spacing: Space.s8) {
+                    Text("\(response.live.count) live")
+                        .foregroundStyle(response.live.isEmpty ? Color.textSecondary : Color.textPrimary)
+                    Text("·").foregroundStyle(Color.textTertiary)
+                    Text("\(response.upcoming.count) coming up")
+                        .foregroundStyle(Color.textSecondary)
+                }
+                .font(.rowTitle)
+            }
+            InfoPillRow(pills: [
+                (symbol: "dollarsign.circle.fill", text: "$10K each"),
+                (symbol: "trophy.fill", text: "Best return wins"),
+            ])
         }
     }
 
-    @ViewBuilder
-    private func section(_ title: String, rooms: [RoomSummary], empty: String) -> some View {
+    private func section(_ title: String, rooms: [RoomSummary]) -> some View {
         VStack(alignment: .leading, spacing: Space.headerGap) {
             SectionHeader(title: title)
-            if rooms.isEmpty {
-                Text(empty)
-                    .font(.rowSubtitle)
-                    .foregroundStyle(Color.textSecondary)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(rooms.enumerated()), id: \.element.id) { index, room in
-                        NavigationLink(value: CompeteRoute.room(id: room.id)) {
-                            RoomRow(room: room)
-                        }
-                        .buttonStyle(.pressable)
-                        .accessibilityIdentifier("rooms.row.\(index)")
-                        if index < rooms.count - 1 { RowSeparator() }
+            VStack(spacing: 0) {
+                ForEach(Array(rooms.enumerated()), id: \.element.id) { index, room in
+                    NavigationLink(value: CompeteRoute.room(id: room.id)) {
+                        RoomRow(room: room)
                     }
+                    .buttonStyle(.pressable)
+                    .accessibilityIdentifier("rooms.row.\(index)")
+                    if index < rooms.count - 1 { RowSeparator(leadingInset: 36 + Space.s12) }
                 }
-                .glassList()
             }
+            .glassList()
         }
     }
 
     private var joinByCode: some View {
         VStack(alignment: .leading, spacing: Space.headerGap) {
-            SectionHeader(title: "Join a streamer's room")
+            SectionHeader(title: "Join with a code")
             HStack(spacing: Space.s8) {
                 TextField("Room code", text: $code)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .font(.body.monospaced())
-                    .padding(Space.s12)
+                    .padding(.horizontal, Space.s16)
+                    .frame(height: Metrics.buttonHeight)
                     .background(Color.appSurface, in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    )
                     .accessibilityIdentifier("rooms.code")
                 Button {
                     Task { await join() }
@@ -158,43 +190,48 @@ struct RoomsView: View {
     }
 }
 
+/// Kicker (live / upcoming / finished) over the title and its clock | players.
 struct RoomRow: View {
     let room: RoomSummary
+
+    private var kicker: String {
+        let state = room.isLive ? "Live" : (room.isFinished ? "Finished" : "Upcoming")
+        return room.kind == "host" ? "\(state) · Hosted" : state
+    }
 
     var body: some View {
         HStack(spacing: Space.s12) {
             Image(systemName: room.kind == "host" ? "video.fill" : "calendar")
-                .foregroundStyle(room.isLive ? Color.positive : Color.textSecondary)
-                .frame(width: 24)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(room.isLive ? Color.accent : Color.textSecondary)
+                .frame(width: 36, height: 36)
+                .metalSurface(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
+                Kicker(text: kicker)
                 Text(room.title)
                     .font(.rowTitle)
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
-                Group {
-                    if room.isLive, let end = room.endDate {
-                        CountdownText(end: end)
-                    } else if room.isFinished {
-                        Text("Finished")
-                    } else if let start = room.startDate {
-                        Text("Starts \(start.formatted(date: .abbreviated, time: .shortened))")
-                    }
+                if room.isLive, let end = room.endDate {
+                    CountdownText(end: end)
+                } else if !room.isFinished, let start = room.startDate {
+                    Text(start.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption13Digits)
+                        .foregroundStyle(Color.textSecondary)
                 }
-                .font(.rowSubtitle)
-                .foregroundStyle(Color.textSecondary)
             }
-            Spacer()
+            Spacer(minLength: Space.s8)
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(room.participantCount)")
                     .font(.rowValue)
                     .foregroundStyle(Color.textPrimary)
-                Text(room.joined ? "joined" : "players")
+                Text(room.joined ? "Joined" : "Players")
                     .font(.caption13)
-                    .foregroundStyle(room.joined ? Color.positive : Color.textSecondary)
+                    .foregroundStyle(room.joined ? Color.accent : Color.textSecondary)
             }
         }
-        .frame(minHeight: 60)
+        .frame(minHeight: Metrics.rowHeight)
         .contentShape(Rectangle())
     }
 }

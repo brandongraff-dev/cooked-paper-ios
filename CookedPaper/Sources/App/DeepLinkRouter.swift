@@ -77,8 +77,20 @@ final class DeepLinkRouter {
     private(set) var showsAchievements = false
     private(set) var pendingLeagueInviteCode: String?
     private(set) var pendingLeagueId: String?
+    /// A tab a screen asked to switch to ("Make your first trade" → Discover).
+    /// `AppShellView` selects it and clears it.
+    private(set) var requestedTab: AppTab?
 
     private init() {}
+
+    /// Switches the app to `tab`, from a screen inside another tab.
+    func openTab(_ tab: AppTab) {
+        requestedTab = tab
+    }
+
+    func clearTabRequest() {
+        requestedTab = nil
+    }
 
     func handle(_ url: URL) {
         guard let link = DeepLink.parse(url) else { return }

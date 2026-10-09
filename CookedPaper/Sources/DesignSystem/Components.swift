@@ -309,9 +309,8 @@ struct Chip: View {
                         Capsule().fill(Color.inverseFill)
                     } else {
                         Capsule()
-                            .fill(.ultraThinMaterial)
-                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-                            .environment(\.colorScheme, .dark)
+                            .fill(Color.appSurfaceElevated)
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
                     }
                 }
         }
@@ -347,6 +346,87 @@ struct Segment: View {
         }
         .buttonStyle(.pressable)
         .animation(Motion.standard, value: isSelected)
+    }
+}
+
+// MARK: - Info pills
+
+/// A rule or fact at a glance: an accent SF Symbol and a short caption on a flat
+/// capsule with a hairline ("$10K start", "30 days"). Not tappable.
+struct InfoPill: View {
+    let symbol: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.accent)
+                .accessibilityHidden(true)
+            Text(text)
+                .font(.caption13)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, Space.s12)
+        .frame(height: Metrics.chipHeight)
+        .background(Color.appSurface, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+    }
+}
+
+/// A row of `InfoPill`s under a screen's headline, read by VoiceOver as one line.
+struct InfoPillRow: View {
+    /// (symbol, text) pairs, left to right.
+    let pills: [(symbol: String, text: String)]
+
+    var body: some View {
+        HStack(spacing: Space.s8) {
+            ForEach(Array(pills.enumerated()), id: \.offset) { _, pill in
+                InfoPill(symbol: pill.symbol, text: pill.text)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A screen's big headline over a one-line summary — the Leaderboard's "You're 9th"
+/// style. 40 heavy, tight tracking.
+struct ScreenHeadline: View {
+    let title: String
+    var subtitle: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.s4) {
+            Text(title)
+                .font(.system(size: 40, weight: .heavy))
+                .tracking(-1.2)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .contentTransition(.numericText())
+                .accessibilityAddTraits(.isHeader)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.rowSubtitle)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A small uppercase label above a card's title ("ROOKIE · +8% / −5%").
+struct Kicker: View {
+    let text: String
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.caption.weight(.bold))
+            .tracking(1.2)
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(1)
     }
 }
 
@@ -481,24 +561,42 @@ struct SimulatedCaption: View {
     }
 }
 
+/// An empty state's one way forward: "Make your first trade", "Start a duel".
+struct EmptyStateAction {
+    let title: String
+    var symbol: String? = nil
+    var identifier: String = "emptyState.action"
+    let run: () -> Void
+}
+
+/// One icon, one short line (an optional detail under it), and at most one way out:
+/// a call to action for an empty list, or "Try again" for an error.
 struct EmptyStateView: View {
     let symbol: String
     let title: String
-    let detail: String
+    var detail: String? = nil
     /// An error state's way out: shows a compact "Try again" button when set.
     var retry: (() -> Void)? = nil
+    /// An empty list's next step, as the screen's accent button. Ignored when `retry`
+    /// is set.
+    var action: EmptyStateAction? = nil
+    /// Less vertical room, for an empty section inside a longer screen.
+    var compact: Bool = false
 
     var body: some View {
         VStack(spacing: Space.s8) {
-            IconTile(symbol: symbol, color: .tileGray, size: 52)
+            IconTile(symbol: symbol, color: action == nil ? .tileGray : .tileBlue, size: 52)
                 .padding(.bottom, Space.s8)
             Text(title)
                 .font(.rowTitle)
                 .foregroundStyle(Color.textPrimary)
-            Text(detail)
-                .font(.rowSubtitle)
-                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
+            if let detail {
+                Text(detail)
+                    .font(.rowSubtitle)
+                    .foregroundStyle(Color.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
             if let retry {
                 Button("Try again") {
                     Haptics.tap()
@@ -507,9 +605,24 @@ struct EmptyStateView: View {
                 .buttonStyle(.compact)
                 .padding(.top, Space.s8)
                 .accessibilityIdentifier("emptyState.retry")
+            } else if let action {
+                Button {
+                    Haptics.tap()
+                    action.run()
+                } label: {
+                    if let symbol = action.symbol {
+                        Label(action.title, systemImage: symbol)
+                    } else {
+                        Text(action.title)
+                    }
+                }
+                .buttonStyle(.accent)
+                .frame(maxWidth: 280)
+                .padding(.top, Space.s12)
+                .accessibilityIdentifier(action.identifier)
             }
         }
-        .padding(.vertical, Space.s48)
+        .padding(.vertical, compact ? Space.s24 : Space.s48)
         .padding(.horizontal, Space.s24)
         .frame(maxWidth: .infinity)
     }

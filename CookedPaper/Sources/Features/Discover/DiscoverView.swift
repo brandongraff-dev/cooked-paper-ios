@@ -285,14 +285,20 @@ private struct TokenRow: View {
     }
 }
 
-/// Compact neutral card: avatar, symbol, price, change.
+/// Compact flat card: avatar and the move on top, symbol over price below.
 private struct TrendingCard: View {
     let entry: PaperDiscoverEntry
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s12) {
-            TokenAvatar(mint: entry.mint, symbol: entry.symbol, logoURL: entry.logoUri.flatMap(URL.init(string:)), size: 32)
-            VStack(alignment: .leading, spacing: Space.s4) {
+            HStack(alignment: .center, spacing: Space.s8) {
+                TokenAvatar(mint: entry.mint, symbol: entry.symbol, logoURL: entry.logoUri.flatMap(URL.init(string:)), size: 32)
+                Spacer(minLength: 0)
+                ChangeText(percent: entry.metrics.priceChangePct, font: .caption13Digits.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            VStack(alignment: .leading, spacing: 2) {
                 Text(entry.symbol ?? "?")
                     .font(.rowTitle)
                     .foregroundStyle(Color.textPrimary)
@@ -300,11 +306,10 @@ private struct TrendingCard: View {
                 PriceText(value: entry.paperTradeable.priceUsd, font: .rowSubvalue, color: .textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                ChangeText(percent: entry.metrics.priceChangePct, font: .caption13Digits)
             }
         }
         .padding(Space.s16)
-        .frame(width: 136, alignment: .leading)
+        .frame(width: 148, alignment: .leading)
         .glassCard()
     }
 }

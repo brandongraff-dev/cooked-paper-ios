@@ -89,6 +89,13 @@ struct AppShellView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             isKeyboardVisible = false
         }
+        .onChange(of: router.requestedTab) { _, tab in
+            guard let tab else { return }
+            router.clearTabRequest()
+            guard tab != selection else { return }
+            Haptics.selection()
+            withAnimation(Motion.standard) { selection = tab }
+        }
         .onChange(of: selection) { _, _ in
             // A search field focused in the tab being left must not keep its
             // keyboard up over the next one.

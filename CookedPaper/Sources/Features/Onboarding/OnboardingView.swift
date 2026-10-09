@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 /// First run, before the paywall: a new user sees their $10,000 paper balance,
-/// plays a practice round, answers two questions, picks up to three coins,
+/// plays a practice round, answers two questions on one screen, picks up to three coins,
 /// and buys them for real (paper trades filled at the live price on the server). Then they watch those positions
 /// move. The paywall that follows is about keeping that portfolio.
 ///
@@ -50,12 +50,9 @@ struct OnboardingView: View {
                 case .profile:
                     ProfileSetupView { go(to: .experience) }
                 case .experience:
-                    ExperienceStep { answer in
-                        model.experience = answer
-                        go(to: .goal)
-                    }
-                case .goal:
-                    GoalStep { goal in
+                    // One screen for both questions: the experience chips set the
+                    // coin order, and picking a goal goes straight to the coins.
+                    AboutYouStep(model: model) { goal in
                         model.goal = goal
                         TradingGoal.saved = goal
                         go(to: .pick)
@@ -167,7 +164,7 @@ struct OnboardingView: View {
     }
 
     private var canGoBack: Bool {
-        step == .goal || step == .pick
+        step == .pick
     }
 
     private var header: some View {
@@ -213,8 +210,10 @@ struct OnboardingView: View {
     }
 }
 
+/// `experience` asks both "traded before?" and "what brings you here?" on one screen,
+/// so the first real trade is one step closer.
 enum OnboardingStep: Int, CaseIterable {
-    case balance, practice, signIn, profile, experience, goal, pick, portfolio
+    case balance, practice, signIn, profile, experience, pick, portfolio
 }
 
 // MARK: - Model
@@ -526,24 +525,41 @@ private struct BalanceStep: View {
     }
 }
 
-// MARK: - Goal
+// MARK: - Step 2: about you
 
-private struct GoalStep: View {
-    var onAnswer: (TradingGoal) -> Void
+/// "Traded before?" as three chips (it orders the coin list), then the goal as
+/// cards; tapping a goal moves on to the coins.
+private struct AboutYouStep: View {
+    let model: OnboardingModel
+    var onGoal: (TradingGoal) -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.s32) {
                 StepHeadline(
                     title: "What brings you\nhere?",
-                    detail: "Pick the one that fits best."
+                    detail: "Pick one. Your coins are next."
                 )
                 .padding(.top, Space.s32)
+
+                VStack(alignment: .leading, spacing: Space.s12) {
+                    Kicker(text: "Traded before?")
+                    HStack(spacing: Space.s8) {
+                        ForEach(TradingExperience.allCases, id: \.self) { answer in
+                            Chip(title: answer.title, isSelected: model.experience == answer) {
+                                model.experience = answer
+                            }
+                            .accessibilityIdentifier("onboarding.answer.\(answer.rawValue)")
+                            .accessibilityHint(answer.detail)
+                            .accessibilityAddTraits(model.experience == answer ? .isSelected : [])
+                        }
+                    }
+                }
 
                 VStack(spacing: Space.s12) {
                     ForEach(TradingGoal.allCases, id: \.self) { goal in
                         Button {
-                            onAnswer(goal)
+                            onGoal(goal)
                         } label: {
                             HStack(spacing: Space.s16) {
                                 Image(systemName: goal.symbol)
@@ -574,53 +590,7 @@ private struct GoalStep: View {
                 }
             }
             .padding(.horizontal, Space.margin)
-        }
-        .scrollIndicators(.hidden)
-    }
-}
-
-// MARK: - Step 2: experience
-
-private struct ExperienceStep: View {
-    var onAnswer: (TradingExperience) -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Space.s32) {
-                StepHeadline(
-                    title: "How much have you\ntraded before?",
-                    detail: "We'll line up your coin list to match."
-                )
-                .padding(.top, Space.s32)
-
-                VStack(spacing: Space.s12) {
-                    ForEach(TradingExperience.allCases, id: \.self) { answer in
-                        Button {
-                            onAnswer(answer)
-                        } label: {
-                            HStack(spacing: Space.s12) {
-                                VStack(alignment: .leading, spacing: Space.s4) {
-                                    Text(answer.title)
-                                        .font(.title3.weight(.semibold))
-                                        .foregroundStyle(Color.textPrimary)
-                                    Text(answer.detail)
-                                        .font(.rowSubtitle)
-                                        .foregroundStyle(Color.textSecondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(Color.textTertiary)
-                            }
-                            .padding(Space.s20)
-                            .glassCard()
-                        }
-                        .buttonStyle(.pressable)
-                        .accessibilityIdentifier("onboarding.answer.\(answer.rawValue)")
-                    }
-                }
-            }
-            .padding(.horizontal, Space.margin)
+            .padding(.bottom, Space.s16)
         }
         .scrollIndicators(.hidden)
     }

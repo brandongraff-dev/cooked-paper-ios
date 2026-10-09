@@ -74,27 +74,23 @@ struct ReplayListView: View {
                 }
                 .font(.rowTitle)
             }
-            HStack(spacing: Space.s8) {
-                pill("dollarsign.circle.fill", "$10K start")
-                pill("eye.slash.fill", "Names hidden")
+            InfoPillRow(pills: [
+                (symbol: "dollarsign.circle.fill", text: "$10K start"),
+                (symbol: "eye.slash.fill", text: "Names hidden"),
+            ])
+            // Nothing played yet: the free first crash, one tap away.
+            if played.isEmpty, let first = scenarios.first(where: { $0.number == 1 }) ?? scenarios.first {
+                Button {
+                    Haptics.tap()
+                    playing = first
+                } label: {
+                    Label("Play Crash #\(first.number)", systemImage: "play.fill")
+                }
+                .buttonStyle(.accent)
+                .padding(.top, Space.s8)
+                .accessibilityIdentifier("replay.firstPlay")
             }
         }
-    }
-
-    private func pill(_ symbol: String, _ text: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(Color.accent)
-            Text(text)
-                .font(.caption13)
-                .foregroundStyle(Color.textPrimary)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, Space.s12)
-        .frame(height: 32)
-        .background(Color.appSurface, in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 
     private func row(_ scenario: ReplaySummary) -> some View {

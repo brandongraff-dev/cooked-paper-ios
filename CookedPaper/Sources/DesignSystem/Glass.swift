@@ -1,9 +1,9 @@
 import SwiftUI
 import UIKit
 
-// The depth layer: frosted glass cards over a black, lightly grained backdrop, and
-// solid colored icon tiles so a row reads at a glance before its words do. No gradients. Gains and
-// losses keep green and red to themselves; the tile palette never uses either.
+// The surface layer: flat, solid cards on a black backdrop, and solid colored icon tiles
+// so a row reads at a glance before its words do. No gradients, no grain, no blur. Gains
+// and losses keep green and red to themselves; the tile palette never uses either.
 
 // MARK: - Palette
 
@@ -49,18 +49,13 @@ private extension UIColor {
 
 // MARK: - Screen backdrop
 
-/// Black with two soft pools of brand light at the top and a faint teal one low on
-/// the left: enough color for the glass cards above it to pick up, never enough to
-/// compete with a number. Static, so it costs nothing while scrolling.
+/// Plain black.
 struct ScreenBackdrop: View {
     var body: some View {
-        ZStack {
-            Color.appBackground
-            GrainOverlay(opacity: 0.05)
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        Color.appBackground
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
@@ -82,25 +77,21 @@ private struct GlassCard: ViewModifier {
         content
             .background {
                 ZStack {
-                    shape.fill(.ultraThinMaterial)
-                    shape.fill(Color.appSurface.opacity(0.62))
+                    shape.fill(Color.appSurfaceElevated)
                     if let tint {
-                        shape.fill(tint.opacity(0.12))
+                        shape.fill(tint.opacity(0.10))
                     }
-                    GrainOverlay(opacity: 0.08).clipShape(shape)
                 }
-                .environment(\.colorScheme, .dark)
             }
             .overlay {
-                shape.strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                shape.strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
             }
-            .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
     }
 }
 
 extension View {
-    /// Frosted glass over the screen backdrop, with a lit rim and a soft drop shadow.
-    /// `tint` washes the glass with a color, for cards that lead to a feature.
+    /// A flat, solid card with a hairline edge. (The name stayed when the frosting went.)
+    /// `tint` washes the card with a color, for cards that lead to a feature.
     func glassCard(cornerRadius: CGFloat = Radius.card, tint: Color? = nil) -> some View {
         modifier(GlassCard(cornerRadius: cornerRadius, tint: tint))
     }
@@ -159,10 +150,6 @@ struct ProBadge: View {
 /// A `List` row's glass, for `.listRowBackground(_:)`.
 struct GlassRowBackground: View {
     var body: some View {
-        ZStack {
-            Rectangle().fill(.ultraThinMaterial)
-            Rectangle().fill(Color.appSurface.opacity(0.62))
-        }
-        .environment(\.colorScheme, .dark)
+        Color.appSurfaceElevated
     }
 }

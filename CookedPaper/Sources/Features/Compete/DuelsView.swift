@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compete → Duels: your record, then active duels (live head-to-head and the
+/// Compete → Duels: your record as the headline, then active duels (live head-to-head and the
 /// clock), invites waiting on you, invites you sent, and finished duels with a
 /// rematch. Two players, the same fresh $1,000 paper portfolio, best return wins.
 struct DuelsView: View {
@@ -57,24 +57,34 @@ struct DuelsView: View {
 
     private func content(_ lists: DuelListResponse) -> some View {
         VStack(alignment: .leading, spacing: Space.section) {
-            VStack(spacing: Space.s16) {
-                DuelRecordCard(stats: store.stats)
-                Button {
-                    Haptics.tap()
-                    showsNewDuel = true
-                } label: {
-                    Label("New duel", systemImage: "plus")
-                }
-                .buttonStyle(.primary)
-                .accessibilityIdentifier("duels.new")
-            }
-
             if lists.isEmpty {
-                EmptyStateView(
-                    symbol: "figure.fencing",
-                    title: "No duels yet",
-                    detail: "Challenge a friend: you each get $1,000 in paper money, and the best return when the clock runs out wins."
-                )
+                VStack(alignment: .leading, spacing: Space.s8) {
+                    rules
+                    EmptyStateView(
+                        symbol: "figure.fencing",
+                        title: "No duels yet",
+                        action: EmptyStateAction(title: "Start a duel", symbol: "plus", identifier: "duels.new") {
+                            showsNewDuel = true
+                        }
+                    )
+                }
+            } else {
+                VStack(alignment: .leading, spacing: Space.s20) {
+                    VStack(alignment: .leading, spacing: Space.s12) {
+                        ScreenHeadline(title: recordTitle, subtitle: recordSubtitle)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("duels.record")
+                        rules
+                    }
+                    Button {
+                        Haptics.tap()
+                        showsNewDuel = true
+                    } label: {
+                        Label("New duel", systemImage: "plus")
+                    }
+                    .buttonStyle(.primary)
+                    .accessibilityIdentifier("duels.new")
+                }
             }
 
             if !lists.active.isEmpty {
@@ -154,7 +164,33 @@ struct DuelsView: View {
             VStack(spacing: 0) {
                 content()
             }
+            .glassList()
         }
+    }
+
+    /// The format, as pills: the same stake for both, best return wins.
+    private var rules: some View {
+        InfoPillRow(pills: [
+            (symbol: "dollarsign.circle.fill", text: "$1K each"),
+            (symbol: "trophy.fill", text: "Best return wins"),
+        ])
+    }
+
+    /// "4–2", or "4–2–1" with draws: wins, losses, draws.
+    private var recordTitle: String {
+        guard let stats = store.stats else { return "Duels" }
+        return stats.draws > 0
+            ? "\(stats.wins)–\(stats.losses)–\(stats.draws)"
+            : "\(stats.wins)–\(stats.losses)"
+    }
+
+    /// "Wins, losses · 2 in a row · best 4".
+    private var recordSubtitle: String? {
+        guard let stats = store.stats else { return nil }
+        var parts = [stats.draws > 0 ? "Wins, losses, draws" : "Wins, losses"]
+        if stats.currentStreak > 0 { parts.append("\(stats.currentStreak) in a row") }
+        if stats.bestStreak > 0 { parts.append("best \(stats.bestStreak)") }
+        return parts.joined(separator: " · ")
     }
 
     /// Runs one row action (accept, decline, cancel, rematch); the list refreshes
@@ -177,56 +213,14 @@ struct DuelsView: View {
 
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: Space.s16) {
-            SkeletonBlock(height: 76, cornerRadius: Radius.card)
+            SkeletonBlock(width: 140, height: 44)
+            SkeletonBlock(width: 220, height: 16)
             SkeletonBlock(height: Metrics.buttonHeight, cornerRadius: Metrics.buttonHeight / 2)
                 .padding(.bottom, Space.s16)
             SkeletonBlock(width: 80, height: 18)
             ForEach(0..<4, id: \.self) { _ in SkeletonRow() }
         }
         .padding(.horizontal, Space.margin)
-    }
-}
-
-// MARK: - Record
-
-private struct DuelRecordCard: View {
-    let stats: DuelStats?
-
-    var body: some View {
-        HStack(spacing: 0) {
-            column("Wins", stats.map { "\($0.wins)" })
-            divider
-            column("Losses", stats.map { "\($0.losses)" })
-            divider
-            column("Draws", stats.map { "\($0.draws)" })
-            divider
-            column("Streak", stats.map { "\($0.currentStreak)" }, caption: stats.map { "Best \($0.bestStreak)" })
-        }
-        .padding(.vertical, Space.s16)
-        .glassCard()
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("duels.record")
-    }
-
-    private var divider: some View {
-        Rectangle()
-            .fill(Color.appSeparator)
-            .frame(width: 1, height: 32)
-    }
-
-    private func column(_ label: String, _ value: String?, caption: String? = nil) -> some View {
-        VStack(spacing: Space.s4) {
-            Text(value ?? "—")
-                .font(.title3.weight(.semibold).monospacedDigit())
-                .foregroundStyle(Color.textPrimary)
-            Text(caption ?? label)
-                .font(.caption13)
-                .foregroundStyle(Color.textSecondary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value ?? "none")")
     }
 }
 
