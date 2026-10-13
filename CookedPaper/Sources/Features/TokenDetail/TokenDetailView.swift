@@ -107,6 +107,8 @@ struct TokenDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .screenBackground()
         .reservesTabBarSpace()
+        // Buy/Sell own the bottom edge here; back is the way out.
+        .hidesFloatingTabBar()
         .navigationTitle(profile?.token.symbol ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $tradeSide) { side in
@@ -284,7 +286,9 @@ struct TokenDetailView: View {
     private func priceLines(livePrice: Decimal?) -> some View {
         let shown = displayed(livePrice: livePrice)
         return VStack(alignment: .leading, spacing: Space.s8) {
-            PriceText(value: shown.price, font: .heroPrice)
+            // Flash only for real ticks: scrubbing or switching ranges also moves
+            // this number, and that isn't the market going up or down.
+            PriceText(value: shown.price, font: .heroPrice, flashes: range == .live && scrubIndex == nil)
                 .tracking(-0.5)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -330,7 +334,12 @@ struct TokenDetailView: View {
                     alertLevels: candles?.denomination == "usd" ? alertStore.chartLevels(for: mint) : []
                 )
             } else if closes.count > 1 {
-                PriceLineChart(values: closes, selectedIndex: $scrubIndex, markers: indexedMarkers)
+                PriceLineChart(
+                    values: closes,
+                    selectedIndex: $scrubIndex,
+                    markers: indexedMarkers,
+                    direction: range == .day ? profile?.market.change24h.value.map { $0 >= 0 } : nil
+                )
             } else {
                 EmptyStateView(symbol: "chart.xyaxis.line", title: "No chart yet", detail: "There's no trading history for this window.")
             }
