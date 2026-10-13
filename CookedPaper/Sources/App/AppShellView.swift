@@ -6,6 +6,7 @@ struct AppShellView: View {
     let portfolioStore = PortfolioStore.shared
     let router = DeepLinkRouter.shared
     @Environment(\.scenePhase) private var scenePhase
+    let tabBarVisibility = FloatingTabBarVisibility.shared
 
     private var deepLinkTarget: DeepLinkTarget? {
         if let mint = router.pendingTokenMint { return .token(mint) }
@@ -57,7 +58,7 @@ struct AppShellView: View {
                 }
                 // Every screen in the stack (pushed ones too) reads this and keeps
                 // its content and pinned bars clear of the floating tab bar.
-                .environment(\.tabBarInset, FloatingTabBar.height + Space.s8)
+                .environment(\.tabBarInset, tabBarVisibility.isHidden ? 0 : FloatingTabBar.height + Space.s8)
                 // Lets a screen's auto-refresh pause while its tab is hidden.
                 .environment(\.isSelectedTab, isSelected)
                 .opacity(isSelected ? 1 : 0)
@@ -74,8 +75,11 @@ struct AppShellView: View {
                 .ignoresSafeArea(.keyboard, edges: .bottom)
                 // Steps aside while typing, as the system tab bar does.
                 .opacity(isKeyboardVisible ? 0 : 1)
-                .allowsHitTesting(!isKeyboardVisible)
+                .allowsHitTesting(!isKeyboardVisible && !tabBarVisibility.isHidden)
                 .animation(Motion.standard, value: isKeyboardVisible)
+                // Slides off the bottom edge under a pushed screen that hides it.
+                .offset(y: tabBarVisibility.isHidden ? FloatingTabBar.height * 2 : 0)
+                .accessibilityHidden(tabBarVisibility.isHidden)
                 .zIndex(2)
 
             // Unlock celebrations float over every tab and pushed screen.

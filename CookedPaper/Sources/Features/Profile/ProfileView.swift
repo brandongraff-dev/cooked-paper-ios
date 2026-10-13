@@ -109,6 +109,7 @@ struct ProfileView: View {
         .scrollContentBackground(.hidden)
         .screenBackground()
         .reservesTabBarSpace()
+        .hidesFloatingTabBar()
         .tint(Color.textPrimary)
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)

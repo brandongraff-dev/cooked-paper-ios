@@ -92,13 +92,6 @@ struct TradeSheetView: View {
             Spacer(minLength: Space.s16)
 
             VStack(spacing: Space.s16) {
-                availableLine
-                if side == .buy, portfolio.isMain, FreeTier.shared.isLimited {
-                    Text("\(FreeTier.shared.tradesLeftToday) of \(FreeTier.freeTradesPerDay) free buys left today")
-                        .font(.caption13)
-                        .foregroundStyle(Color.textSecondary)
-                        .accessibilityIdentifier("trade.freeTradesLeft")
-                }
                 quickAmountRow
                 if let errorMessage {
                     Text(errorMessage)
@@ -153,6 +146,17 @@ struct TradeSheetView: View {
                 .font(.rowSubvalue)
                 .foregroundStyle(Color.textSecondary)
                 .contentTransition(.numericText())
+
+            // With the amount rather than above the keypad: what you're typing
+            // and what you can spend read as one group.
+            availableLine
+                .padding(.top, Space.s8)
+            if side == .buy, portfolio.isMain, FreeTier.shared.isLimited {
+                Text("\(FreeTier.shared.tradesLeftToday) of \(FreeTier.freeTradesPerDay) free buys left today")
+                    .font(.caption13)
+                    .foregroundStyle(Color.textSecondary)
+                    .accessibilityIdentifier("trade.freeTradesLeft")
+            }
         }
         .padding(.horizontal, Space.margin)
     }

@@ -56,7 +56,8 @@ struct DiscoverView: View {
         }
         .task { await load() }
         // The server caches the feeds for ~60 s; every 30 s catches each update
-        // within half a cache window, without a skeleton or a scroll jump.
+        // within half a cache window (and keeps market caps and their tick
+        // flashes current), without a skeleton or a scroll jump.
         .autoRefresh(every: 30) { await refreshSilently() }
     }
 
@@ -214,11 +215,15 @@ struct DiscoverView: View {
 
     private func load() async {
         isLoading = response == nil
-        errorMessage = nil
         do {
             response = try await DiscoverAPI.paperDiscover()
+            errorMessage = nil
+        } catch is CancellationError {
+            // Left the screen mid-refresh; keep whatever is showing.
         } catch {
-            errorMessage = error.localizedDescription
+            // A failed background refresh keeps the last good feed on screen
+            // rather than swapping it for an error.
+            if response == nil { errorMessage = error.localizedDescription }
         }
         isLoading = false
     }
@@ -268,7 +273,8 @@ private struct SearchMessageRow: View {
     }
 }
 
-/// Avatar | symbol over volume | price over change. Nothing else.
+/// Avatar | symbol over volume | market cap over change. Nothing else. Memecoin
+/// prices like $0.0₄2314 don't compare across rows; market cap does.
 private struct TokenRow: View {
     let entry: PaperDiscoverEntry
 
@@ -279,13 +285,19 @@ private struct TokenRow: View {
         ) {
             TokenAvatar(mint: entry.mint, symbol: entry.symbol, logoURL: entry.logoUri.flatMap(URL.init(string:)))
         } trailing: {
-            PriceText(value: entry.paperTradeable.priceUsd)
+            HStack(alignment: .firstTextBaseline, spacing: Space.s4) {
+                Text("MC")
+                    .font(.caption13)
+                    .foregroundStyle(Color.textTertiary)
+                MarketCapText(value: entry.metrics.marketCapUsd)
+            }
+            .accessibilityElement(children: .combine)
             ChangeText(percent: entry.metrics.priceChangePct)
         }
     }
 }
 
-/// Compact flat card: avatar and the move on top, symbol over price below.
+/// Compact flat card: avatar and the move on top, symbol over market cap below.
 private struct TrendingCard: View {
     let entry: PaperDiscoverEntry
 
@@ -303,9 +315,15 @@ private struct TrendingCard: View {
                     .font(.rowTitle)
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
-                PriceText(value: entry.paperTradeable.priceUsd, font: .rowSubvalue, color: .textSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                HStack(alignment: .firstTextBaseline, spacing: Space.s4) {
+                    Text("MC")
+                        .font(.caption13)
+                        .foregroundStyle(Color.textTertiary)
+                    MarketCapText(value: entry.metrics.marketCapUsd, font: .rowSubvalue, color: .textSecondary)
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .accessibilityElement(children: .combine)
             }
         }
         .padding(Space.s16)

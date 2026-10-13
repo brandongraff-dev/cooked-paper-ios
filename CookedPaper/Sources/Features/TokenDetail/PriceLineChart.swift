@@ -56,8 +56,12 @@ struct PriceLineChart: View {
     @Binding var selectedIndex: Int?
     /// The person's own trades, placed on the line at the bucket they fell in.
     var markers: [(index: Int, marker: ChartTradeMarker)] = []
+    /// Overrides the colour's direction when the screen's headline change comes
+    /// from somewhere other than this series (e.g. the server's 24h change), so
+    /// a red "−4.12%" never sits over a green line.
+    var direction: Bool? = nil
 
-    private var isUp: Bool { (values.last ?? 0) >= (values.first ?? 0) }
+    private var isUp: Bool { direction ?? ((values.last ?? 0) >= (values.first ?? 0)) }
     private var lineColor: Color { isUp ? .positive : .negative }
 
     var body: some View {

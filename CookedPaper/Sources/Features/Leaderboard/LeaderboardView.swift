@@ -102,7 +102,6 @@ struct LeaderboardView: View {
         switch window {
         case .day: "in the last 24 hours"
         case .week: "in the last 7 days"
-        case .month: "in the last 30 days"
         case .all: "this month"
         }
     }
